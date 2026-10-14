@@ -173,6 +173,12 @@ export interface AgentRuntimeConfig {
     /** 是否把 CUA broker 凭据注入共享 node_repl；不代表注册独立 CUA MCP。 */
     computerUse?: boolean;
     /**
+     * ThinkRail 的 spec_*（P3 后加 worktree_*）工具面。由 Host 从用户开关
+     * （AppSettings.thinkrailEnabled）推导后写入会话配置；缺省即关。
+     * 与 nodeRepl 同一层：都是「宿主决定这个会话里注册什么工具」，不是插件 manifest 的自声明。
+     */
+    thinkrail?: boolean;
+    /**
      * 官方 browser-use plugin 的 docs 资产目录。由 bootstrap 从 plugin metadata.rootPath 推导，
      * 不属于 plugin manifest schema。
      */
@@ -227,6 +233,8 @@ export interface AgentRuntimeConfig {
 
   // Context Builder config
   systemPrompt?: string;
+  /** Host settings 的主代理正文，不覆盖注入或子代理。 */
+  mainSystemPrompt?: string;
   /**
    * 动态工作流子代理的身份输入：在场即让
    * context builder 走「基座 + 工作流子代理契约 + persona 叠加」路径，而不是把 persona 当
@@ -324,6 +332,9 @@ export interface AgentRuntimeDeps {
   getAgentDefinitions?: GetAgentDefinitions;
   /** 新父上下文读取一次；子执行不得继承此加载器。 */
   loadAgentDefinitions?: LoadAgentDefinitions;
+  /** Host 的进程策略；只在新 turn 或空闲目录边界读取。 */
+  readThinkrailEnabled?: () => boolean;
+  readMainSystemPrompt?: () => string | undefined;
   agentTelemetry?: AgentExecutionTelemetryPort;
   agentTelemetryCausation?: AgentTelemetryCausation;
   agentTelemetryCausationMode?: "child" | "linked_root";

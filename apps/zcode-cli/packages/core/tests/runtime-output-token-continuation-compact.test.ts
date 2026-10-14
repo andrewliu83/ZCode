@@ -6,6 +6,7 @@ import {
   modelMessageContentToText,
 } from "@zcode/contracts";
 import { type AgentRuntime } from "../src/runtime.js";
+import { estimateMessageTokens } from "../src/compact/manual.js";
 import { createToolRegistry } from "../src/tool/registry.js";
 import { createTestSessionEventStore } from "./test-event-store.js";
 import { createTestAgentRuntime } from "./test-agent-runtime.js";
@@ -263,6 +264,10 @@ describe("output-token continuation with Compact", () => {
     const toolRegistry = createToolRegistry();
     const oldOutputStylePrompt = "Use the old microcompact style.";
     const newOutputStylePrompt = "Use the next-turn microcompact style.";
+    // microcompact 按整个请求体（含稳定 system 提示词）估算 token，所以硬编码阈值会
+    // 随稳定段增长而提前触发，在 Continue 之前就清掉旧 tool result。这里让测试自校准：
+    // 首个请求把阈值抬到不会触发的高度，Continue 前的那个请求再按实测大小精确卡到
+    // 下一次请求之上——断言的仍是「只清在 Continue 上」，不依赖提示词长度。
     const requests: string[] = [];
     let callCount = 0;
     toolRegistry.register({
@@ -310,6 +315,14 @@ describe("output-token continuation with Compact", () => {
           async generateText(request: any) {
             requests.push(requestText(request.messages));
             callCount += 1;
+            if (callCount === 1) {
+              (runtime as any).config.compact.microcompact.thresholdTokens =
+                Number.MAX_SAFE_INTEGER;
+            }
+            if (callCount === 3) {
+              (runtime as any).config.compact.microcompact.thresholdTokens =
+                estimateMessageTokens(request.messages) + 1;
+            }
             if (callCount <= 2) {
               return {
                 finishReason: "tool-calls",

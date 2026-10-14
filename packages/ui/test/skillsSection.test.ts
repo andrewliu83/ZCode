@@ -416,6 +416,27 @@ function findCreateSkillButton() {
 }
 
 describe("SkillsSection", () => {
+  it("内置技能可在设置中查看，独立启停和删除控件不可见", async () => {
+    mockSkillsState = [
+      {
+        id: "glm:built-in:/builtin/choosing-a-workflow/SKILL.md",
+        name: "choosing-a-workflow",
+        description: "Workflow router",
+        body: "Router body",
+        path: "/builtin/choosing-a-workflow/SKILL.md",
+        scope: "built-in",
+        enabled: true,
+        readOnly: true,
+      },
+    ];
+    activeScopeFilter = "user";
+    const html = await renderSkillsSection();
+    expect(html).toContain("choosing-a-workflow");
+    expect(html).toContain('data-skills-built-in="true"');
+    expect(capturedSwitches).toHaveLength(0);
+    expect(capturedButtons.some((button) => button["aria-label"] === "common.delete")).toBe(false);
+  });
+
   beforeEach(() => {
     capturedButtons.length = 0;
     capturedSwitches.length = 0;

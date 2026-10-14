@@ -222,6 +222,10 @@ export type { ProjectMemoryFileSummary, ProjectMemoryWorkspaceSummary } from "./
 
 // OutputStyle service — IOutputStyleService is both a type (interface) and value (descriptor).
 export { IOutputStyleService } from "./output-style/outputStyle.js";
+
+// SpecGraph service — ThinkRail spec 图的只读派生视图（面板消费）。
+export { ISpecGraphService } from "./spec-graph/specGraph.js";
+export { createSpecGraphService } from "./spec-graph/specGraphService.js";
 export type { SessionRealtimePort } from "./session/sessionRealtimePort.js";
 
 // FileWatcher service — IFileWatcherService is both a type (interface) and value (descriptor)

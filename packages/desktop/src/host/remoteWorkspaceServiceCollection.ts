@@ -36,6 +36,7 @@ import {
   IHooksService,
   IMemoryService,
   IOutputStyleService,
+  ISpecGraphService,
   ISettingsSyncService,
   IPromptAttachmentTransferService,
   type IServiceAccessor,
@@ -432,10 +433,20 @@ export function createRemoteWorkspaceServiceCollection(params: {
     // 远端设置页插件管理也必须打到远端 agent（插件目录在远端文件系统）。
     .register(IPluginManagementService, params.connectionServices.pluginManagementService)
     .register(ICommandsService, params.connectionServices.commandsService)
-    .register(ISubagentsService, createSubagentsService({ isDesktopRuntime: true }))
+    .register(
+      ISubagentsService,
+      createSubagentsService({
+        isDesktopRuntime: true,
+        // 远程组合沿用本窗口的设置与用户代理所有者，内置目录必须随同一开关走。
+        isThinkrailEnabled: async () => (await localSettingService.get()).thinkrailEnabled === true,
+      }),
+    )
     .register(IHooksService, params.connectionServices.hooksService)
     .register(IMemoryService, createMemoryService())
     .register(IOutputStyleService, createOutputStyleService())
+    // ThinkRail spec 图必须来自**远端**：它读的是远端工作区的文件系统，
+    // 用本机的 createSpecGraphService 会去读本机同名路径（存在时给出错误的图，不存在时空图）。
+    .register(ISpecGraphService, params.connectionServices.specGraphService)
     .register(
       ISettingsSyncService,
       createSettingsSyncService({ settingService: localSettingService }),
@@ -496,6 +507,7 @@ export function createServerRemoteWorkspaceServiceCollection(params: {
     .register(IHooksService, params.connectionServices.hooksService)
     .register(IMemoryService, params.connectionServices.memoryService)
     .register(IOutputStyleService, params.connectionServices.outputStyleService)
+    .register(ISpecGraphService, params.connectionServices.specGraphService)
     .register(ISettingsSyncService, params.connectionServices.settingsSyncService)
     .register(
       IPromptAttachmentTransferService,

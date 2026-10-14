@@ -13,12 +13,7 @@ import {
 } from "lucide-react";
 import { ControlHintTooltip } from "@/ControlHintTooltip.js";
 import { Button } from "@/components/ui/button.js";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog.js";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog.js";
 import { Switch } from "@/components/ui/switch.js";
 import type {
   ZCodeProvider,
@@ -61,12 +56,10 @@ import {
 import { groupSkillsByPlugin } from "@/settings/pluginManagedResourceGroups.js";
 import { SkillsImportDialog } from "@/settings/ExternalAgentImportDialog.js";
 import { formatRemoteSkillSyncTarget } from "@/settings/RemoteSkillSyncDialog.js";
-import {
-  RemoteSyncDialogs,
-  shouldShowRemoteSyncActions,
-} from "@/settings/RemoteSyncActions.js";
+import { RemoteSyncDialogs, shouldShowRemoteSyncActions } from "@/settings/RemoteSyncActions.js";
 import { refreshSharedSkillStoreForWorkspace } from "@/lib/skillStoreRefresh.js";
 import { usePluginManagementStore } from "@/store/pluginManagementStore.js";
+import { useThinkrailCatalogStore } from "@/store/thinkrailCatalogStore.js";
 import {
   groupScopedSkillsBySource,
   selectPluginsForScope,
@@ -143,10 +136,7 @@ function SkillPathDetailField({
           onClick={onOpen}
         >
           <span>{path}</span>
-          <ExternalLink
-            className="relative top-px size-3 shrink-0"
-            aria-hidden="true"
-          />
+          <ExternalLink className="relative top-px size-3 shrink-0" aria-hidden="true" />
         </Button>
       </div>
     </div>
@@ -188,28 +178,16 @@ export function SkillsSection({
   const platform = usePlatform();
   const baseServices = useBaseWorkspaceServices();
   const plugins = usePluginManagementStore((state) => state.plugins);
-  const installedPlugins = usePluginManagementStore(
-    (state) => state.installedPlugins,
-  );
-  const availablePlugins = usePluginManagementStore(
-    (state) => state.availablePlugins,
-  );
+  const installedPlugins = usePluginManagementStore((state) => state.installedPlugins);
+  const availablePlugins = usePluginManagementStore((state) => state.availablePlugins);
   const pluginListingById = useMemo(
     () => new Map(availablePlugins.map((plugin) => [plugin.id, plugin.listing])),
     [availablePlugins],
   );
-  const pluginWorkspacePath = usePluginManagementStore(
-    (state) => state.workspacePath,
-  );
-  const pluginWorkspaceIdentity = usePluginManagementStore(
-    (state) => state.workspaceIdentity,
-  );
-  const pluginConfigScope = usePluginManagementStore(
-    (state) => state.configScope,
-  );
-  const initializePlugins = usePluginManagementStore(
-    (state) => state.initialize,
-  );
+  const pluginWorkspacePath = usePluginManagementStore((state) => state.workspacePath);
+  const pluginWorkspaceIdentity = usePluginManagementStore((state) => state.workspaceIdentity);
+  const pluginConfigScope = usePluginManagementStore((state) => state.configScope);
+  const initializePlugins = usePluginManagementStore((state) => state.initialize);
   // useConfirmDialog 是纯 Zustand selector（不含 useState），放在这里不会影响 SkillsSection
   // 既有的「按 useState 调用次序」单测桩（见下方 selectedSkill 附近的注释）。
   const confirmDialog = useConfirmDialog();
@@ -245,8 +223,10 @@ export function SkillsSection({
   const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [remoteSkillSyncOpen, setRemoteSkillSyncOpen] = useState(false);
   const latestRequestIdRef = useRef(0);
+  const catalogRevision = useThinkrailCatalogStore((state) => state.revision);
+  const baseSkillTargetKey = activeWorkspaceIdentity?.trim() || activeWorkspacePath || "";
   const activeSkillTargetKey =
-    activeWorkspaceIdentity?.trim() || activeWorkspacePath || "";
+    catalogRevision === 0 ? baseSkillTargetKey : `${baseSkillTargetKey}|catalog:${catalogRevision}`;
   const projectionMatchesTarget =
     !activeWorkspacePath || loadedSkillTargetKey === activeSkillTargetKey;
 
@@ -273,18 +253,14 @@ export function SkillsSection({
     shouldShowRemoteSyncActions({
       remoteSessionId,
       remoteTarget,
-      clientMode: isWebRemoteControl
-        ? "web-remote-replayable"
-        : "desktop-continuous",
+      clientMode: isWebRemoteControl ? "web-remote-replayable" : "desktop-continuous",
       hasLocalSourceService: Boolean(baseServices.skillSyncService),
-    }) && activeWorkspacePath
+    }) &&
+    activeWorkspacePath
       ? remoteTarget
       : null;
   const remoteSkillSyncTargetLabel = connectedRemoteSyncTarget
-    ? formatRemoteSkillSyncTarget(
-        connectedRemoteSyncTarget,
-        activeWorkspacePath ?? "",
-      )
+    ? formatRemoteSkillSyncTarget(connectedRemoteSyncTarget, activeWorkspacePath ?? "")
     : "";
 
   const renderScopeLabel = useCallback(
@@ -310,6 +286,8 @@ export function SkillsSection({
                 locale,
               )
             : intl.formatMessage({ id: "settings.skills.scope.plugin" });
+        case "built-in":
+          return intl.formatMessage({ id: "settings.skills.scope.builtIn" });
         case "user":
         default:
           return intl.formatMessage({ id: "settings.skills.scope.personal" });
@@ -336,8 +314,7 @@ export function SkillsSection({
         setLoadedSkillTargetKey("");
         return;
       }
-      const requestTargetKey =
-        activeWorkspaceIdentity?.trim() || activeWorkspacePath;
+      const requestTargetKey = activeSkillTargetKey;
       setLoading(showBlockingLoading);
       setError(null);
       const requestId = ++latestRequestIdRef.current;
@@ -361,12 +338,11 @@ export function SkillsSection({
         }
         setLoadedSkillTargetKey(requestTargetKey);
         setLoading(false);
-        setError(
-          loadError instanceof Error ? loadError.message : String(loadError),
-        );
+        setError(loadError instanceof Error ? loadError.message : String(loadError));
       }
     },
     [
+      activeSkillTargetKey,
       activeWorkspaceIdentity,
       activeWorkspacePath,
       skillsService,
@@ -386,7 +362,7 @@ export function SkillsSection({
     // 首屏或切换 Scope target 时必须显示阻塞 loading；手动刷新仍走后台刷新，
     // 避免有当前 target 数据时整块闪烁。
     void loadSkills(true);
-  }, [activeWorkspacePath, loadSkills, targetServiceResolution.rpcReady]);
+  }, [activeWorkspacePath, loadSkills, targetServiceResolution.rpcReady, catalogRevision]);
 
   const refresh = useCallback(async () => {
     await loadSkills(false);
@@ -407,6 +383,7 @@ export function SkillsSection({
       }
       // 移除三方来源后，技能状态统一写入 ZCode Agent 上下文，避免旧 provider 前缀带来分桶漂移。
       const targetSkill = skills.find((skill) => skill.id === skillId);
+      if (targetSkill?.scope === "built-in" || targetSkill?.readOnly) return;
       const effectiveProvider: ZCodeProvider = ZCODE_AGENT_PROVIDER;
       try {
         await skillsService.setEnabled({
@@ -423,15 +400,10 @@ export function SkillsSection({
           workspaceIdentity: activeWorkspaceIdentity,
           reason: "settings-skill-enabled",
         });
-        await Promise.all([
-          loadSkills(false),
-          refreshSharedSkillStoreForCurrentWorkspace(),
-        ]);
+        await Promise.all([loadSkills(false), refreshSharedSkillStoreForCurrentWorkspace()]);
       } catch (setEnabledError) {
         setError(
-          setEnabledError instanceof Error
-            ? setEnabledError.message
-            : String(setEnabledError),
+          setEnabledError instanceof Error ? setEnabledError.message : String(setEnabledError),
         );
       }
     },
@@ -450,7 +422,12 @@ export function SkillsSection({
   // 复用应用根部已挂载的确认弹窗 store（useConfirmDialog），与子智能体删除流程保持一致。
   const handleDeleteSkill = useCallback(
     async (skill: SkillSummary) => {
-      if (!activeWorkspacePath || skill.scope === "plugin") {
+      if (
+        !activeWorkspacePath ||
+        skill.scope === "plugin" ||
+        skill.scope === "built-in" ||
+        skill.readOnly
+      ) {
         return;
       }
       const confirmed = await confirmDialog({
@@ -481,11 +458,7 @@ export function SkillsSection({
         }
         await loadSkills(false);
       } catch (deleteError) {
-        setError(
-          deleteError instanceof Error
-            ? deleteError.message
-            : String(deleteError),
-        );
+        setError(deleteError instanceof Error ? deleteError.message : String(deleteError));
       }
     },
     [
@@ -501,19 +474,14 @@ export function SkillsSection({
   );
 
   const scopedProviderSkills = useMemo(() => {
-    const allProviderSkills = filterSkillsForProvider(
-      skills,
-      ZCODE_AGENT_PROVIDER,
-    );
+    const allProviderSkills = filterSkillsForProvider(skills, ZCODE_AGENT_PROVIDER);
     const pluginStoreMatchesTarget =
       (pluginWorkspaceIdentity?.trim() || pluginWorkspacePath || "") ===
         (activeWorkspaceIdentity?.trim() || activeWorkspacePath || "") &&
       pluginConfigScope === scopeFilter;
     return selectSkillsForScope(
       allProviderSkills,
-      pluginStoreMatchesTarget
-        ? selectPluginsForScope(plugins, installedPlugins, scopeFilter)
-        : [],
+      pluginStoreMatchesTarget ? selectPluginsForScope(plugins, installedPlugins, scopeFilter) : [],
       scopeFilter,
     );
   }, [
@@ -527,8 +495,20 @@ export function SkillsSection({
     scopeFilter,
     skills,
   ]);
+  const builtInSkills = useMemo(
+    () =>
+      groupSkillsByPlugin(
+        scopedProviderSkills.filter((skill) => skill.scope === "built-in"),
+        query,
+      ).local,
+    [query, scopedProviderSkills],
+  );
   const groupedSkills = useMemo(
-    () => groupSkillsByPlugin(scopedProviderSkills, query),
+    () =>
+      groupSkillsByPlugin(
+        scopedProviderSkills.filter((skill) => skill.scope !== "built-in"),
+        query,
+      ),
     [query, scopedProviderSkills],
   );
   const skillSourceGroups = useMemo(() => {
@@ -536,25 +516,16 @@ export function SkillsSection({
       [...groupedSkills.local, ...groupedSkills.plugin],
       scopeFilter === "user"
         ? intl.formatMessage({ id: "settings.scope.user" })
-        : workspaceLabel ||
-            intl.formatMessage({ id: "settings.scope.workspace" }),
+        : workspaceLabel || intl.formatMessage({ id: "settings.scope.workspace" }),
     );
-  }, [
-    groupedSkills.local,
-    groupedSkills.plugin,
-    intl,
-    scopeFilter,
-    workspaceLabel,
-  ]);
+  }, [groupedSkills.local, groupedSkills.plugin, intl, scopeFilter, workspaceLabel]);
   const filteredSkillCount =
-    groupedSkills.local.length + groupedSkills.plugin.length;
-  const hasEmptySearchResult =
-    Boolean(query.trim()) && filteredSkillCount === 0;
+    builtInSkills.length + groupedSkills.local.length + groupedSkills.plugin.length;
+  const hasEmptySearchResult = Boolean(query.trim()) && filteredSkillCount === 0;
   const directInstalledSkillCount = scopedProviderSkills.filter(
-    (skill) => skill.scope !== "plugin",
+    (skill) => skill.scope === "user" || skill.scope === "workspace",
   ).length;
-  const hideInstalledGroup =
-    Boolean(query.trim()) && groupedSkills.local.length === 0;
+  const hideInstalledGroup = Boolean(query.trim()) && groupedSkills.local.length === 0;
   const pluginIconItemById = useMemo(
     () =>
       new Map(
@@ -576,10 +547,7 @@ export function SkillsSection({
     const skillCreator = filterSkillsForProvider(skills, effectiveProvider).find(
       (skill) => skill.name === "skill-creator",
     );
-    const markdown = buildSkillMentionMarkdown(
-      "skill-creator",
-      skillCreator?.path,
-    );
+    const markdown = buildSkillMentionMarkdown("skill-creator", skillCreator?.path);
 
     // v4 迁移删除旧 pendingComposerPrefill 后，这个入口仍手工操作 session
     // store，只剩返回聊天页的导航，skill-creator 文本没有进入新 Composer。统一委托
@@ -593,9 +561,7 @@ export function SkillsSection({
         label: "skill-creator",
         value: "skill-creator",
         markdown,
-        ...(skillCreator?.description
-          ? { description: skillCreator.description }
-          : {}),
+        ...(skillCreator?.description ? { description: skillCreator.description } : {}),
         ...(skillCreator
           ? {
               data: {
@@ -611,9 +577,7 @@ export function SkillsSection({
   const detailSkill = selectedSkill
     ? (skills.find((skill) => skill.id === selectedSkill.id) ?? selectedSkill)
     : null;
-  const selectedSkillPublishedAt = formatSkillPublishedAt(
-    detailSkill?.metadata?.publishedAt,
-  );
+  const selectedSkillPublishedAt = formatSkillPublishedAt(detailSkill?.metadata?.publishedAt);
   const openSkillFilePath = useCallback(
     async (path: string) => {
       const result = await platform.openInFileManager(path);
@@ -655,10 +619,7 @@ export function SkillsSection({
         className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 transition-colors hover:bg-hover"
       >
         {skill.scope === "plugin" && pluginIconItem ? (
-          <PluginStoreAvatar
-            item={pluginIconItem}
-            className="size-9 bg-background"
-          />
+          <PluginStoreAvatar item={pluginIconItem} className="size-9 bg-background" />
         ) : (
           <div
             className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-background text-foreground-subtle"
@@ -680,9 +641,7 @@ export function SkillsSection({
           }}
         >
           <div className="flex min-w-0 flex-wrap items-center gap-2">
-            <span className="truncate text-ui-base font-medium text-foreground">
-              {skill.name}
-            </span>
+            <span className="truncate text-ui-base font-medium text-foreground">{skill.name}</span>
           </div>
           <div className="mt-0.5 truncate text-ui-sm text-foreground-subtle">
             {skill.description ||
@@ -692,7 +651,7 @@ export function SkillsSection({
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          {skill.scope === "plugin" ? null : (
+          {skill.scope === "plugin" || skill.scope === "built-in" || skill.readOnly ? null : (
             <>
               <Switch
                 checked={skill.enabled}
@@ -728,12 +687,7 @@ export function SkillsSection({
 
   const skillHeaderActions = (
     <SettingsResourceHeaderActions
-      onRefresh={() =>
-        void Promise.all([
-          refresh(),
-          refreshSharedSkillStoreForCurrentWorkspace(),
-        ])
-      }
+      onRefresh={() => void Promise.all([refresh(), refreshSharedSkillStoreForCurrentWorkspace()])}
       onImport={() => setImportDialogOpen(true)}
       onNew={handleCreateSkill}
       importDisabled={!capability?.userScopeAvailable}
@@ -742,9 +696,7 @@ export function SkillsSection({
     />
   );
   const remoteSyncAction = connectedRemoteSyncTarget ? (
-    <ControlHintTooltip
-      title={intl.formatMessage({ id: "settings.skills.remoteSync.open" })}
-    >
+    <ControlHintTooltip title={intl.formatMessage({ id: "settings.skills.remoteSync.open" })}>
       <Button
         type="button"
         variant="outline"
@@ -782,9 +734,7 @@ export function SkillsSection({
           }
         />
       ) : null}
-      {remoteSyncAction ? (
-        <div className="flex justify-end">{remoteSyncAction}</div>
-      ) : null}
+      {remoteSyncAction ? <div className="flex justify-end">{remoteSyncAction}</div> : null}
 
       {connectedRemoteSyncTarget ? (
         <div className="rounded-lg border border-border bg-card px-3 py-2 text-ui-base text-foreground-subtle">
@@ -817,13 +767,8 @@ export function SkillsSection({
             ) : (
               <ChevronRight className="size-3.5 shrink-0" aria-hidden="true" />
             )}
-            <AlertTriangle
-              className="size-3.5 shrink-0 text-amber-500"
-              aria-hidden="true"
-            />
-            <span className="flex-1 truncate font-medium">
-              {diagnosticsSummary}
-            </span>
+            <AlertTriangle className="size-3.5 shrink-0 text-amber-500" aria-hidden="true" />
+            <span className="flex-1 truncate font-medium">{diagnosticsSummary}</span>
           </button>
           {diagnosticsOpen ? (
             <ul className="space-y-1 border-t border-amber-500/30 px-3 py-2">
@@ -846,9 +791,7 @@ export function SkillsSection({
                       {renderDiagnosticCodeLabel(diagnostic.code)}
                     </span>
                     {diagnostic.skillName ? (
-                      <span className="text-foreground-subtle">
-                        · {diagnostic.skillName}
-                      </span>
+                      <span className="text-foreground-subtle">· {diagnostic.skillName}</span>
                     ) : null}
                   </div>
                   <div className="mt-0.5 break-words text-foreground-subtle">
@@ -879,13 +822,9 @@ export function SkillsSection({
       ) : null}
 
       {!targetServiceResolution.rpcReady ? (
-        <PluginLoadingState
-          label={intl.formatMessage({ id: "common.connecting" })}
-        />
+        <PluginLoadingState label={intl.formatMessage({ id: "common.connecting" })} />
       ) : loading || !projectionMatchesTarget ? (
-        <PluginLoadingState
-          label={intl.formatMessage({ id: "common.loading" })}
-        />
+        <PluginLoadingState label={intl.formatMessage({ id: "common.loading" })} />
       ) : hasEmptySearchResult ? (
         <PluginSearchEmptyState
           label={intl.formatMessage({
@@ -894,6 +833,15 @@ export function SkillsSection({
         />
       ) : (
         <div className="space-y-6">
+          {builtInSkills.length > 0 ? (
+            <section className="space-y-4" data-skills-built-in="true">
+              <SettingsResourceGroupHeader
+                count={builtInSkills.length}
+                title={intl.formatMessage({ id: "settings.skills.scope.builtIn" })}
+              />
+              {renderSkillList(builtInSkills)}
+            </section>
+          ) : null}
           <section className={hideInstalledGroup ? "hidden" : "space-y-4"}>
             <div data-skills-plugin-direct-actions="true">
               <SettingsResourceGroupHeader
@@ -916,12 +864,7 @@ export function SkillsSection({
                 })}
                 actions={
                   <>
-                    <Button
-                      type="button"
-                      variant="default"
-                      size="lg"
-                      onClick={handleCreateSkill}
-                    >
+                    <Button type="button" variant="default" size="lg" onClick={handleCreateSkill}>
                       <Plus data-icon="inline-start" aria-hidden="true" />
                       {intl.formatMessage({
                         id: "settings.plugin.skills.newSkill",
@@ -977,9 +920,7 @@ export function SkillsSection({
           {detailSkill ? (
             <div className="flex min-h-0 flex-col">
               <DialogHeader className="border-b border-popover-border px-4 pt-4 pb-3">
-                <DialogTitle className="truncate pr-8 text-ui-lg">
-                  {detailSkill.name}
-                </DialogTitle>
+                <DialogTitle className="truncate pr-8 text-ui-lg">{detailSkill.name}</DialogTitle>
               </DialogHeader>
               <div className="min-h-0 space-y-4 overflow-auto px-4 py-5">
                 <div className="grid gap-1.5">
@@ -1079,14 +1020,10 @@ export function SkillsSection({
       />
       <RemoteSyncDialogs
         canSyncSkills={Boolean(
-          targetServiceResolution.rpcReady &&
-            connectedRemoteSyncTarget &&
-            activeWorkspacePath,
+          targetServiceResolution.rpcReady && connectedRemoteSyncTarget && activeWorkspacePath,
         )}
         canSyncMcp={false}
-        skillOpen={
-          remoteSkillSyncOpen && targetServiceResolution.rpcReady
-        }
+        skillOpen={remoteSkillSyncOpen && targetServiceResolution.rpcReady}
         mcpOpen={false}
         onSkillOpenChange={setRemoteSkillSyncOpen}
         onMcpOpenChange={() => {}}
@@ -1103,10 +1040,7 @@ export function SkillsSection({
             workspaceIdentity: activeWorkspaceIdentity,
             reason: "settings-remote-skill-sync",
           });
-          await Promise.all([
-            refresh(),
-            refreshSharedSkillStoreForCurrentWorkspace(),
-          ]);
+          await Promise.all([refresh(), refreshSharedSkillStoreForCurrentWorkspace()]);
         }}
         onMcpSynced={() => {}}
       />

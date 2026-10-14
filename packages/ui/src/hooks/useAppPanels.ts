@@ -55,6 +55,7 @@ import {
   setActiveSidePaneTab,
   syncSubagentSessionSidePaneTabs,
   toggleBrowserSidePane,
+  activateSpecGraphSidePane,
   toggleGitSidePane,
   updateBrowserSidePaneTab,
   stampSidePaneTabsOwnership,
@@ -792,6 +793,17 @@ export function useAppPanels(options: {
     workspaceAbsPath,
     workspaceIdentity,
   ]);
+
+  const handleOpenSpecGraph = useCallback(() => {
+    revealSidePaneForCurrentOwner();
+    commitOpenedSidePaneState((current) => {
+      const next = activateSpecGraphSidePane(current);
+      logger.info(
+        `[App] 打开右侧面板 mode=spec-graph workspace=${workspaceAbsPath} tabs=${next.tabs.length}`,
+      );
+      return next;
+    });
+  }, [commitOpenedSidePaneState, revealSidePaneForCurrentOwner, workspaceAbsPath]);
 
   const handleOpenDeveloperTools = useCallback(() => {
     revealSidePaneForCurrentOwner();
@@ -1623,6 +1635,7 @@ export function useAppPanels(options: {
     handleOpenTreemapping,
     handleOpenWhiteboard,
     handleOpenDeveloperTools,
+    handleOpenSpecGraph,
     handleOpenTerminalTab,
     handleOpenModelTrajectory,
     handleOpenSubagentSession,

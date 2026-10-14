@@ -77,6 +77,7 @@ import {
 import { discardPersistedPendingSteerInputs } from "./steering.js";
 import { createDefaultSubagentPort } from "./subagent.js";
 import { ensureContextInitialized, getSkillCatalog } from "./context.js";
+import { getSystemPromptInspection } from "./system-prompt-inspection.js";
 import { createContextBuilderFromSnapshot } from "./context.js";
 import { loadProjectMemoryRoot } from "./context.js";
 import { logMemorySkipped } from "./context.js";
@@ -280,6 +281,7 @@ export function installAgentRuntimeMethods(ctor: AgentRuntimeConstructor): void 
   proto.createDefaultSubagentPort = createDefaultSubagentPort;
   proto.ensureContextInitialized = ensureContextInitialized;
   proto.getSkillCatalog = getSkillCatalog;
+  proto.getSystemPromptInspection = getSystemPromptInspection;
   proto.createContextBuilderFromSnapshot = createContextBuilderFromSnapshot;
   proto.loadProjectMemoryRoot = loadProjectMemoryRoot;
   proto.logMemorySkipped = logMemorySkipped;

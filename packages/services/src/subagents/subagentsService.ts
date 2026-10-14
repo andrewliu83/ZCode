@@ -4,6 +4,7 @@ import { basename, dirname, isAbsolute, join, relative, resolve } from "node:pat
 import {
   createAgentStateId,
   createPluginAgentStateId,
+  createThinkrailAgentProfiles,
   parsePluginSubagentModelSelectionOverrides,
   DEFAULT_ENABLED_OFFICIAL_PLUGIN_IDS,
   ZCODE_OFFICIAL_PLUGIN_MARKETPLACE_ID,
@@ -76,6 +77,8 @@ interface InstalledPluginRecord {
 
 interface SubagentsServiceOptions extends SubagentStorageOptions {
   isDesktopRuntime?: boolean;
+  /** 宿主读取权威设置；目录不能复制一份功能开关状态。 */
+  isThinkrailEnabled?: () => Promise<boolean>;
 }
 
 interface PluginAgentDiscovery {
@@ -92,6 +95,7 @@ const PLUGIN_MANIFEST_PATHS = [
 
 function createBuiltInAgents(
   modelSelectionOverrides: BuiltInSubagentModelSelectionOverrides = {},
+  thinkrailEnabled = false,
 ): AgentSummary[] {
   const generalPurposeOverride = modelSelectionOverrides["general-purpose"];
   const exploreOverride = modelSelectionOverrides.Explore;
@@ -138,6 +142,24 @@ function createBuiltInAgents(
       enabled: true,
       readOnly: true,
     },
+    // 修复依据：此前 UI 仅列出两个基础预设，必须与 CLI 复用共享定义及功能开关。
+    ...(thinkrailEnabled
+      ? createThinkrailAgentProfiles().map(
+          (profile): AgentSummary => ({
+            ...profile,
+            id: createAgentStateId({ name: profile.name, scope: "built-in", source: "built-in" }),
+            path: `built-in:${profile.name}`,
+            tools: profile.tools ? [...profile.tools] : undefined,
+            disallowedTools: profile.disallowedTools ? [...profile.disallowedTools] : undefined,
+            skills: profile.skills ? [...profile.skills] : undefined,
+            mcpServers: profile.mcpServers ? [...profile.mcpServers] : undefined,
+            scope: "built-in",
+            source: "built-in",
+            enabled: true,
+            readOnly: true,
+          }),
+        )
+      : []),
   ];
 }
 
@@ -627,7 +649,10 @@ export function createSubagentsService(options?: SubagentsServiceOptions): ISuba
           });
       }
       const state = await readAgentStateFile(storageOptions);
-      const builtInAgents = createBuiltInAgents(state.builtInModelSelectionOverrides);
+      const builtInAgents = createBuiltInAgents(
+        state.builtInModelSelectionOverrides,
+        (await options?.isThinkrailEnabled?.()) ?? false,
+      );
       const fileAgents = await discoverFileAgents({
         diagnostics,
         includeUserAgents: capability.userScopeAvailable,

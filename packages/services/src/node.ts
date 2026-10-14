@@ -244,6 +244,8 @@ export { createCommandsService } from "./commands/commandsService.js";
 export { createHooksService } from "./hooks/hooksService.js";
 export { createMemoryService } from "./memory/memoryService.js";
 export { createOutputStyleService } from "./output-style/outputStyleService.js";
+export { ISpecGraphService } from "./spec-graph/specGraph.js";
+export { createSpecGraphService } from "./spec-graph/specGraphService.js";
 export { createSettingsSyncService } from "./settings-sync/settingsSyncService.js";
 export { createFeedbackDiagnosticArchive } from "./feedback/feedbackLogArchive.js";
 export { createFeedbackService } from "./feedback/feedbackService.js";
@@ -453,6 +455,8 @@ import { createCommandsService } from "./commands/commandsService.js";
 import { createHooksService } from "./hooks/hooksService.js";
 import { createMemoryService } from "./memory/memoryService.js";
 import { createOutputStyleService } from "./output-style/outputStyleService.js";
+import { ISpecGraphService } from "./spec-graph/specGraph.js";
+import { createSpecGraphService } from "./spec-graph/specGraphService.js";
 import { createSettingsSyncService } from "./settings-sync/settingsSyncService.js";
 import {
   createFeedbackService,
@@ -1129,6 +1133,9 @@ export function createLocalServices(options: {
    * Desktop Host 把本机设置里的选择推给本窗口所有在线的 desktop-attached remote Host。
    */
   forwardDynamicWorkflowUserMode?: (mode: DynamicWorkflowMode | undefined) => void;
+  /** ThinkRail 开关变化后交给装配层转发（Desktop Host 推给本窗口的远程 Host）。 */
+  forwardThinkrailEnabled?: (enabled: boolean | undefined) => void;
+  forwardMainSystemPrompt?: (value: string | undefined) => void | Promise<void>;
   /** Desktop Host 请求 Main 登记已校验的插件 UI HTML，换取沙箱句柄。 */
   registerPluginSandbox?: (input: PluginSandboxRegisterInput) => Promise<PluginSandboxHandle>;
   feedback?: Partial<
@@ -1520,7 +1527,12 @@ export function createLocalServices(options: {
       }),
   };
   // mcpSync/hooks 里引用 zcodeAgentService 的闭包是惰性调用，声明顺序不影响初始化。
-  const skillsService = createSkillsService({ isDesktopRuntime: true });
+  const skillsService = createSkillsService({
+    isDesktopRuntime: true,
+    // 目录复用目标 Agent 的发现结果，覆盖开发态、桌面资源和远端 Host 布局。
+    readBuiltInSkills: async (params) =>
+      (await zcodeAgentService.getSkillReferenceCatalog(params)).skills,
+  });
   const mcpSyncService = createMcpSyncService({
     // mcp/list 的 host 消费点收拢到 mcpSync 服务；真实状态检查仍在 agent 进程。
     listMcpServerStatuses: (params) => zcodeAgentService.listMcpServerStatuses(params),
@@ -1567,6 +1579,7 @@ export function createLocalServices(options: {
   });
   const subagentsService = createSubagentsService({
     isDesktopRuntime: true,
+    isThinkrailEnabled: async () => (await settingService.get()).thinkrailEnabled === true,
   });
   const commandsService = createCommandsService({ isDesktopRuntime: true });
   const hooksService = createHooksService({
@@ -1991,6 +2004,11 @@ export function createLocalServices(options: {
           resolveOffPeakClientConfig: () => codingPlanSubscriptionService.getOffPeakClientConfig(),
           resolveOffPeakTaskService: () => offPeakTaskServiceForAgent,
         };
+  // ThinkRail 总开关（docs/thinkrail/design.md D2）：本机设置文件是唯一来源，每次 client work 前读取。
+  // desktop-attached remote Host 读不到桌面的设置，开关由 desktop 推送（syncThinkrailEnabled），这里不注入。
+  const resolveThinkrailEnabled = isDesktopAttachedRemote
+    ? undefined
+    : async () => (await settingService.get()).thinkrailEnabled;
   const zcodeAgentService = createZCodeAgentService({
     ...(agentAccountProviderConfigSource
       ? { accountProviderConfigSource: agentAccountProviderConfigSource }
@@ -2006,6 +2024,12 @@ export function createLocalServices(options: {
       codingPlanSubscriptionService.getDynamicWorkflowClientConfig(),
     ...(resolveDynamicWorkflowUserMode ? { resolveDynamicWorkflowUserMode } : {}),
     forwardDynamicWorkflowUserMode: options?.forwardDynamicWorkflowUserMode,
+    ...(resolveThinkrailEnabled ? { resolveThinkrailEnabled } : {}),
+    forwardThinkrailEnabled: options?.forwardThinkrailEnabled,
+    ...(isDesktopAttachedRemote
+      ? {}
+      : { resolveMainSystemPrompt: async () => (await settingService.get()).mainSystemPrompt }),
+    forwardMainSystemPrompt: options?.forwardMainSystemPrompt,
     commandResolver: options?.zcodeAgentCommandResolver,
     presentationSurface: resolveZCodeAgentPresentationSurface({
       runtimeSurface: options?.agentTelemetry?.runtimeSurface,
@@ -2632,6 +2656,8 @@ export function createLocalServices(options: {
     )
     .register(IMemoryService, createMemoryService())
     .register(IOutputStyleService, createOutputStyleService())
+    // ThinkRail spec 图：面板的只读数据源（docs/thinkrail/design.md D7）。
+    .register(ISpecGraphService, createSpecGraphService())
     .register(ISettingsSyncService, createSettingsSyncService({ settingService }))
     .register(
       IFeedbackService,

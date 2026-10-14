@@ -16,7 +16,8 @@ import { candidateBaseDirs } from "./bundled-plugins.js";
 /**
  * 随 CLI 内置的技能包（apps/zcode-cli/packages/bundled-skills）。
  *
- * 它不是插件：不进官方市场目录、没有启停开关、不能卸载，也不出现在设置页与 `$` 引用面板。
+ * 它不是插件：不进官方市场目录、不能卸载，设置页与 `$` 面板只读展示并引用。
+ * 可见性由对应产品功能开关决定，内置技能没有单独启停开关。
  * 产品功能的工具由 runtime 注册，教模型使用这些工具的技能必须同样不可移除——
  * 2026-09-19 的「/workflow 消失」事故根因就是 dynamic-workflows 技能与命令都住在
  * 用户可卸载的 zcode-guide 插件里（docs/dynamic-workflow/authoring.md「The `/workflow` command and the skill」）。
@@ -33,11 +34,27 @@ export const BUNDLED_SKILL_PACK_SKILLS_DIRECTORY = "skills";
 /** 门与技能包共用一个名字：常量住在 contracts（core 的技能门也读它），这里只转出。 */
 export { DYNAMIC_WORKFLOW_SKILL_NAME };
 
-/** 技能包里每个文件都是必需资产：丢任何一个都拒绝整包，而不是装出一个引用文件缺失的技能。 */
+// 技能族名称与附属资产清单由领域公开入口唯一维护，Runtime 也用它限定刷新范围。
+import { THINKRAIL_SKILL_FILES } from "@zcode/thinkrail";
+export {
+  THINKRAIL_SKILL_FILES,
+  THINKRAIL_SKILL_NAMES,
+  THINKRAIL_SPEC_SKILL_NAME,
+} from "@zcode/thinkrail";
+
+/**
+ * 技能包里每个文件都是必需资产：丢任何一个都拒绝整包，而不是装出一个引用文件缺失的技能。
+ *
+ * 两份技能各由一条产品特性支撑（`dynamic-workflows` ← 工作流工具簇；ThinkRail 技能族 ← spec_* 工具簇，
+ * 以及后续的 worktree_*），各自都有「对应特性关闭时不提供」的减法，减法用的路径就取自这里。
+ */
 export const BUNDLED_SKILL_PACK_REQUIRED_PATHS = [
   `skills/${DYNAMIC_WORKFLOW_SKILL_NAME}/SKILL.md`,
   `skills/${DYNAMIC_WORKFLOW_SKILL_NAME}/patterns.md`,
   `skills/${DYNAMIC_WORKFLOW_SKILL_NAME}/examples.md`,
+  ...Object.entries(THINKRAIL_SKILL_FILES).flatMap(([skill, files]) =>
+    files.map((file) => `skills/${skill}/${file}`),
+  ),
 ] as const;
 
 /** 与 official-plugin-definitions 的 rootCandidates 同形，覆盖 monorepo src/dist、cli/dist 与桌面 resources/glm 布局。 */

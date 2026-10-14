@@ -96,6 +96,7 @@ export interface AgentRuntimeInternal
   contextBuilder: ContextBuilder | null;
   contextInitialized: boolean;
   contextSourceSnapshot?: ContextSourceSnapshot;
+  contextInitialization?: Promise<void>;
   latestContextBuildResult?: ContextBuildResult;
   memoryRoot?: string;
   memoryIndexContent?: string;
@@ -104,6 +105,10 @@ export interface AgentRuntimeInternal
   memoryExtractionScheduler?: ProjectMemoryExtractionScheduler;
   memoryDreamLastScanAtMs: number;
   pendingMemoryUpdate?: ProjectMemoryUpdate;
+  readThinkrailEnabled?: AgentRuntimeDeps["readThinkrailEnabled"];
+  thinkrailPolicyRefresh?: Promise<void>;
+  readMainSystemPrompt?: AgentRuntimeDeps["readMainSystemPrompt"];
+  lastSystemPromptRequest?: import("../context/system-prompt.js").SystemPromptInspection["lastRequest"];
   contextSourcePort?: ContextSourcePort;
   skillPort?: SkillPort;
   mcpPort?: McpPort;
@@ -120,6 +125,7 @@ export interface AgentRuntimeInternal
   prepareAgentDefinitions: (input: {
     signal: AbortSignal;
     traceContext: TraceContext;
+    thinkrailEnabled?: boolean;
   }) => Promise<void>;
 
   dynamicWorkflowRunPort?: DynamicWorkflowRunPort;

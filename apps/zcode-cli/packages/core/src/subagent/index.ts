@@ -10,5 +10,10 @@ export * from "./profile.js";
 export * from "./explore-tools.js";
 export * from "./runner.js";
 export * from "./runtime-task-registry.js";
+export * from "./thinkrail-presets.js";
+export {
+  applyThinkrailAgentProfiles,
+  createAgentDefinitionsReader,
+} from "./definitions.js";
 
 export type { AgentDefinitionsSnapshot, GetAgentDefinitions } from "./definitions.js";

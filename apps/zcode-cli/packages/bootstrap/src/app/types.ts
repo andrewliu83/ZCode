@@ -145,6 +145,9 @@ export interface ZCodeAppOptions {
    * 普通 CLI 不传，继续使用 cli 默认值。
    */
   sourceTitle?: ModelProviderSourceTitle;
+  /** stdio Host 的当前进程策略；已有会话在下一轮边界采用新值。 */
+  readThinkrailEnabled?: () => boolean;
+  readMainSystemPrompt?: () => string | undefined;
   /** 本地 Host 源文档读取；无此能力时保持启动期配置。 */
   readSubagentRuntimeConfig?: (input: {
     signal: AbortSignal;
@@ -418,6 +421,7 @@ export interface ZCodeApp {
   getPluginReferenceCatalog(): PluginReferenceCatalog;
   /** 当前 Session 的 AgentRuntime Skill 发现快照；冷恢复重建 runtime 后重新发现。 */
   getSkillCatalog(): Promise<SkillLoadOutcome>;
+  getSystemPromptInspection(): Promise<import("@zcode/core").SystemPromptInspection>;
   listMcpServers(): Promise<Record<string, McpServerStatus>>;
   connectMcpServer(name: string): Promise<McpServerStatus>;
   /**

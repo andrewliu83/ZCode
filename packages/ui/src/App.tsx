@@ -241,6 +241,7 @@ export function App({
     handleOpenTreemapping,
     handleOpenWhiteboard,
     handleOpenDeveloperTools,
+    handleOpenSpecGraph,
     handleOpenTerminalTab,
     handleOpenSubagentSession,
     handleOpenBackgroundBash,
@@ -1324,6 +1325,7 @@ export function App({
           handleOpenTreemapping={handleOpenTreemappingIfWritable}
           handleOpenWhiteboard={handleOpenWhiteboard}
           handleOpenDeveloperTools={handleOpenDeveloperTools}
+          handleOpenSpecGraph={handleOpenSpecGraph}
           handleOpenTerminalTab={handleOpenTerminalTabIfWritable}
           handleToggleGit={handleToggleGitIfWritable}
           handleToggleSidePane={handleToggleSidePane}

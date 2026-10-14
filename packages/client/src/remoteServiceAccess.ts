@@ -44,6 +44,7 @@ import {
   IHooksService,
   IMemoryService,
   IOutputStyleService,
+  ISpecGraphService,
   ISettingsSyncService,
   IFeedbackService,
   IPromptAttachmentTransferService,
@@ -105,6 +106,7 @@ export class RemoteServiceAccess implements IServiceAccessor {
   readonly hooksService: IHooksService;
   readonly memoryService: IMemoryService;
   readonly outputStyleService: IOutputStyleService;
+  readonly specGraphService: ISpecGraphService;
   readonly settingsSyncService: ISettingsSyncService;
   readonly feedbackService: IFeedbackService;
   readonly promptAttachmentTransferService: IPromptAttachmentTransferService;
@@ -249,6 +251,9 @@ export class RemoteServiceAccess implements IServiceAccessor {
     );
     this.outputStyleService = ProxyChannel.toService<IOutputStyleService>(
       channelClient.getChannel(IOutputStyleService.channelName),
+    );
+    this.specGraphService = ProxyChannel.toService<ISpecGraphService>(
+      channelClient.getChannel(ISpecGraphService.channelName),
     );
     this.settingsSyncService = ProxyChannel.toService<ISettingsSyncService>(
       channelClient.getChannel(ISettingsSyncService.channelName),

@@ -177,6 +177,7 @@ export class AgentRuntime {
   private contextBuilder: ContextBuilder | null = null;
   private contextInitialized = false;
   private contextSourceSnapshot?: ContextSourceSnapshot;
+  private contextInitialization?: Promise<void>;
   private latestContextBuildResult?: ContextBuildResult;
   private memoryRoot?: string;
   private memoryIndexContent?: string;
@@ -185,6 +186,10 @@ export class AgentRuntime {
   private memoryExtractionScheduler?: ProjectMemoryExtractionScheduler;
   private memoryDreamLastScanAtMs = 0;
   private pendingMemoryUpdate?: ProjectMemoryUpdate;
+  private readThinkrailEnabled?: AgentRuntimeDeps["readThinkrailEnabled"];
+  private readMainSystemPrompt?: AgentRuntimeDeps["readMainSystemPrompt"];
+  private lastSystemPromptRequest?: import("../context/system-prompt.js").SystemPromptInspection["lastRequest"];
+  private thinkrailPolicyRefresh?: Promise<void>;
   private contextSourcePort?: ContextSourcePort;
   private skillPort?: SkillPort;
   private mcpPort?: McpPort;
@@ -264,9 +269,15 @@ export class AgentRuntime {
     Object.assign(this.config, resolveExecutionState(config));
     const definitions = createTurnAgentDefinitions(
       deps.getAgentDefinitions ??
-        createAgentDefinitionsReader(this.config.subagents?.profiles ?? [], {
-          builtInModelSelectionOverrides: this.config.subagents?.builtInModelSelectionOverrides,
-        }),
+        (() =>
+          createAgentDefinitionsReader(
+            this.config.subagents?.profiles ?? [],
+            {
+              builtInModelSelectionOverrides: this.config.subagents?.builtInModelSelectionOverrides,
+            },
+            // ThinkRail 总开关（docs/thinkrail/design.md D6）：关闭时五个预设不进可选名单。
+            { enabled: this.config.runtimeFeatures?.thinkrail === true },
+          )()),
       deps.loadAgentDefinitions,
     );
     this.getAgentDefinitions = definitions.get;
@@ -317,6 +328,8 @@ export class AgentRuntime {
     this.workingDirectory = config.workingDirectory ?? ".";
     this.contextSourcePort = deps.contextSourcePort;
     this.skillPort = deps.skillPort;
+    this.readThinkrailEnabled = deps.readThinkrailEnabled;
+    this.readMainSystemPrompt = deps.readMainSystemPrompt;
     this.mcpPort = deps.mcpPort;
     this.runtimeTaskRegistry = deps.runtimeTaskRegistry ?? new InMemoryRuntimeTaskRegistry();
     this.runtimeTaskRegistry.setActiveBranchGeneration?.(this.branchGeneration);
@@ -361,6 +374,11 @@ export class AgentRuntime {
         event: "browser.session_cleanup.failed",
       });
     }
+  }
+
+  /** 技能 gate 读取本轮快照，不直接读取会在执行中变化的 Host 设置。 */
+  isThinkrailEnabled(): boolean {
+    return this.config.runtimeFeatures?.thinkrail === true;
   }
 
   beginShutdown(): void {
@@ -563,6 +581,9 @@ export interface AgentRuntime {
   getContextBuilder(): ContextBuilder;
   /** Composer 使用的 Session Skill 快照；同一 runtime 冻结，runtime 重建后重新发现。 */
   getSkillCatalog(traceContext: TraceContext): Promise<SkillLoadOutcome>;
+  getSystemPromptInspection(
+    traceContext: TraceContext,
+  ): Promise<import("../context/system-prompt.js").SystemPromptInspection>;
   resumeFromStore(options?: ResumeSessionOptions): Promise<ResumeSessionResult>;
   recordTargetChanged(input: TargetChangedPayload & { traceContext: TraceContext }): Promise<void>;
   recordUserInputAutoResolutionUpdate(

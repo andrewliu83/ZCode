@@ -24,6 +24,7 @@ import type {
   SkillsPromptContext,
   SkillsListResult,
   SkillsCapability,
+  ZCodeSkillReferenceCatalogEntry,
 } from "@zcode/shared";
 import { DEFAULT_ENABLED_OFFICIAL_PLUGIN_IDS } from "@zcode/shared";
 import type { ISkillsService } from "./skills.js";
@@ -67,6 +68,11 @@ function resolveUserHomeDir() {
 
 interface SkillsServiceOptions {
   isDesktopRuntime?: boolean;
+  /** 复用目标 Agent 的内置目录，不自行构造另一份技能资产路径。 */
+  readBuiltInSkills?: (params: {
+    workspacePath: string;
+    workspaceIdentity?: string;
+  }) => Promise<readonly ZCodeSkillReferenceCatalogEntry[]>;
 }
 
 /** ZCode Agent 工作区级技能目录。 */
@@ -256,7 +262,7 @@ function collectMentionedSkillNames(prompt: string): Set<string> {
 function escapeXmlAttribute(value: string): string {
   return value
     .replaceAll("&", "&amp;")
-    .replaceAll("\"", "&quot;")
+    .replaceAll('"', "&quot;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;");
 }
@@ -457,7 +463,7 @@ function hasYamlUnsafeLooseInlineField(frontmatterText: string): boolean {
     const rawValue = line.slice(colonIndex + 1).trim();
     if (
       rawValue.length === 0 ||
-      rawValue.startsWith("\"") ||
+      rawValue.startsWith('"') ||
       rawValue.startsWith("'") ||
       rawValue.startsWith("|") ||
       rawValue.startsWith(">")
@@ -845,9 +851,7 @@ async function discoverSkills(params: {
   includeUserSkills: boolean;
   provider: ZCodeProvider;
 }): Promise<DiscoverResult> {
-  const workspaceRoots = dedupeRoots(
-    await resolveAncestorWorkspaceRoots(params.workspacePath),
-  );
+  const workspaceRoots = dedupeRoots(await resolveAncestorWorkspaceRoots(params.workspacePath));
   const roots: SkillRootDescriptor[] = workspaceRoots.map((rootPath) => ({
     scope: "workspace" as const,
     rootPath,
@@ -910,10 +914,7 @@ async function discoverSkills(params: {
         diagnostics.push({
           code: "skill_read_failed",
           severity: "warning",
-          message:
-            error instanceof Error
-              ? error.message
-              : `Failed to read skill: ${skillPath}`,
+          message: error instanceof Error ? error.message : `Failed to read skill: ${skillPath}`,
           path: skillPath,
         });
         continue;
@@ -1001,10 +1002,7 @@ async function collectSkillMarkdownPaths(
       diagnostics.push({
         code: "skill_scan_failed",
         severity: "warning",
-        message:
-          error instanceof Error
-            ? error.message
-            : `Failed to scan skill directory: ${path}`,
+        message: error instanceof Error ? error.message : `Failed to scan skill directory: ${path}`,
         path,
       });
     },
@@ -1015,8 +1013,7 @@ async function collectSkillMarkdownPaths(
 }
 
 function resolveCapabilities(options?: SkillsServiceOptions): SkillsCapability {
-  const isDesktopRuntime =
-    options?.isDesktopRuntime ?? Boolean(process.env.ZCODE_PROCESS_LABEL);
+  const isDesktopRuntime = options?.isDesktopRuntime ?? Boolean(process.env.ZCODE_PROCESS_LABEL);
   if (isDesktopRuntime) {
     return { userScopeAvailable: true };
   }
@@ -1051,8 +1048,20 @@ export function createSkillsService(options?: SkillsServiceOptions): ISkillsServ
         provider,
       });
       const enabledByPath = await readSkillEnabledMap();
+      const builtInEntries = (await options?.readBuiltInSkills?.(params)) ?? [];
+      const builtInSkills = await Promise.all(
+        builtInEntries
+          .filter((entry) => entry.scope === "built-in")
+          .map(
+            async (entry): Promise<SkillSummary> => ({
+              ...entry,
+              body: readFrontmatter(await readFile(entry.path, "utf8")).body,
+              readOnly: true,
+            }),
+          ),
+      );
       return {
-        skills: attachEnabledState(discovered, enabledByPath),
+        skills: [...attachEnabledState(discovered, enabledByPath), ...builtInSkills],
         capability,
         diagnostics,
       };
@@ -1067,6 +1076,10 @@ export function createSkillsService(options?: SkillsServiceOptions): ISkillsServ
       enabled: boolean;
     }): Promise<void> {
       const runUpdate = async () => {
+        if (params.skillId.startsWith("glm:built-in:")) {
+          // 内置技能属于产品资产，不能写入用户级启停覆盖，功能开关才是唯一所有者。
+          throw new Error("内置技能由功能开关控制，不能单独启停");
+        }
         const provider = "glm";
         const capability = resolveCapabilities(options);
         const { skills } = await discoverSkills({
@@ -1140,6 +1153,9 @@ export function createSkillsService(options?: SkillsServiceOptions): ISkillsServ
       if (!skill) {
         throw new Error(`Skill not found: ${params.skillId}`);
       }
+      if (skill.readOnly || skill.scope === "built-in") {
+        throw new Error("内置技能只读，不能安装到用户目录");
+      }
       const sourceDir = dirname(skill.path);
       // 通用目录根据 skill 原 scope 确定 user 还是 workspace 级
       const commonRoot =
@@ -1195,6 +1211,10 @@ export function createSkillsService(options?: SkillsServiceOptions): ISkillsServ
       if (!skill) {
         throw new Error(`Skill not found: ${params.skillId}`);
       }
+      // 内置技能只能通过产品功能开关控制，不能删除随包资产。
+      if (skill.readOnly || skill.scope === "built-in") {
+        throw new Error("内置技能只读，不能单独删除");
+      }
       // plugin 作用域的技能由其所属插件管理，应通过卸载插件移除，这里拒绝单独删除。
       if (skill.scope === "plugin") {
         throw new Error("插件提供的技能不可单独删除，请卸载对应插件");
@@ -1227,10 +1247,7 @@ export function createSkillsService(options?: SkillsServiceOptions): ISkillsServ
         const canonicalRoot = await realpath(root).catch(() => root);
         const relativePath = relative(canonicalRoot, canonicalParent);
         // 父目录等于根（叶子直接位于根下）也是合法的常见场景，故允许 "".
-        if (
-          relativePath === "" ||
-          (!relativePath.startsWith("..") && !isAbsolute(relativePath))
-        ) {
+        if (relativePath === "" || (!relativePath.startsWith("..") && !isAbsolute(relativePath))) {
           contained = true;
           break;
         }

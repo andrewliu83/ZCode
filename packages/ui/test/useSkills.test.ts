@@ -3,6 +3,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import type { ZCodeSkillsReferenceCatalogResult } from "@zcode/shared";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useThinkrailCatalogStore } from "@/store/thinkrailCatalogStore.js";
 
 const getSkillReferenceCatalog =
   vi.fn<(params: unknown) => Promise<ZCodeSkillsReferenceCatalogResult>>();
@@ -55,11 +56,37 @@ function deferred<T>() {
 
 describe("useSkills conversation catalog", () => {
   beforeEach(() => {
+    useThinkrailCatalogStore.setState({ revision: 0 });
     vi.clearAllMocks();
     getSkillReferenceCatalog.mockReset();
     runtimeRestartListener = undefined;
     resolution.remoteSessionId = null;
     resolution.rpcReady = true;
+  });
+
+  it("开关确认后刷新已有会话目录，并丢弃旧代次的迟到结果", async () => {
+    const previous = deferred<ZCodeSkillsReferenceCatalogResult>();
+    const current = deferred<ZCodeSkillsReferenceCatalogResult>();
+    getSkillReferenceCatalog
+      .mockReturnValueOnce(previous.promise)
+      .mockReturnValueOnce(current.promise);
+    const { useSkills } = await import("@/hooks/useSkills.js");
+    const hook = renderHook(() =>
+      useSkills({ workspacePath: "/workspace", sessionId: "session-a", enabled: true }),
+    );
+    await waitFor(() => expect(getSkillReferenceCatalog).toHaveBeenCalledTimes(1));
+    act(() => useThinkrailCatalogStore.getState().invalidate());
+    await waitFor(() => expect(getSkillReferenceCatalog).toHaveBeenCalledTimes(2));
+    const builtin = catalog("choosing-a-workflow", "session");
+    current.resolve(builtin);
+    await waitFor(() => expect(hook.result.current.skills[0]?.name).toBe("choosing-a-workflow"));
+    await act(async () => {
+      previous.resolve(catalog("stale", "session"));
+      await previous.promise;
+    });
+    expect(hook.result.current.skills[0]?.name).toBe("choosing-a-workflow");
+    expect(hook.result.current.authority).toBe("session");
+    hook.unmount();
   });
 
   it("uses workspace authority for a draft and Session authority for an existing conversation", async () => {

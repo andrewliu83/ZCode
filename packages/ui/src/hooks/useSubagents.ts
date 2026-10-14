@@ -8,6 +8,7 @@ import { useTabStore } from "@/store/TabStoreProvider.js";
 import { isWorkspaceTab, type WindowTabState, type WorkspaceTabState } from "@/store/tabStore.js";
 import { getSubagentsContextKey, useSubagentsContextStore } from "@/store/subagentsContextStore.js";
 import { useSubagentsStore } from "@/store/subagentsStore.js";
+import { useThinkrailCatalogStore } from "@/store/thinkrailCatalogStore.js";
 
 export function useSubagents(
   workspacePath: string | null,
@@ -15,6 +16,7 @@ export function useSubagents(
   explicitWorkspaceIdentity?: string,
 ) {
   const { subagentsService } = useServices();
+  const catalogRevision = useThinkrailCatalogStore((state) => state.revision);
   const explicitIdentity = explicitWorkspaceIdentity?.trim() || undefined;
   const workspaceRpcTarget = useTabStore(
     useShallow((state) => {
@@ -63,6 +65,7 @@ export function useSubagents(
   const context = useSubagentsContextStore((state) =>
     contextKey ? state.contexts[contextKey] : undefined,
   );
+  const currentContext = context?.catalogRevision === catalogRevision ? context : undefined;
   const initialize = useSubagentsContextStore((state) => state.initialize);
   const refreshStore = useSubagentsContextStore((state) => state.refresh);
   const setEnabledStore = useSubagentsContextStore((state) => state.setEnabled);
@@ -78,6 +81,7 @@ export function useSubagents(
     })),
   );
   const useLegacyContext =
+    catalogRevision === 0 &&
     workspacePath !== null &&
     legacyContext.workspacePath === workspacePath &&
     legacyContext.workspaceIdentity === (workspaceIdentity ?? null) &&
@@ -89,9 +93,10 @@ export function useSubagents(
       // 这里先跳过 workspace RPC，避免 disconnected proxy 的内部错误码显示成红色子智能体提示。
       return;
     }
-    if (context) return;
+    if (context?.catalogRevision === catalogRevision) return;
     void initialize(workspacePath, provider, subagentsService, workspaceIdentity);
   }, [
+    catalogRevision,
     context,
     initialize,
     provider,
@@ -146,29 +151,29 @@ export function useSubagents(
       agents: workspaceRpcEnabled
         ? useLegacyContext
           ? legacyContext.agents
-          : (context?.agents ?? [])
+          : (currentContext?.agents ?? [])
         : [],
       capability: workspaceRpcEnabled
         ? useLegacyContext
           ? legacyContext.capability
-          : (context?.capability ?? null)
+          : (currentContext?.capability ?? null)
         : null,
       loading:
         workspaceRpcEnabled && workspacePath !== null
           ? useLegacyContext
             ? legacyContext.loading
-            : !context || context.loading
+            : !currentContext || currentContext.loading
           : false,
       error: workspaceRpcEnabled
         ? useLegacyContext
           ? legacyContext.error
-          : (context?.error ?? null)
+          : (currentContext?.error ?? null)
         : null,
       refresh,
       setEnabled,
     }),
     [
-      context,
+      currentContext,
       legacyContext,
       refresh,
       setEnabled,

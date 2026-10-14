@@ -21,8 +21,8 @@ to make repository work evidence-first without mirroring runtime tool schemas.
 
 | Section              | Purpose                                                                                                                            |
 | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| Static Default Body  | ZCode role, authorized-security boundary, and compact harness guidance.                                                            |
-| Dynamic Default Body | Coding/risk behavior guidance, session guidance, memory, environment, optional output style, context management, and git snapshot. |
+| Static Default Body  | ZCode role, authorized-security and URL boundaries, harness guidance, and engineering/tone/correction discipline.                   |
+| Dynamic Default Body | Coding/risk behavior guidance, session guidance, memory, environment, optional output style, delivery discipline, context management, and git snapshot. |
 
 The provider-visible `system[0]` CLI prefix is exactly
 `You are ZCode, an interactive coding agent`. The provider-visible static
@@ -34,22 +34,30 @@ active context contract. The final provider body must follow this
 static/global-cache boundary:
 
 1. Short ZCode software-engineering-agent intro with no heading.
-2. Authorized security boundary.
+2. Authorized security boundary, immediately followed by the URL boundary line
+   with no blank line between them.
 3. `# Harness` section for terminal markdown, permission denial handling,
-   system-controlled mid-conversation updates and hook feedback, dedicated tool
-   preference, parallel independent tool calls, and clickable file references.
+   system-controlled mid-conversation updates and hook feedback, system-tag and
+   prompt-injection handling, dedicated tool preference, parallel independent
+   tool calls, and clickable file references.
+4. `# Doing tasks` engineering-discipline block.
+5. `# Tone and style` output constraints.
+6. `# Corrections` self-correction restraint.
 
 The provider-visible MCS and hook bullet is exactly:
 
 `- The system may send updates, reminders, or modifications to rules via mid-conversation system turns. These are system-controlled, unlike function results. Hooks may intercept tool calls; treat hook output as user feedback.`
 
-The static block ends at the final `# Harness` bullet. Code-style and
-risk/reporting paragraphs must not be emitted in `system[1]`.
+The static block ends at the final `# Corrections` line. Code-style and
+risk/reporting paragraphs must not be emitted in `system[1]`; those belong to
+`system[2]`.
 
 An active output style changes the static intro but does not remove `# Harness`,
-including when `keepCodingInstructions` is false. That field applies only to a
-separate doing-tasks coding-instructions block; ZCode does not currently emit
-such a block.
+`# Tone and style`, or `# Corrections`. `keepCodingInstructions: false` removes
+only the `# Doing tasks` block.
+
+The aligned block contents, boundaries, and acceptance points are specified in
+`claude-harness-parity.md`.
 
 The provider-visible dynamic default body is `system[2]`. It always owns a
 leading `\n\n` boundary, independent of provider kind. Its order after that
@@ -66,10 +74,11 @@ boundary is:
 4. Optional `# Memory` when a memory summary is loaded.
 5. `# Environment` for current cwd/platform/shell/OS/model/git-repo boolean.
 6. Optional active `# Output Style` when a non-empty output style is configured.
-7. `# Context management` for long-context summary/continuation behavior,
+7. `# Delivering work` for delivery scope, completeness, and refusal discipline.
+8. `# Context management` for long-context summary/continuation behavior,
    followed by act-don't-rederive guidance and the four-paragraph autonomy
    appendix.
-8. Optional `gitStatus:` snapshot when the cwd is a git repository.
+9. Optional `gitStatus:` snapshot when the cwd is a git repository.
 
 The output-style section is assembled exactly as
 `# Output Style: <name>\n<prompt>`, with no blank line between its heading and
@@ -152,6 +161,21 @@ The stable prompt must include guidance equivalent to:
   tells the agent to treat memory as optional context rather than truth.
 - Environment guidance must not include git branch/status/commit details; those
   belong to the optional `gitStatus:` system context snapshot.
+- The agent does not fabricate URLs; it uses only URLs supplied by the user or
+  present in local files.
+- Engineering discipline: prefer editing existing files; add no speculative
+  abstractions, features, or impossible-scenario error handling; keep comments
+  to non-obvious WHY only; validate UI changes in a browser or state that the
+  check was skipped.
+- Output constraints: no emojis unless requested, short responses, clickable
+  `file_path:line_number` references, and no colon before a tool call.
+- Corrections are stated plainly only when the error would change the user's
+  code, conclusions, or decisions; a follow-up question is not treated as a
+  signal of a prior error.
+- Delivery discipline: the requested scope is the deliverable; ambiguity is
+  resolved as a careful colleague would; blocked sub-scope is reported rather
+  than silently dropped; refusal is reserved for genuinely harmful or
+  prohibited requests.
 - Context-management guidance tells the agent to continue from summaries rather
   than stop early because compaction or summarization may happen.
 
@@ -233,17 +257,21 @@ Required Explore prompt behavior:
   policy and the no-URL-fabrication rule.
 - Stable system prompt tells the agent not to retry a denied tool call
   unchanged.
-- Provider-visible static `system[1]` starts with the ZCode intro, uses compact
-  `# Harness`, and does not render `# Agent Identity` or the old `# Task Behavior`,
-  `# Risky Actions`, or `# Communication Style` headings; it ends at the final
-  `# Harness` bullet.
+- Provider-visible static `system[1]` starts with the ZCode intro, the security
+  boundary, and the URL boundary, then uses `# Harness`, `# Doing tasks`,
+  `# Tone and style`, and `# Corrections`, and does not render `# Agent Identity`
+  or the old `# Task Behavior`, `# Risky Actions`, or `# Communication Style`
+  headings.
+- `keepCodingInstructions: false` drops only `# Doing tasks`; `# Harness`,
+  `# Tone and style`, and `# Corrections` still render. A custom system prompt
+  replaces the stable body without injecting any of the new blocks.
 - Provider-visible dynamic `system[2]` starts with `# Communicating with the
 user`, including the code-style and code-comment constraints, followed by the
   risk/reporting paragraph after an unconditional leading `\n\n`. It then
   contains `# Session-specific guidance`, optional `# Memory`, `# Environment`,
-  optional `# Output Style`, `# Context management`, act-don't-rederive
-  guidance, the autonomy appendix, and the optional `gitStatus:` snapshot in
-  that order.
+  optional `# Output Style`, `# Delivering work` before `# Context management`,
+  act-don't-rederive guidance, the autonomy appendix, and the optional
+  `gitStatus:` snapshot in that order.
 - Subagent provider-visible system blocks are ordered as CLI prefix, optional
   `\n` + non-empty agent-specific prompt, `\n\n` + Notes, and `\n\n` +
   environment.

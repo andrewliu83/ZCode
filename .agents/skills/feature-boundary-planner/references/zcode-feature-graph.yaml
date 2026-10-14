@@ -17,6 +17,68 @@ rules:
     - "evidence-only"
 
 nodes:
+  - id: "capability.system-prompt-settings"
+    kind: "capability"
+    label: "Editable main prompt with read-only runtime additions and last model request"
+    aliases: ["系统提示词", "system prompt", "注入提示词", "prompt inspection"]
+    docs: ["docs/system-prompt-settings.md"]
+    codeSeeds:
+      - file: "packages/services/src/setting/settingService.ts"
+        symbol: "createSettingService"
+      - file: "packages/services/src/zcode-agent/mainSystemPromptPolicy.ts"
+        symbol: "createMainSystemPromptPolicySync"
+      - file: "apps/zcode-cli/packages/core/src/context/system-prompt.ts"
+        symbol: "inspectSystemPrompt"
+      - file: "apps/zcode-cli/packages/bootstrap/src/zcode-protocol/system-prompt.ts"
+        symbol: "readSystemPrompt"
+    invariants:
+      - "AppSettings owns only mainSystemPrompt; automatic sections come from ContextBuilder and remain read-only."
+      - "Running turns freeze policy; next admission reads saved main prompt and ThinkRail policy together."
+      - "Workflow actors and ordinary children retain persona; legacy complete replacement contract stays intact."
+      - "Workspace preview creates no session or model call; resident inspection checks identity and never falls back."
+  - id: "surface.system-prompt-settings"
+    kind: "ui-surface"
+    label: "Shared desktop and mobile system prompt settings"
+    codeSeeds:
+      - file: "packages/ui/src/settings/SystemPromptSettingsSection.tsx"
+        symbol: "SystemPromptSettingsSection"
+      - file: "packages/ui/src/hooks/useSystemPromptInspection.ts"
+        symbol: "useSystemPromptInspection"
+  - id: "capability.thinkrail"
+    kind: "capability"
+    label: "Spec switch controls shared agent and skill catalogs and per-turn prompt guidance"
+    aliases: ["ThinkRail", "spec 开关", "choosing-a-workflow", "chose workflow", "熟悉当前项目"]
+    docs: ["docs/thinkrail/design.md", "docs/thinkrail/catalog-prompt-repair.md"]
+    codeSeeds:
+      - file: "packages/shared/src/thinkrail-agent-presets.ts"
+        symbol: "createThinkrailAgentProfiles"
+      - file: "packages/services/src/subagents/subagentsService.ts"
+        symbol: "createSubagentsService"
+      - file: "packages/services/src/skills/skillsService.ts"
+        symbol: "createSkillsService"
+      - file: "apps/zcode-cli/packages/bootstrap/src/zcode-protocol/skill-reference-catalog.ts"
+        symbol: "getSkillReferenceCatalog"
+      - file: "apps/zcode-cli/packages/core/src/runtime/methods/context-policy.ts"
+        symbol: "refreshContextPolicy"
+      - file: "apps/zcode-cli/packages/core/src/context/sections/thinkrail.ts"
+        symbol: "buildThinkrailSection"
+    invariants:
+      - "Settings owns the switch; Host serializes process policy; each running turn keeps its admitted snapshot and queued turns read the next policy."
+      - "Workflow routing requires Skill but no existing spec; spec guidance independently requires actual spec and read tools."
+      - "Builtin assets remain read-only and visible; custom profiles retain precedence; legacy catalog endpoint keeps its closed scope contract."
+      - "UI invalidates derived catalogs only after policy acknowledgement; workspace identity and remote attachment remain isolated."
+  - id: "surface.thinkrail-catalogs"
+    kind: "ui-surface"
+    label: "Shared ThinkRail settings and Composer references"
+    codeSeeds:
+      - file: "packages/ui/src/settings/SubagentsSection.tsx"
+        symbol: "SubagentsSection"
+      - file: "packages/ui/src/settings/SkillsSection.tsx"
+        symbol: "SkillsSection"
+      - file: "packages/ui/src/hooks/useSkills.ts"
+        symbol: "useSkills"
+      - file: "packages/ui/src/hooks/useSubagents.ts"
+        symbol: "useSubagents"
   - id: "capability.permission-full-access"
     kind: "capability"
     label: "Approval full access updates task and pending input permissions"
@@ -4996,7 +5058,12 @@ nodes:
     kind: "capability"
     label: "Bot group and topic collaboration"
     aliases: ["群聊机器人", "话题续接", "ReplyToChannel", "渠道提及", "Bot 历史附件"]
-    docs: ["docs/bots-feishu-group-collaboration.md", "docs/bots-topic-input-materials.md", "docs/testing/bots-e2e-coverage-matrix.md"]
+    docs:
+      [
+        "docs/bots-feishu-group-collaboration.md",
+        "docs/bots-topic-input-materials.md",
+        "docs/testing/bots-e2e-coverage-matrix.md",
+      ]
     codeSeeds:
       - file: "packages/services/src/bots/botsService.ts"
         symbol: "createBotsService"
@@ -5020,6 +5087,26 @@ nodes:
         symbol: "BotTopicPreparationList"
 
 edges:
+  - from: "capability.system-prompt-settings"
+    to: "surface.system-prompt-settings"
+    type: "exposed-through"
+    rank: "must-inspect"
+  - from: "capability.system-prompt-settings"
+    to: "capability.thinkrail"
+    type: "shares-prompt-composition"
+    rank: "must-inspect"
+  - from: "capability.system-prompt-settings"
+    to: "capability.workspace-identity"
+    type: "isolated-by"
+    rank: "invariant-only"
+  - from: "capability.thinkrail"
+    to: "surface.thinkrail-catalogs"
+    type: "exposed-through"
+    rank: "must-inspect"
+  - from: "capability.thinkrail"
+    to: "capability.workspace-identity"
+    type: "isolated-by"
+    rank: "invariant-only"
   - from: "capability.permission-full-access"
     to: "surface.permission-full-access"
     type: "renders-in"

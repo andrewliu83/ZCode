@@ -1326,6 +1326,11 @@ export function createHomeOnlyWebRemoteControlServices(): RootServices {
       listStyles: async () => ({ styles: [] }),
       getUserStylesDirectory: async () => ({ path: "" }),
     }),
+    // ThinkRail spec 图：手机远控首页在 bridge 就绪前没有工作区可读；明确报不可用，
+    // 而不是返回一份空快照（那会被面板显示成「这个仓库没有 spec」）。
+    specGraphService: createUnsupportedHomeOnlyService<RootServices["specGraphService"]>(
+      "specGraphService",
+    ),
     // Bugfix: feedbackService 成为统一服务接口后，Web 远控首页 fallback 也必须补齐。
     // 断开 bridge 时这里明确报不可用，避免类型通过但运行时误以为空反馈数据。
     feedbackService:

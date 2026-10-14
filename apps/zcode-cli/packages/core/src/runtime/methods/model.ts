@@ -24,6 +24,8 @@ import { getOrCreateReasoningBlock } from "./reasoning-stream.js";
 import { createRefreshRuntimeHeadersBeforeModelAttempt } from "./model-runtime-headers.js";
 import { isOutputTokenLimitFinishReason } from "./turn-output-token-continuation.js";
 
+import { captureSystemPromptRequest } from "../../context/system-prompt.js";
+
 const TOOL_INPUT_STREAM_DELTA_FALLBACK_FLUSH_CHARS = 4096;
 
 function hasToolInputLineBreak(value: string): boolean {
@@ -124,6 +126,11 @@ export async function runModelTextRequest(
       : {}),
   };
 
+  // 这是本次实际请求的只读投影，不进入 Session 持久化或形成配置来源。
+  this.lastSystemPromptRequest = captureSystemPromptRequest(
+    modelRequest.messages,
+    new Date(this.now()),
+  );
   this.logger?.debug(
     "Model request token limits",
     modelRequestTokenLimitLogContext({

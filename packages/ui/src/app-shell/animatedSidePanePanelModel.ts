@@ -5,15 +5,19 @@ export type OpenTabLauncherItemId =
   | "review"
   | "terminal"
   | "browser"
-  | "developer-tools";
+  | "developer-tools"
+  | "spec-graph";
 
 export function resolveOpenTabLauncherItemIds({
   developerToolsEnabled,
+  thinkrailEnabled = false,
   hasReviewTab,
   canOpenSelectionSideConversation = false,
   supportsEmbeddedBrowser = true,
 }: {
   developerToolsEnabled: boolean;
+  /** ThinkRail 总开关（AppSettings.thinkrailEnabled）；关闭时 spec 图入口不出现。 */
+  thinkrailEnabled?: boolean;
   hasReviewTab: boolean;
   canOpenSelectionSideConversation?: boolean;
   supportsEmbeddedBrowser?: boolean;
@@ -36,6 +40,10 @@ export function resolveOpenTabLauncherItemIds({
 
   if (developerToolsEnabled) {
     itemIds.push("developer-tools");
+  }
+
+  if (thinkrailEnabled) {
+    itemIds.push("spec-graph");
   }
 
   return itemIds;

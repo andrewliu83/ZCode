@@ -100,6 +100,7 @@ export function selectSkillsForScope(
     scopedPluginIdsByName.set(name, [...(scopedPluginIdsByName.get(name) ?? []), plugin.id]);
   }
   return skills.filter((skill) => {
+    if (skill.scope === "built-in") return true;
     if (skill.scope !== "plugin") {
       return skill.scope === scope;
     }

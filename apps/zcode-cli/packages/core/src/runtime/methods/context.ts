@@ -28,11 +28,15 @@ import {
 import { resolveEnabledProjectMemoryRoot } from "../helpers/project-memory.js";
 import { buildContextHistoryEntries } from "./context-history-entries.js";
 import { resolveRuntimeEmbeddedSearchEnabled } from "./embedded-search-branch.js";
+import { refreshContextPolicy } from "./context-policy.js";
+import { rebuildContextPrefix } from "./context-refresh.js";
 import { getContextSourceShellDisplayName } from "./session-shell-environment.js";
 import {
   ensureGenUiOutputDirectory,
   resolveGenUiOutputDirectory,
 } from "../helpers/gen-ui-output.js";
+import { SPEC_RULE, WORKFLOW_RULE } from "@zcode/thinkrail";
+import { thinkrailHasSpec } from "../../tool/handlers/thinkrail/index.js";
 
 export { buildContextHistoryEntries };
 
@@ -42,7 +46,22 @@ export async function ensureContextInitialized(
   model?: Model,
 ): Promise<void> {
   if (this.contextInitialized) return;
+  if (this.contextInitialization) return await this.contextInitialization;
+  // 原因：目录/设置查询与首轮初始化并发时，第二次 init 会覆盖已经追加的历史。
+  const initialization = initializeContextSources.call(this, traceContext, model);
+  this.contextInitialization = initialization;
+  try {
+    await initialization;
+  } finally {
+    if (this.contextInitialization === initialization) this.contextInitialization = undefined;
+  }
+}
 
+async function initializeContextSources(
+  this: AgentRuntimeInternal,
+  traceContext: TraceContext,
+  model?: Model,
+): Promise<void> {
   const shellDisplayName = getContextSourceShellDisplayName(this);
   const snapshot = this.contextSourcePort
     ? await this.contextSourcePort.resolveContextSources(
@@ -93,7 +112,13 @@ export async function getSkillCatalog(
   // Composer 曾独立扫描磁盘，所以运行中的 Session 会看到 AgentRuntime
   // 尚未加载的新 Skill。先经过 runtime 唯一的 context 初始化门，再返回防御性副本，
   // 让 UI 与本 Session 实际可用的 Skill 保持同一快照；新 runtime 会自然重新发现。
-  await this.ensureContextInitialized(traceContext);
+  if (!this.activeTurn && !this.activeTurnStartReservation) {
+    const changed = await refreshContextPolicy(this, traceContext);
+    if (changed && this.contextInitialized) rebuildContextPrefix(this);
+    await this.ensureContextInitialized(traceContext);
+  }
+  // 开始执行的 turn 可能正在更新自己的快照；目录只等待这次更新，不读取新的实时策略。
+  if (this.thinkrailPolicyRefresh) await this.thinkrailPolicyRefresh;
   const outcome = this.skillLoadOutcome ?? {
     skills: [],
     diagnostics: [],
@@ -148,11 +173,22 @@ export function createContextBuilderFromSnapshot(
     embeddedSearchEnabled: resolveRuntimeEmbeddedSearchEnabled(this),
     skillMetadataBudget: this.config.skillMetadataBudget,
     customSystemPrompt: this.config.systemPrompt,
+    mainSystemPrompt: this.config.subagentContext ? undefined : this.config.mainSystemPrompt,
     workflowActor: this.config.workflowActor,
     language: this.config.language,
     outputStyle: this.config.outputStyle,
     compact: this.config.compact,
     guidanceToolNames: this.getTools(options.model).map((tool) => tool.name),
+    // ThinkRail 常驻段的三条条件（docs/thinkrail/design.md D3）：开关、工具表锚点由
+    // section 内部判；启用时有界探测当前文件系统，关闭时不产生探测 IO。
+    thinkrail: {
+      enabled: this.config.runtimeFeatures?.thinkrail === true,
+      hasSpec:
+        this.config.runtimeFeatures?.thinkrail === true &&
+        thinkrailHasSpec(snapshot.workingDirectory),
+      specRule: SPEC_RULE,
+      workflowRule: WORKFLOW_RULE,
+    },
   };
 
   return createContextBuilder(contextConfig).setToolRegistry(this.registry);

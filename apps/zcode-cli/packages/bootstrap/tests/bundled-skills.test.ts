@@ -102,6 +102,15 @@ const COMPLETE_PACK = Object.fromEntries(
   BUNDLED_SKILL_PACK_REQUIRED_PATHS.map((path) => [path, `# ${path}\n`]),
 );
 
+describe("必需资产清单", () => {
+  it("与 SEA 构建脚本的那份逐字相等（两份清单漂移 = 构建期漏过、运行时整包被拒）", async () => {
+    // SEA 侧跑在纯 JS 的构建脚本上下文（packages/cli/scripts/sea-bundled-skill-assets.mjs），
+    // 没法 import 这份 TS 常量；相等由这条断言守，不是靠两边各自记得同步。
+    const sea = await import("../../cli/scripts/sea-bundled-skill-assets.mjs");
+    expect([...sea.bundledSkillPackRequiredPaths]).toEqual([...BUNDLED_SKILL_PACK_REQUIRED_PATHS]);
+  });
+});
+
 describe("resolveBundledSkillRoots", () => {
   let tempRoot: string;
 

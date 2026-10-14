@@ -3333,8 +3333,9 @@ function seedE2EStartupState(specs: string[] = []) {
         ? {}
         : // Bug 根因：I20 不验证账号登录，却播种假 ZCode JWT；带账号身份的旁路请求
           // 会把它发往真实控制面，401 随后弹出登录过期对话框并遮挡目标交互。
-          // 该 case 只保留本地 Provider 回放，不注入无关账号身份。
-          builtInSubagentModelOverridesSpec
+          // 该 case 与系统提示词设置只验证本地行为，不注入无关账号身份。
+          builtInSubagentModelOverridesSpec ||
+            workerSpecsContain(specs, "settings-system-prompt.test.ts")
           ? {}
           : subagentLoginCatalogStaleSpec
             ? {}

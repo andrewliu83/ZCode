@@ -20,6 +20,8 @@ import {
   useDynamicWorkflowAvailabilityLoader,
   useDynamicWorkflowUserModeSync,
 } from "@/hooks/useDynamicWorkflowAvailability.js";
+import { useThinkrailEnabledSync } from "@/hooks/useThinkrailEnabledSync.js";
+import { useMainSystemPromptSync } from "@/hooks/useMainSystemPromptSync.js";
 import { DirectoryBrowser } from "@/DirectoryBrowser.js";
 import { useTabPersistence } from "@/hooks/useTabPersistence.js";
 import { useTokenRefresh } from "@/hooks/useTokenRefresh.js";
@@ -359,6 +361,18 @@ function RootInner({
     userMode: appSettings?.dynamicWorkflowMode,
     zcodeAgentService: services.zcodeAgentService,
     codingPlanSubscriptionService: services.codingPlanSubscriptionService,
+  });
+  // docs/thinkrail/design.md D2：ThinkRail 总开关变化后通知本窗口的 Host 重发 CLI 策略
+  // （并转发给远程 Host）。这里不需要重读快照——开关只有设置文件一个来源。
+  useThinkrailEnabledSync({
+    settingsLoaded: Boolean(appSettings),
+    enabled: appSettings?.thinkrailEnabled,
+    zcodeAgentService: services.zcodeAgentService,
+  });
+  useMainSystemPromptSync({
+    settingsLoaded: Boolean(appSettings),
+    mainSystemPrompt: appSettings?.mainSystemPrompt,
+    zcodeAgentService: services.zcodeAgentService,
   });
   const [welcomeScreenOpenReason, setWelcomeScreenOpenReason] =
     useState<WelcomeScreenOpenReason | null>(() =>

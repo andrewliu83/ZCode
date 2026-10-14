@@ -9,6 +9,7 @@ import {
   FileCode2Icon,
   FileDiffIcon,
   MapIcon,
+  NetworkIcon,
   MessageSquareTextIcon,
   ListTreeIcon,
   PlugIcon,
@@ -349,6 +350,12 @@ export function SidePaneTabIcon({ tab }: { tab: WorkspaceSidePaneTab }) {
     return <BrowserUseTabIcon tab={tab} />;
   }
 
+  // spec-graph 与 browser-use 同一个理由：它没有 source 字段，落到下面的
+  // `tab.source.type` 会读 undefined.type 并崩掉整棵 workspace 子树。
+  if (tab.type === "spec-graph") {
+    return <NetworkIcon className="size-3.5" />;
+  }
+
   if (tab.source.type === "patch") {
     const fileDisplayTarget = getPatchFileDisplayTarget(tab.source);
     if (fileDisplayTarget) {
@@ -562,6 +569,10 @@ export function getSidePaneTabTitle(
 
   if (tab.type === "plugin-ui") {
     return tab.title.trim() || formatMessage({ id: "sidePane.pluginUi" });
+  }
+
+  if (tab.type === "spec-graph") {
+    return formatMessage({ id: "thinkrail.specGraph.title" });
   }
 
   return tab.source.title || formatMessage({ id: "codeViewer.title" });

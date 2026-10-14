@@ -337,6 +337,15 @@ export interface AppSettings {
    * 提供的模式；只在功能已提供时生效。选回提供的模式时删除该字段，未改动的安装继续跟随服务端翻转。
    */
   dynamicWorkflowMode?: DynamicWorkflowMode;
+  /**
+   * ThinkRail（spec-graph + worktree 工作方式）的总开关，docs/thinkrail/design.md D2。
+   * 缺席 = 关：新老用户都不因升级得到新的工具面；技能、预设、面板同理。
+   * 这一位是**唯一所有者**——Host 从设置读它，经 workspace/updateThinkrailToolPolicy 推给
+   * CLI，CLI 只缓存结论；不在 CLI config 或环境变量里另开一份。
+   */
+  thinkrailEnabled?: boolean;
+  /** 主代理基础正文；空白恢复默认，自动注入与子代理身份由 Runtime 保持独立。 */
+  mainSystemPrompt?: string;
   /** 已启用的内置 Agent CLI；UI 对外仍展示为“Install”，底层语义保持为启用内置能力。 */
   enabledBuiltinAgentCliProviders?: ZCodeProvider[];
   /** 设置页中每个 Provider Family 当前唯一的结构化连接选择。 */

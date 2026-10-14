@@ -157,6 +157,8 @@ import {
   type WindowRemoteConnectionHandle,
 } from "./windowRemoteConnectionRegistry.js";
 import { pushDynamicWorkflowUserModeToRemoteHosts } from "./remoteDynamicWorkflowUserMode.js";
+import { pushThinkrailEnabledToRemoteHosts } from "./remoteThinkrailEnabled.js";
+import { pushMainSystemPromptToRemoteHosts } from "./remoteMainSystemPrompt.js";
 import { createWindowHostControllerRuntime } from "./windowHostControllerService.js";
 import { resolveAutomationSubmissionModelSelection } from "./automationModelSelection.js";
 import { createRemoteConnectionProgressContext } from "@zcode/server/remote/remoteConnectionProgressContext.js";
@@ -1778,6 +1780,21 @@ async function createWindowRemoteConnectionHandle(params: {
       dynamicWorkflowUserMode,
       (error) => logger.warn("remote dynamic workflow user mode push failed", error),
     );
+    await pushMainSystemPromptToRemoteHosts(
+      [{ target: params.target, zcodeAgentService: services.get(IZCodeAgentService) }],
+      (await localSettingService.get()).mainSystemPrompt,
+      (error) => logger.warn("remote main system prompt push failed", error),
+    );
+    // ThinkRail 总开关（docs/thinkrail/design.md D2）：同一条推送，同一个理由。
+    const thinkrailEnabled = await localSettingService
+      .get()
+      .then((settings) => settings.thinkrailEnabled)
+      .catch(() => undefined);
+    await pushThinkrailEnabledToRemoteHosts(
+      [{ target: params.target, zcodeAgentService: services.get(IZCodeAgentService) }],
+      thinkrailEnabled,
+      (error) => logger.warn("remote thinkrail enabled push failed", error),
+    );
   }
 
   peerServices = services;
@@ -2967,6 +2984,31 @@ parentPort.on("message", async (e: Electron.MessageEvent) => {
                     })),
                   mode,
                   (error) => logger.warn("remote dynamic workflow user mode forward failed", error),
+                );
+              },
+              // ThinkRail 总开关（docs/thinkrail/design.md D2）：同一形状，同一理由。
+              forwardMainSystemPrompt: (value) => {
+                return pushMainSystemPromptToRemoteHosts(
+                  windowRemoteConnectionRegistry
+                    .listReadyConnections()
+                    .map(({ target, services: remoteServices }) => ({
+                      target,
+                      zcodeAgentService: remoteServices.get(IZCodeAgentService),
+                    })),
+                  value,
+                  (error) => logger.warn("remote main system prompt forward failed", error),
+                );
+              },
+              forwardThinkrailEnabled: (enabled) => {
+                void pushThinkrailEnabledToRemoteHosts(
+                  windowRemoteConnectionRegistry
+                    .listReadyConnections()
+                    .map(({ target, services: remoteServices }) => ({
+                      target,
+                      zcodeAgentService: remoteServices.get(IZCodeAgentService),
+                    })),
+                  enabled,
+                  (error) => logger.warn("remote thinkrail enabled forward failed", error),
                 );
               },
               registerPluginSandbox: pluginSandboxRegistrationBridge.register,

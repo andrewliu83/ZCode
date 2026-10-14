@@ -253,6 +253,9 @@ export interface AgentRuntimeCoreMethods {
   getContextBuilder(): ContextBuilder;
   ensureContextInitialized(traceContext: TraceContext, model?: Model): Promise<void>;
   getSkillCatalog(traceContext: TraceContext): Promise<SkillLoadOutcome>;
+  getSystemPromptInspection(
+    traceContext: TraceContext,
+  ): Promise<import("../context/system-prompt.js").SystemPromptInspection>;
   createContextBuilderFromSnapshot(
     snapshot: ContextSourceSnapshot,
     memoryRoot?: string,

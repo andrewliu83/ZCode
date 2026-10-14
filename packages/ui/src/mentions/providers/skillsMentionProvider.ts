@@ -24,6 +24,7 @@ export function mapSkillsToMentionItemsForTest(
     workspace: 0,
     plugin: 1,
     user: 2,
+    "built-in": 3,
   };
   for (const skill of skills) {
     const key = skill.name.trim().toLowerCase();

@@ -508,21 +508,21 @@ describe("tool contract declarations", () => {
     }
     expect(byName.get("Edit")?.description).toContain("Performs exact string replacement");
     expect(byName.get("Bash")?.resultBudget?.strategy).toBe("artifact");
-    expect(byName.get("Bash")?.description).toBe(
-      [
-        "Executes a bash command and returns its output.",
-        "",
-        "- Working directory persists between calls, but prefer absolute paths — `cd` in a compound command can trigger a permission prompt. Shell state (env vars, functions) does not persist; the shell is initialized from the user's profile.",
-        "- IMPORTANT: Avoid using this tool to run `find`, `grep`, `cat`, `head`, `tail`, `sed`, `awk`, or `echo` commands, unless explicitly instructed or after you have verified that a dedicated tool cannot accomplish your task. Instead, use the appropriate dedicated tool as this will provide a much better experience for the user.",
-        "- `timeout` is in milliseconds: default 120000, max 600000.",
-        "- `run_in_background` runs the command detached: it keeps running across turns and re-invokes you when it exits. No `&` needed.",
-        "",
-        "# Git",
-        "- Interactive flags (`-i`, e.g. `git rebase -i`, `git add -i`) are not supported in this environment.",
-        "- Use the `gh` CLI for GitHub operations (PRs, issues, API).",
-        "- Commit or push only when the user asks. If on the default branch, branch first.",
-      ].join("\n"),
+    const bashContractDescription = byName.get("Bash")?.description ?? "";
+    expect(bashContractDescription).toContain("Executes a bash command and returns its output.");
+    expect(bashContractDescription).toContain("- Read files: Use Read (NOT cat/head/tail)");
+    expect(bashContractDescription).toContain("- Edit files: Use Edit (NOT sed/awk)");
+    expect(bashContractDescription).toContain("- Write files: Use Write (NOT echo >/cat <<EOF)");
+    expect(bashContractDescription).toContain("- Communication: Output text directly (NOT echo/printf)");
+    expect(bashContractDescription).toContain(
+      "- `timeout` is in milliseconds: default 120000, max 600000.",
     );
+    expect(bashContractDescription).toContain("- `run_in_background` runs the command detached");
+    expect(bashContractDescription).toContain("# Git");
+    expect(bashContractDescription).toContain("NEVER run destructive git commands");
+    expect(bashContractDescription).toContain("NEVER skip hooks");
+    expect(bashContractDescription).toContain("Always create NEW commits rather than amending");
+    expect(bashContractDescription).toContain("prefer adding specific files by name");
     expect(byName.get("Skill")?.description).toContain("available skills");
     expect(byName.get("Skill")?.inputSchema).not.toHaveProperty("_def");
     const workflow = byName.get("Workflow");
@@ -992,7 +992,7 @@ describe("tool contract declarations", () => {
     );
 
     const bashDescription = byName.get("Bash")?.description ?? "";
-    expect(bashDescription.length).toBeLessThan(1600);
+    expect(bashDescription.length).toBeLessThan(3000);
     expect(wordCount(bashDescription)).toBeGreaterThan(120);
     expect(bashDescription).toContain("Executes a bash command and returns its output.");
     expect(bashDescription).toContain("Working directory persists between calls");
@@ -1003,7 +1003,9 @@ describe("tool contract declarations", () => {
     expect(bashDescription).toContain("# Git");
     expect(bashDescription).not.toContain("Usage:");
     expect(bashDescription).not.toContain("DO NOT use newlines to separate commands");
-    expect(bashDescription).not.toContain("Always create NEW commits rather than amending");
+    expect(bashDescription).toContain("Always create NEW commits rather than amending");
+    expect(bashDescription).toContain("NEVER run destructive git commands");
+    expect(bashDescription).toContain("prefer adding specific files by name");
 
     const explorePrompt = buildExploreSystemPrompt({
       workingDirectory: "/workspace/project",
@@ -1159,25 +1161,17 @@ describe("tool contract declarations", () => {
     expect(byName.has("Grep")).toBe(false);
 
     const bashDescription = byName.get("Bash")?.description ?? "";
-    expect(bashDescription).toBe(
-      [
-        "Executes a bash command and returns its output.",
-        "",
-        "- Working directory persists between calls, but prefer absolute paths — `cd` in a compound command can trigger a permission prompt. Shell state (env vars, functions) does not persist; the shell is initialized from the user's profile.",
-        "- IMPORTANT: Avoid using this tool to run `cat`, `head`, `tail`, `sed`, `awk`, or `echo` commands, unless explicitly instructed or after you have verified that a dedicated tool cannot accomplish your task. Instead, use the appropriate dedicated tool as this will provide a much better experience for the user.",
-        "- `timeout` is in milliseconds: default 120000, max 600000.",
-        "- `run_in_background` runs the command detached: it keeps running across turns and re-invokes you when it exits. No `&` needed.",
-        "",
-        "# Git",
-        "- Interactive flags (`-i`, e.g. `git rebase -i`, `git add -i`) are not supported in this environment.",
-        "- Use the `gh` CLI for GitHub operations (PRs, issues, API).",
-        "- Commit or push only when the user asks. If on the default branch, branch first.",
-      ].join("\n"),
-    );
+    expect(bashDescription).toContain("Executes a bash command and returns its output.");
     expect(bashDescription).toContain(
       "Avoid using this tool to run `cat`, `head`, `tail`, `sed`, `awk`, or `echo` commands",
     );
     expect(bashDescription).not.toContain("`find`, `grep`");
+    expect(bashDescription).toContain("- Read files: Use Read (NOT cat/head/tail)");
+    expect(bashDescription).toContain("- Write files: Use Write (NOT echo >/cat <<EOF)");
+    expect(bashDescription).toContain("# Git");
+    expect(bashDescription).toContain("NEVER run destructive git commands");
+    expect(bashDescription).toContain("NEVER skip hooks");
+    expect(bashDescription).toContain("Always create NEW commits rather than amending");
 
     const agentDescription = byName.get("Agent")?.description ?? "";
     expect(agentDescription).not.toContain("Tools: Glob, Grep");

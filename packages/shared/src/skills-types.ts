@@ -1,4 +1,4 @@
-export type SkillScope = "workspace" | "user" | "plugin";
+export type SkillScope = "workspace" | "user" | "plugin" | "built-in";
 
 export interface SkillMetadata {
   slug?: string;
@@ -21,6 +21,8 @@ export interface SkillSummary {
   sourcePath?: string;
   scope: SkillScope;
   enabled: boolean;
+  /** 随包内置项由功能开关控制，不能单独编辑、启停或卸载。 */
+  readOnly?: boolean;
   /** plugin scope 时为来源插件名；其它 scope 留空。 */
   pluginName?: string;
   /** plugin scope 时为来源插件完整 ID（name@marketplace）；旧 payload 可缺省。 */

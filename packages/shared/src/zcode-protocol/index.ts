@@ -2622,6 +2622,28 @@ export type ZCodeWorkspaceUpdateOffPeakToolPolicyResult = z.infer<
   typeof zcodeWorkspaceUpdateOffPeakToolPolicyResultSchema
 >;
 
+// ThinkRail 总开关（docs/thinkrail/design.md D2）：与 Off-Peak 同形的 workspace 级事实。
+// 权威在 Host 的设置文件，CLI 只缓存结论——v4 冷恢复没有 per-request flag 通道，不推就丢开关。
+export const zcodeWorkspaceUpdateThinkrailToolPolicyParamsSchema = z
+  .object({
+    workspace: zcodeWorkspaceRefSchema,
+    enabled: z.boolean(),
+  })
+  .strict();
+export type ZCodeWorkspaceUpdateThinkrailToolPolicyParams = z.infer<
+  typeof zcodeWorkspaceUpdateThinkrailToolPolicyParamsSchema
+>;
+
+export const zcodeWorkspaceUpdateThinkrailToolPolicyResultSchema = z
+  .object({
+    workspace: zcodeWorkspaceRefSchema,
+    enabled: z.boolean(),
+  })
+  .strict();
+export type ZCodeWorkspaceUpdateThinkrailToolPolicyResult = z.infer<
+  typeof zcodeWorkspaceUpdateThinkrailToolPolicyResultSchema
+>;
+
 // 动态工作流灰度门禁：workspace 级事实，
 // 与 Off-Peak 同一套 host→CLI 同步模式；旧 CLI method-not-found → host 降级忽略。
 export const zcodeWorkspaceUpdateDynamicWorkflowPolicyParamsSchema = z
@@ -3068,8 +3090,9 @@ export const zcodeSkillReferenceCatalogEntrySchema = z
     name: nonEmptyString,
     description: z.string(),
     path: nonEmptyString,
-    scope: z.enum(["workspace", "user", "plugin"]),
+    scope: z.enum(["workspace", "user", "plugin", "built-in"]),
     enabled: z.literal(true),
+    readOnly: z.literal(true).optional(),
     pluginName: nonEmptyString.optional(),
   })
   .strict();
@@ -3095,6 +3118,51 @@ export const zcodeSkillsReferenceCatalogResultSchema = z
 export type ZCodeSkillsReferenceCatalogResult = z.infer<
   typeof zcodeSkillsReferenceCatalogResultSchema
 >;
+
+// 系统提示词设置：配置在 Host，内容由 CLI 的实际 ContextBuilder 投影。
+export const zcodeSystemPromptReadParamsSchema = z
+  .object({
+    workspace: zcodeWorkspaceRefSchema,
+    sessionId: nonEmptyString.optional(),
+    presentationSurface: z.enum(["terminal", "zcode_desktop"]).optional(),
+  })
+  .strict();
+export const zcodeSystemPromptSectionSchema = z
+  .object({
+    name: z.string(),
+    source: z.string(),
+    content: z.string(),
+    preview: z.string(),
+    injectionTarget: z.enum(["system", "meta_user"]),
+    cacheHint: z.enum(["stable", "dynamic"]),
+    chars: z.number().int().nonnegative(),
+    tokens: z.number().nonnegative(),
+    readOnly: z.literal(true),
+  })
+  .strict();
+export const zcodeSystemPromptReadResultSchema = z
+  .object({
+    authority: z.enum(["session", "workspace"]),
+    basePrompt: z.string(),
+    defaultPrompt: z.string(),
+    sections: z.array(zcodeSystemPromptSectionSchema),
+    busy: z.boolean(),
+    availableSessions: z.array(z.object({ sessionId: nonEmptyString }).strict()).optional(),
+    lastRequest: z
+      .object({ at: z.string(), systemMessages: z.array(z.string()) })
+      .strict()
+      .optional(),
+  })
+  .strict();
+export type ZCodeSystemPromptReadResult = z.infer<typeof zcodeSystemPromptReadResultSchema>;
+export const zcodeWorkspaceUpdateSystemPromptPolicyParamsSchema = z
+  .object({
+    workspace: zcodeWorkspaceRefSchema,
+    mainSystemPrompt: z.string().max(65536),
+  })
+  .strict();
+export const zcodeWorkspaceUpdateSystemPromptPolicyResultSchema =
+  zcodeWorkspaceUpdateSystemPromptPolicyParamsSchema;
 
 // ── 已保存工作流的 GUI 中枢──
 // workspace 级、无会话的五个方法，照 skills/referenceCatalog 的先例：每次调用现扫
@@ -4120,6 +4188,10 @@ export const zcodeProtocolMethods = {
   workspaceUpdateOffPeakToolPolicy: "workspace/updateOffPeakToolPolicy",
   // 动态工作流灰度门禁：同 Off-Peak 的同步模式。
   workspaceUpdateDynamicWorkflowPolicy: "workspace/updateDynamicWorkflowPolicy",
+  // ThinkRail 总开关：同 Off-Peak 的同步模式（docs/thinkrail/design.md D2）。
+  workspaceUpdateThinkrailToolPolicy: "workspace/updateThinkrailToolPolicy",
+  workspaceUpdateSystemPromptPolicy: "workspace/updateSystemPromptPolicy",
+  systemPromptRead: "context/systemPrompt",
   // LLM 执行面在 CLI，直连不可行；消费仅 services 内部
   // （commit message），待 v4 workspace 查询/命令面覆盖后移除。
   workspaceGenerateText: "workspace/generateText",
@@ -4149,6 +4221,8 @@ export const zcodeProtocolMethods = {
   pluginsListUiSurfaces: "plugins/listUiSurfaces",
   pluginsReferenceCatalogWithCategory: "plugins/referenceCatalogWithCategory",
   skillsReferenceCatalog: "skills/referenceCatalog",
+  // 新 scope 只经新入口返回，旧客户端的严格响应校验继续有效。
+  skillsReferenceCatalogWithBuiltIns: "skills/referenceCatalogWithBuiltIns",
   // 已保存工作流的 GUI 中枢：workspace 级、无会话。
   workflowsList: "workflows/list",
   workflowsGet: "workflows/get",

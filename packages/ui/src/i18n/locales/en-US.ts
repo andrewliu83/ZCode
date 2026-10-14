@@ -1,6 +1,8 @@
+import { systemPromptMessagesEnUS } from "./systemPromptMessages.js";
 import { requestSecurityMessagesEnUS } from "@/request-security-edition/messages.js";
 /** English translations */
 const enUS: Record<string, string> = {
+  ...systemPromptMessagesEnUS,
   "startPlan.recommendation.subagentDescription":
     "Your Start Plan has quota available for {model}. Switch this subagent’s model to the Start Plan?",
   "startPlan.recommendation.preferenceSaveFailed":
@@ -1076,7 +1078,8 @@ const enUS: Record<string, string> = {
   "browser.permission.deviceBluetooth": "Bluetooth devices",
   "browser.permission.unknownCapability": "an unknown capability",
   "browser.permission.screenShareTitle": "{origin} wants to share your screen",
-  "browser.permission.screenShareDescription": "Choose the screen or window to share. This choice applies only to this session.",
+  "browser.permission.screenShareDescription":
+    "Choose the screen or window to share. This choice applies only to this session.",
   "browser.permission.deviceTitle": "{origin} wants to connect a device",
   "browser.permission.connect": "Connect",
   "browser.permission.screenGroup.screen": "Entire Screen",
@@ -2597,6 +2600,10 @@ const enUS: Record<string, string> = {
   "settings.askUserQuestionAutoResolution": "Automatically continue questions",
   "settings.askUserQuestionAutoResolutionDescription":
     "When enabled, Agent questions automatically continue after 5 minutes without an answer. When disabled, current and future questions wait for your response.",
+  "settings.thinkrail": "Spec graph & ThinkRail workflows",
+  "settings.thinkrailDescription":
+    "Keep durable specs beside the code as the project's ground truth, and route each piece of work through a workflow — brainstorm, write specs, set up a project, ship a PR. Adds the spec tools, the workflow skills, and the spec rules every turn.",
+  "settings.thinkrail.saveError": "Could not save the ThinkRail setting",
   "settings.dynamicWorkflow": "Dynamic workflows",
   "settings.dynamicWorkflowDescription":
     "Let the model orchestrate many subagents working in parallel, so it can take on complex tasks and deliver polished results.",
@@ -4211,6 +4218,7 @@ const enUS: Record<string, string> = {
   "settings.skills.detail.disabled": "Disabled",
   "settings.skills.scope.personal": "Personal",
   "settings.skills.scope.plugin": "Plugin",
+  "settings.skills.scope.builtIn": "Built-in",
   "settings.skills.scope.workspaceFallback": "Project",
   "settings.skills.diagnostics.summary":
     "Skill diagnostics: {errorCount} error(s), {warningCount} warning(s)",
@@ -5099,6 +5107,20 @@ const enUS: Record<string, string> = {
   "tokenDebug.column.hitRate": "Hit rate",
   "tokenDebug.empty": "No main session token records yet",
   "developerTools.title": "Developer tools",
+  "thinkrail.specGraph.title": "Specs",
+  "thinkrail.specGraph.summary": "{nodes} specs · {issues} issues",
+  "thinkrail.specGraph.refresh": "Re-read the spec graph",
+  "thinkrail.specGraph.loading": "Reading the spec graph…",
+  "thinkrail.specGraph.error": "Could not read the spec graph: {message}",
+  "thinkrail.specGraph.empty":
+    "No specs in this workspace yet. A markdown file becomes a spec once its frontmatter has an id and a type.",
+  "thinkrail.specGraph.skipped":
+    "{count} directories were skipped (node_modules, .git, dist, build).",
+  "thinkrail.specGraph.issues": "{count} structural issues",
+  "thinkrail.specGraph.field.id": "id",
+  "thinkrail.specGraph.field.type": "type",
+  "thinkrail.specGraph.field.path": "path",
+  "thinkrail.specGraph.field.status": "status",
   "developerTools.tokenSection": "Token debug",
   "developerTools.networkSection": "Network status",
   "developerTools.network.empty": "No model network status records yet",

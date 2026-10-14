@@ -306,6 +306,7 @@ export * from "./intranetDefaults.js";
 export * from "./hooks.js";
 export * from "./memory.js";
 export * from "./output-style.js";
+export * from "./thinkrail-spec-graph.js";
 export * from "./openrouter-attribution.js";
 export * from "./workspaceSessionRestore.js";
 export * from "./skill-scan-policy.js";
@@ -328,6 +329,12 @@ export * from "./subagent-runtime-config.js";
 
 export * from "./subagent-profile.js";
 export { parseAgentProfileFromMarkdown } from "./subagent-profile-parser.js";
+export {
+  createThinkrailAgentProfiles,
+  isThinkrailAgentProfileName,
+  THINKRAIL_AGENT_TYPES,
+  type ThinkrailAgentType,
+} from "./thinkrail-agent-presets.js";
 
 export * from "./localTtft.js";
 export * from "./pluginStoreOrder.js";

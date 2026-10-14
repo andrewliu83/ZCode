@@ -137,6 +137,12 @@ export interface ZCodeProtocolAgentServerContext {
     /** host 同步的 Off-Peak 工具面门禁；缺省 false（fail-closed），供 v4 冷恢复等无 host 参数的路径读取。 */
     offPeakToolEnabled: boolean;
     /**
+     * host 同步的 ThinkRail 总开关（docs/thinkrail/design.md D2）。缺省 false（fail-closed）：
+     * 不认识该方法的旧 Host 或还没来得及同步的启动窗口里，spec_*（P3 后加 worktree_*）一律不注册。
+     */
+    thinkrailEnabled: boolean;
+    mainSystemPrompt?: string;
+    /**
      * host 同步的动态工作流灰度门。
      * 缺省 false（fail-closed）：不认识该方法的旧 Host 或还没来得及同步的启动窗口里，
      * 工作流工具面、`/workflow` 与 dynamic-workflows 技能一律不露出。

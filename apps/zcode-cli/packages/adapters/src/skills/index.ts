@@ -38,6 +38,8 @@ export interface NodeSkillAdapterOptions extends SkillRootResolutionOptions {
   // 被禁用的 SKILL.md 绝对路径集合（来自 config.json 的 skill.<path>.enable=false）。
   // 命中的 skill 在发现阶段直接剔除，使 discover/load/inspect 全链路保持一致。
   disabledPaths?: Iterable<string>;
+  /** 会话能力快照 gate；发现、加载和目录使用同一判据。 */
+  isSkillEnabled?: (skill: SkillMetadata) => boolean;
 }
 
 export class NodeSkillAdapter implements SkillPort {
@@ -75,6 +77,7 @@ export class NodeSkillAdapter implements SkillPort {
         throwIfAborted(options);
         const parsed = await this.parseSkill(path, root, diagnostics);
         if (!parsed) continue;
+        if (this.options.isSkillEnabled?.(parsed) === false) continue;
         if (await this.isDisabledSkillPath(parsed.path)) continue;
         totalDiscovered++;
         // 同名技能可能来自不同技能生态或版本，不能只按 name 去重；路径才是安装项身份。

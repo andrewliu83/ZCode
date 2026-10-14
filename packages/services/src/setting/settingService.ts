@@ -42,6 +42,14 @@ const debugLog = (...args: unknown[]) => {
   console.debug(formatLogPrefix("settingService", process.pid), ...args);
 };
 
+function formatSettingsLog(settings: AppSettings): string {
+  // 原因：新增正文设置后，整份设置日志会泄露提示词；只保留字段已配置的事实。
+  return JSON.stringify({
+    ...settings,
+    mainSystemPrompt: settings.mainSystemPrompt === undefined ? undefined : "[redacted]",
+  });
+}
+
 function resolveUserHomeDir() {
   // 独立桌面 Dev 实例已设置自己的 home，设置服务却仍写真实 HOME，
   // 导致启动迁移和外观操作污染其他实例。与 Electron 的显式 home 覆盖保持一致。
@@ -155,7 +163,7 @@ async function readSettingsWithMeta(): Promise<ReadSettingsResult> {
         needsMigrationPersist: false,
       };
     }
-    debugLog("read result:", JSON.stringify(result.data));
+    debugLog("read result:", formatSettingsLog(result.data));
     return {
       settings: result.data,
       needsMigrationPersist: shouldPersistSettingsMigrations(rawValue),
@@ -198,7 +206,7 @@ async function writeSettings(
   const settingsFile = getSettingsFile();
   // Windows 下测试只改了 HOME，模块顶层常量如果在导入时就把 homedir() 固化，
   // 后续读写仍会串到真实用户目录。这里改成每次按当前环境解析配置路径，保证本地和测试都稳定。
-  log("writing settings to:", settingsFile, JSON.stringify(settings));
+  log("writing settings to:", settingsFile, formatSettingsLog(settings));
   maybeThrowInjectedFsFault({ operation: "mkdir", path: settingsDir });
   await mkdir(settingsDir, { recursive: true });
   if (!shouldCommit()) return;

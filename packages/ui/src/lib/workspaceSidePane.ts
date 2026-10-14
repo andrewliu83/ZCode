@@ -99,6 +99,20 @@ export interface DeveloperToolsSidePaneTab {
   openedAt?: number;
 }
 
+/**
+ * ThinkRail spec 图面板（docs/thinkrail/design.md D7）。
+ *
+ * 它是 **workspace 级** tab（与 git / developer-tools 同一档，见 WORKSPACE_GLOBAL_SIDE_PANE_TAB_TYPES）：
+ * spec 图描述的是这个工作区，不属于某一条对话。面板只读，数据经 ISpecGraphService 现算。
+ */
+export interface SpecGraphSidePaneTab {
+  id: "spec-graph";
+  type: "spec-graph";
+  ownerTaskId?: string | null;
+  workspaceKey?: string | null;
+  openedAt?: number;
+}
+
 export interface TerminalSidePaneTab {
   id: string;
   type: "terminal";
@@ -537,6 +551,7 @@ export type WorkspaceSidePaneTab =
   | WhiteboardSidePaneTab
   | ModelTrajectorySidePaneTab
   | DeveloperToolsSidePaneTab
+  | SpecGraphSidePaneTab
   | TerminalSidePaneTab
   | BrowserUseSidePaneTab
   | SubagentSessionSidePaneTab
@@ -1082,6 +1097,8 @@ const WORKSPACE_GLOBAL_SIDE_PANE_TAB_TYPES = new Set<WorkspaceSidePaneTab["type"
   "git",
   "developer-tools",
   "treemapping",
+  // spec 图描述的是工作区，不属于某条对话：切对话不该把它藏掉。
+  "spec-graph",
 ]);
 
 export function isWorkspaceGlobalSidePaneTab(tab: WorkspaceSidePaneTab): boolean {
@@ -1705,6 +1722,21 @@ export function activateGitSidePane(
   current: WorkspaceSidePaneState | null,
 ): WorkspaceSidePaneState {
   return activateSidePaneTab(current, createGitSidePaneTab());
+}
+
+function createSpecGraphSidePaneTab(): SpecGraphSidePaneTab {
+  return { id: "spec-graph", type: "spec-graph", openedAt: Date.now() };
+}
+
+/**
+ * 打开（或聚焦）spec 图面板。
+ *
+ * 恒等 tab：一个工作区只有一个 spec 图，重复点击是聚焦而不是开第二个 —— 与 git 面板同一条规则。
+ */
+export function activateSpecGraphSidePane(
+  current: WorkspaceSidePaneState | null,
+): WorkspaceSidePaneState {
+  return activateSidePaneTab(current, createSpecGraphSidePaneTab());
 }
 
 export function activateTreemappingSidePane(
@@ -2365,6 +2397,24 @@ export function toggleGitSidePane(
   }
 
   return activateGitSidePane(current);
+}
+
+export function toggleSpecGraphSidePane(
+  current: WorkspaceSidePaneState | null,
+): WorkspaceSidePaneState | null {
+  const activeTab = getActiveSidePaneTab(current);
+  if (activeTab?.type === "spec-graph") {
+    return closeSidePaneTab(current, activeTab.id);
+  }
+
+  return activateSpecGraphSidePane(current);
+}
+
+export function closeSpecGraphSidePane(
+  current: WorkspaceSidePaneState | null,
+): WorkspaceSidePaneState | null {
+  const activeTab = getActiveSidePaneTab(current);
+  return activeTab?.type === "spec-graph" ? closeSidePaneTab(current, activeTab.id) : current;
 }
 
 export function closeCodeViewerSidePane(

@@ -228,6 +228,10 @@ export const useSkillStore = create<SkillStoreState>((set, get) => ({
       legacyCall ? get().provider : providerOrEnabled,
     );
     const scope = legacyCall ? undefined : (scopeOrSkillsService as SkillSummary["scope"]);
+    if (scope === "built-in") {
+      set({ error: "内置技能由功能开关控制，不能单独启停" });
+      return;
+    }
     const enabled = legacyCall ? providerOrEnabled : (enabledOrSkillsService as boolean);
     const skillsService = legacyCall
       ? (scopeOrSkillsService as ISkillsService)

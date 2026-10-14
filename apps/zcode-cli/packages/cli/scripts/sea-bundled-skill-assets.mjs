@@ -10,12 +10,31 @@ export const seaBundledSkillAssetPrefix = "zcode-bundled-skills/";
 export const seaBundledSkillManifestAssetKey = `${seaBundledSkillAssetPrefix}manifest.json`;
 export const bundledSkillPackRootPath = join("packages", "bundled-skills");
 export const bundledSkillPackSkillsDirectory = "skills";
-// 与 bootstrap 的 BUNDLED_SKILL_PACK_REQUIRED_PATHS 对齐：缺任一项即中止 SEA 构建，
-// 不把一个引用文件残缺的技能包发进正式二进制。
+// 与 bootstrap 的 BUNDLED_SKILL_PACK_REQUIRED_PATHS **逐字相等**（缺任一项即中止 SEA 构建，
+// 不把一个引用文件残缺的技能包发进正式二进制；运行时那边同样按这份清单拒绝整包，
+// 所以构建期漏过就意味着运行时连 /workflow 一起消失）。
+//
+// 两份清单为什么不合成一份：这里跑在 pnpm 构建的脚本上下文里，bootstrap 那份住在 TS 源码中，
+// 直接 import 会把脚本绑上「bootstrap 的 dist 必须先构建」。改为由测试守住相等：
+// packages/bootstrap/tests/bundled-skills.test.ts 的「两份必需资产清单逐字相等」。
 export const bundledSkillPackRequiredPaths = [
   "skills/dynamic-workflows/SKILL.md",
   "skills/dynamic-workflows/patterns.md",
   "skills/dynamic-workflows/examples.md",
+  "skills/spec-graph/SKILL.md",
+  "skills/choosing-a-workflow/SKILL.md",
+  "skills/brainstorming/SKILL.md",
+  "skills/writing-specs/SKILL.md",
+  "skills/asking-user-questions/SKILL.md",
+  "skills/setting-up-a-project/SKILL.md",
+  "skills/starting-a-new-project/SKILL.md",
+  "skills/importing-a-codebase/SKILL.md",
+  "skills/shipping-a-pr/SKILL.md",
+  "skills/shipping-a-pr/checks.md",
+  "skills/shipping-a-pr/creating.md",
+  "skills/shipping-a-pr/review-comments.md",
+  "skills/shipping-a-pr/screenshots.md",
+  "skills/shipping-a-pr/syncing.md",
 ];
 
 export const collectSeaBundledSkillAssets = async ({ root, stagingDirectory }) => {

@@ -38,7 +38,16 @@ describe("settingsPageConfig", () => {
       },
       {
         id: "agentCapabilities",
-        sections: ["memory", "subagents", "plugin", "mcp", "skill", "commands", "hooks"],
+        sections: [
+          "systemPrompt",
+          "memory",
+          "subagents",
+          "plugin",
+          "mcp",
+          "skill",
+          "commands",
+          "hooks",
+        ],
       },
       {
         id: "dataAndStats",
@@ -50,6 +59,7 @@ describe("settingsPageConfig", () => {
       "general",
       "appearance",
       "modelProvider",
+      "systemPrompt",
       "memory",
       "subagents",
       "plugin",
@@ -71,6 +81,7 @@ describe("settingsPageConfig", () => {
       "general",
       "appearance",
       "modelProvider",
+      "systemPrompt",
       "memory",
       "subagents",
       "plugin",

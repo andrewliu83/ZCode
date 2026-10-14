@@ -630,6 +630,12 @@ export interface IZCodeAgentService {
    * desktop-attached remote Host 以传入值为准（缺席 = 跟随服务端）。不得为此启动空闲 Agent。
    */
   syncDynamicWorkflowUserMode(params: { mode?: DynamicWorkflowMode }): Promise<void>;
+  /**
+   * ThinkRail 总开关的变更信号（docs/thinkrail/design.md D2）：Host 重新读设置并串行重发
+   * workspace/updateThinkrailToolPolicy。有本机设置权威的 Host 以设置文件为准；
+   * desktop-attached remote Host 以传入值为准。不得为此启动空闲 Agent。
+   */
+  syncThinkrailEnabled(params: { enabled?: boolean }): Promise<void>;
   getWorkspaceRuntimeIdentity(
     params: ZCodeAgentWorkspaceTarget,
   ): Promise<ZCodeAgentWorkspaceRuntimeIdentity>;
@@ -667,6 +673,10 @@ export interface IZCodeAgentService {
   getSkillReferenceCatalog(
     params: ZCodeAgentSkillReferenceCatalogParams,
   ): Promise<ZCodeSkillsReferenceCatalogResult>;
+  getSystemPromptSnapshot(
+    params: ZCodeAgentWorkspaceTarget & { sessionId?: string },
+  ): Promise<import("@zcode/shared").ZCodeSystemPromptReadResult>;
+  syncMainSystemPrompt(params: { mainSystemPrompt?: string }): Promise<void>;
   /** 插件 UI：读取插件 MCP 的 `ui://` 资源；走 session 所在 workspace agent 进程。 */
   openMcpUiInstance(
     params: import("../plugin-ui-bridge/contract.js").PluginUiPrepareSandboxParams & {

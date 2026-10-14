@@ -7,6 +7,7 @@ import {
   type ZCodeProvider,
 } from "@zcode/shared";
 import { logger } from "@/logger.js";
+import { useThinkrailCatalogStore } from "@/store/thinkrailCatalogStore.js";
 
 export interface SubagentsContextSnapshot {
   workspacePath: string;
@@ -16,6 +17,7 @@ export interface SubagentsContextSnapshot {
   capability: AgentsCapability | null;
   loading: boolean;
   loaded: boolean;
+  catalogRevision?: number;
   error: string | null;
 }
 
@@ -101,6 +103,8 @@ async function loadContext(
   const workspaceIdentity = params.workspaceIdentity?.trim() || undefined;
   const key = getSubagentsContextKey(params.workspacePath, provider, workspaceIdentity);
   const existing = get().contexts[key];
+  const catalogRevision = useThinkrailCatalogStore.getState().revision;
+  const catalogChanged = existing?.catalogRevision !== catalogRevision;
   const requestId = ++nextRequestId;
   latestRequestIds.set(key, requestId);
   set((state) =>
@@ -108,9 +112,10 @@ async function loadContext(
       workspacePath: params.workspacePath,
       workspaceIdentity: workspaceIdentity ?? null,
       provider,
-      agents: existing?.agents ?? [],
+      agents: catalogChanged ? [] : (existing?.agents ?? []),
+      catalogRevision,
       capability: existing?.capability ?? null,
-      loading: existing?.loaded !== true,
+      loading: catalogChanged || existing?.loaded !== true,
       loaded: existing?.loaded ?? false,
       error: null,
     }),
@@ -124,9 +129,14 @@ async function loadContext(
       workspaceIdentity,
       params.bypassCache,
     );
-    if (latestRequestIds.get(key) !== requestId) return;
+    if (
+      latestRequestIds.get(key) !== requestId ||
+      useThinkrailCatalogStore.getState().revision !== catalogRevision
+    )
+      return;
     set((state) =>
       updateContext(state, key, {
+        catalogRevision,
         workspacePath: params.workspacePath,
         workspaceIdentity: workspaceIdentity ?? null,
         provider,
@@ -138,7 +148,11 @@ async function loadContext(
       }),
     );
   } catch (error) {
-    if (latestRequestIds.get(key) !== requestId) return;
+    if (
+      latestRequestIds.get(key) !== requestId ||
+      useThinkrailCatalogStore.getState().revision !== catalogRevision
+    )
+      return;
     const message = error instanceof Error ? error.message : String(error);
     logger.error("[subagents] workspace context load failed", {
       workspacePath: params.workspacePath,
@@ -170,9 +184,16 @@ export const useSubagentsContextStore = create<SubagentsContextStoreState>((set,
     // 多个可见 pane 会各自挂载 Subagents 消费者。旧单例把“当前 workspace”
     // 当成全局可变字段，跨 workspace pane 会互相触发 initialize；按 workspaceKey+provider
     // 分桶后，每个 effect 只订阅自己的稳定快照。
-    if (get().contexts[key]) return;
+    const existing = get().contexts[key];
+    if (existing?.catalogRevision === useThinkrailCatalogStore.getState().revision) return;
     await loadContext(
-      { workspacePath, provider, subagentsService, workspaceIdentity, bypassCache: false },
+      {
+        workspacePath,
+        provider,
+        subagentsService,
+        workspaceIdentity,
+        bypassCache: Boolean(existing),
+      },
       set,
       get,
     );

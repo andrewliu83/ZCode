@@ -76,6 +76,9 @@ function registerRuntimeBuiltInTools(runtime: AgentRuntimeInternal, deps: AgentR
     // node_repl/browser-use 由 ZCode 官方 browser-use 插件启停推导出的 runtimeFeatures 控制。
     includeNodeRepl: nodeReplEnabled,
     includeBrowserUse: browserUseEnabled,
+    // ThinkRail 是用户开关（AppSettings.thinkrailEnabled）——host 推导后写进 runtimeFeatures，
+    // 与 nodeRepl 同一层。显式 true 才注册，缺省即关（docs/thinkrail/design.md D2）。
+    includeThinkrail: runtime.config.runtimeFeatures?.thinkrail === true,
     embeddedSearchEnabled: resolveRuntimeEmbeddedSearchEnabled(runtime),
     allowedTools: resolveBuiltInToolAllowlist(runtime.config),
     // workflow_child 的结构性禁用（CreateWorkflow/SaveWorkflow 因 alwaysAsk 隐形挂起；

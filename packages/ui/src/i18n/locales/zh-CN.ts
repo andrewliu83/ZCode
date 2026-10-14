@@ -1,6 +1,8 @@
+import { systemPromptMessagesZhCN } from "./systemPromptMessages.js";
 import { requestSecurityMessagesZhCN } from "@/request-security-edition/messages.js";
 /** 中文翻译 */
 const zhCN: Record<string, string> = {
+  ...systemPromptMessagesZhCN,
   "startPlan.recommendation.subagentDescription":
     "你的体验套餐中，{model} 仍有可用额度，是否将此子智能体的模型切换到体验套餐？",
   "startPlan.recommendation.preferenceSaveFailed": "未能保存“不再提示”，本次仍按你的选择继续。",
@@ -2442,6 +2444,10 @@ const zhCN: Record<string, string> = {
   "settings.askUserQuestionAutoResolution": "提问自动继续",
   "settings.askUserQuestionAutoResolutionDescription":
     "开启后，Agent 提问 5 分钟未回答会自动继续；关闭后，当前和后续提问会一直等待你的回答。",
+  "settings.thinkrail": "Spec 图与 ThinkRail 工作流",
+  "settings.thinkrailDescription":
+    "把耐久规格留在代码旁作为项目的事实来源，并让每件工作走一条固定的工作流——头脑风暴、写规格、起步新项目、发 PR。开启后会加入 spec 工具、工作流技能，以及每轮都注入的 spec 规则。",
+  "settings.thinkrail.saveError": "保存 ThinkRail 开关失败",
   "settings.dynamicWorkflow": "动态工作流",
   "settings.dynamicWorkflowDescription":
     "让模型用脚本编排大量子代理并行工作，处理复杂任务、交付专业结果。",
@@ -3949,6 +3955,7 @@ const zhCN: Record<string, string> = {
   "settings.skills.detail.disabled": "已停用",
   "settings.skills.scope.personal": "个人",
   "settings.skills.scope.plugin": "插件",
+  "settings.skills.scope.builtIn": "内置",
   "settings.skills.scope.workspaceFallback": "项目",
   "settings.skills.diagnostics.summary": "技能加载诊断：{errorCount} 个错误，{warningCount} 个警告",
   "settings.skills.diagnostics.expand": "展开诊断",
@@ -4779,6 +4786,19 @@ const zhCN: Record<string, string> = {
   "tokenDebug.column.hitRate": "命中率",
   "tokenDebug.empty": "暂无 main session token 记录",
   "developerTools.title": "开发者工具",
+  "thinkrail.specGraph.title": "Spec 图",
+  "thinkrail.specGraph.summary": "{nodes} 个 spec · {issues} 个问题",
+  "thinkrail.specGraph.refresh": "重新读取 spec 图",
+  "thinkrail.specGraph.loading": "正在读取 spec 图…",
+  "thinkrail.specGraph.error": "读取 spec 图失败：{message}",
+  "thinkrail.specGraph.empty":
+    "这个工作区还没有 spec。markdown 文件的 frontmatter 里同时有 id 与 type 时，它就是一个 spec。",
+  "thinkrail.specGraph.skipped": "已跳过 {count} 个目录（node_modules、.git、dist、build）。",
+  "thinkrail.specGraph.issues": "{count} 个结构问题",
+  "thinkrail.specGraph.field.id": "id",
+  "thinkrail.specGraph.field.type": "类型",
+  "thinkrail.specGraph.field.path": "路径",
+  "thinkrail.specGraph.field.status": "状态",
   "developerTools.tokenSection": "Token 调试",
   "developerTools.networkSection": "网络状态",
   "developerTools.network.empty": "暂无模型网络状态记录",

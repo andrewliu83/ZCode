@@ -79,6 +79,7 @@ import {
 import { PluginStoreAvatar } from "@/settings/PluginStoreAvatar.js";
 import type { StorePluginItem } from "@/settings/pluginStoreListing.js";
 import { usePluginManagementStore } from "@/store/pluginManagementStore.js";
+import { useThinkrailCatalogStore } from "@/store/thinkrailCatalogStore.js";
 
 const AGENT_COLORS: AgentColor[] = [...SUBAGENT_COLORS];
 const COLOR_DOT_CLASS: Record<AgentColor, string> = SUBAGENT_COLOR_CLASS;
@@ -1362,9 +1363,10 @@ export function SubagentsSection({ onManageModels }: SubagentsSectionProps) {
     [subagentsService, activeScope, targetWorkspaceIdentity, targetWorkspacePath],
   );
 
+  const catalogRevision = useThinkrailCatalogStore((state) => state.revision);
   useEffect(() => {
     void loadAgents(true);
-  }, [loadAgents]);
+  }, [loadAgents, catalogRevision]);
 
   useEffect(() => {
     if (!pluginInventoryWorkspacePath) return;

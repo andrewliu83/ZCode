@@ -7,6 +7,7 @@ import {
   resolveRuntimeDynamicWorkflowToolsIncluded,
 } from "../helpers/tool-allowlist.js";
 import { isToolNameDisallowed } from "../../tool/tool-visibility.js";
+import { thinkrailSpecToolEntries } from "../../tool/handlers/thinkrail/index.js";
 
 export function resolveRuntimeEmbeddedSearchEnabled(runtime: AgentRuntimeInternal): boolean {
   const builtInToolAllowlist = resolveBuiltInToolAllowlist(runtime.config);
@@ -25,10 +26,15 @@ export function refreshBranchAwareBuiltInTools(runtime: AgentRuntimeInternal): v
     runtime.registry.unregister("Grep");
   }
 
+  if (runtime.config.runtimeFeatures?.thinkrail !== true) {
+    // 开关的减法必须撤回此前已注册的 spec 工具，单纯省略注册不会移除旧项。
+    for (const entry of thinkrailSpecToolEntries) runtime.registry.unregister(entry.metadata.name);
+  }
   registerBuiltInTools(runtime.registry, {
     bashTimeoutPolicy: runtime.config.bashTimeoutPolicy,
     includeSkill: Boolean(runtime.skillPort),
     includeAgent: Boolean(runtime.subagentPort),
+    includeThinkrail: runtime.config.runtimeFeatures?.thinkrail === true,
     embeddedSearchEnabled,
     // 本函数是**第二个**
     // 注册入口，且刻意只传一个精简选项集。对「只有 true 才注册」的门（OffPeak / Cron / Workflow…）

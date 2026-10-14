@@ -1,4 +1,5 @@
 import { querySessionDebug } from "./session-debug.js";
+import { readSystemPrompt, updateSystemPromptPolicy } from "./system-prompt.js";
 import { createNodeNetworkCapture } from "@zcode/shared/node";
 import { networkCaptureControlSchema, zcodeProtocolNotifications } from "@zcode/shared";
 import {
@@ -113,6 +114,7 @@ import { updateInteractionPreferences } from "./interaction-preferences.js";
 import { updateAccountProviderConfig } from "./account-provider-config.js";
 import { updateModelIoPreferences } from "./model-io-preferences.js";
 import { updateOffPeakToolPolicy } from "./off-peak-tool-policy.js";
+import { updateThinkrailToolPolicy } from "./thinkrail-policy.js";
 import { updateDynamicWorkflowPolicy } from "./dynamic-workflow-policy.js";
 import { grantWorkspaceHookTrustForProtocol } from "./workspace-hook-trust.js";
 import {
@@ -298,6 +300,8 @@ export class ZCodeProtocolAgentServer {
         askUserQuestionAutoResolutionEnabled: true,
         modelIoFullRetentionEnabled: false,
         offPeakToolEnabled: false,
+        // ThinkRail 同款 fail-closed 缺省：Host 未同步前不注册 spec_* 工具面。
+        thinkrailEnabled: false,
         // 动态工作流灰度门 fail-closed：Host 必须显式 workspace/updateDynamicWorkflowPolicy
         // 才开启。
         dynamicWorkflowEnabled: false,
@@ -685,6 +689,12 @@ export class ZCodeProtocolAgentServer {
         return await updateModelIoPreferences(this.context, request.params);
       case zcodeProtocolMethods.workspaceUpdateOffPeakToolPolicy:
         return await updateOffPeakToolPolicy(this.context, request.params);
+      case zcodeProtocolMethods.workspaceUpdateSystemPromptPolicy:
+        return updateSystemPromptPolicy(this.context, request.params);
+      case zcodeProtocolMethods.systemPromptRead:
+        return await readSystemPrompt(this.context, request.params);
+      case zcodeProtocolMethods.workspaceUpdateThinkrailToolPolicy:
+        return await updateThinkrailToolPolicy(this.context, request.params);
       case zcodeProtocolMethods.workspaceUpdateDynamicWorkflowPolicy:
         return await updateDynamicWorkflowPolicy(this.context, request.params);
       case zcodeProtocolMethods.workspaceGenerateText:
@@ -739,6 +749,8 @@ export class ZCodeProtocolAgentServer {
         return await getPluginReferenceCatalog(this.context, request.params);
       case zcodeProtocolMethods.pluginsListUiSurfaces:
         return await listPluginUiSurfaces(this.context, request.params);
+      case zcodeProtocolMethods.skillsReferenceCatalogWithBuiltIns:
+        return await getSkillReferenceCatalog(this.context, request.params, true);
       case zcodeProtocolMethods.skillsReferenceCatalog:
         return await getSkillReferenceCatalog(this.context, request.params);
       case zcodeProtocolMethods.workflowsList:

@@ -111,6 +111,7 @@ import {
   resolveSettingsSectionForPlatform,
 } from "./settingsPageHelpers.js";
 import { AppearanceSectionContent } from "./settingsCodePreview.js";
+import { SystemPromptSettingsSection } from "@/settings/SystemPromptSettingsSection.js";
 import type { SettingsSectionId } from "@/lib/settingsNavigation.js";
 import { requestPluginStoreOpen } from "@/lib/pluginStoreNavigation.js";
 import {
@@ -1875,6 +1876,13 @@ export function SettingsPage({
                               }
                             />
                           </ServiceProvider>
+                        ) : activeSection === "systemPrompt" ? (
+                          <SystemPromptSettingsSection
+                            key={`${activeWorkspaceIdentity?.trim() || activeWorkspacePath}:${activeWorkspaceTab?.remoteSessionId ?? ""}`}
+                            workspacePath={activeWorkspacePath}
+                            workspaceIdentity={activeWorkspaceIdentity}
+                            remoteSessionId={activeWorkspaceTab?.remoteSessionId}
+                          />
                         ) : activeSection === "memory" ? (
                           <ServiceProvider services={localHostServices}>
                             {/* Memory catalog 始终使用本地 Host，避免远程 workspace 误读本机数据。 */}

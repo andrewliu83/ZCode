@@ -7,6 +7,7 @@ import {
 } from "@zcode/shared";
 import type { SkillLoadOutcome, SkillMetadata } from "@zcode/contracts";
 import { listZCodeSkills } from "../skills.js";
+import { filterBundledSkillCatalog } from "../app/bundled-skill-policy.js";
 import {
   parseParams,
   requireSession,
@@ -16,12 +17,13 @@ import {
 export async function getSkillReferenceCatalog(
   context: ZCodeProtocolAgentServerContext,
   rawParams: unknown,
+  includeBuiltIns = false,
 ): Promise<ZCodeSkillsReferenceCatalogResult> {
   const params = parseParams(zcodeSkillsReferenceCatalogParamsSchema, rawParams);
   if (params.sessionId) {
     const record = requireSession(context, params.sessionId);
     const outcome = await record.app.getSkillCatalog();
-    return toResult("session", outcome);
+    return toResult("session", outcome, includeBuiltIns);
   }
 
   // 旧 UI cache 只在 workspace 首次挂载时扫描，用户从文件系统手动新增
@@ -33,26 +35,37 @@ export async function getSkillReferenceCatalog(
     logger: context.logger,
     workingDirectory: params.workspace.workspacePath,
   });
-  return toResult("workspace", outcome);
+  // 修复依据：草稿不能绕过 Host 总开关，重新扫描后复活已关闭的随包技能。
+  const gated = filterBundledSkillCatalog(outcome, {
+    thinkrailEnabled: context.appRuntimePreferences?.thinkrailEnabled === true,
+    dynamicWorkflowEnabled: context.appRuntimePreferences?.dynamicWorkflowEnabled === true,
+  });
+  return toResult("workspace", gated, includeBuiltIns);
 }
 
 function toResult(
   authority: ZCodeSkillsReferenceCatalogResult["authority"],
   outcome: SkillLoadOutcome,
+  includeBuiltIns: boolean,
 ): ZCodeSkillsReferenceCatalogResult {
   return {
     authority,
-    // 内置技能包（bundled-skills.ts）不进引用面板：它由内置命令（`/workflow`）加载，不是用户
-    // 管理或引用的对象；协议的 scope 是封闭枚举，旧客户端严格校验，这里不为它扩枚举。
+    // 旧入口继续只返回旧 scope；内置项通过新入口提供，保持远端旧客户端兼容。
     skills: outcome.skills
-      .filter((skill) => skill.source !== "bundled")
+      .filter((skill) => includeBuiltIns || skill.source !== "bundled")
       .map(toReferenceCatalogEntry),
   };
 }
 
 function toReferenceCatalogEntry(skill: SkillMetadata): ZCodeSkillReferenceCatalogEntry {
   const scope =
-    skill.source === "plugin" ? "plugin" : skill.scope === "project" ? "workspace" : "user";
+    skill.source === "bundled"
+      ? "built-in"
+      : skill.source === "plugin"
+        ? "plugin"
+        : skill.scope === "project"
+          ? "workspace"
+          : "user";
   return {
     // `glm:` 是现有 UI provider 过滤契约；路径使同名不同来源仍有稳定行身份。
     id: `glm:${scope}:${skill.path}`,
@@ -61,6 +74,7 @@ function toReferenceCatalogEntry(skill: SkillMetadata): ZCodeSkillReferenceCatal
     path: skill.path,
     scope,
     enabled: true,
+    ...(skill.source === "bundled" ? { readOnly: true as const } : {}),
     ...(skill.pluginName ? { pluginName: skill.pluginName } : {}),
   };
 }

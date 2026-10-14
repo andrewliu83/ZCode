@@ -40,6 +40,8 @@ const EXPECTED_COMMUNICATION_PROMPT = [
   "",
   "Match the response to the question: a simple question gets a direct answer in prose, not headers and sections. Use tables only for short enumerable facts, with explanations in the surrounding prose rather than the cells. Calibrate to the user \u2014 a bit tighter for an expert, more explanatory for someone newer.",
   "",
+  "When you use a pronoun for someone \u2014 the user or anyone else you mention \u2014 and their pronouns haven't been stated, use they/them. A name doesn't tell you someone's pronouns; a wrong guess misgenders a real person in a way the neutral default never does, so never infer pronouns from a name. This applies to all user-visible text, including visible thinking.",
+  "",
   DEFAULT_COMMUNICATION_PROMPT,
   "Only write a code comment to state a constraint the code itself can't show \u2014 never to say where it came from, what the next line does, or why your change is correct; that's you talking to the reviewer, not the next reader, and it's noise the moment the PR merges.",
 ].join("\n");
@@ -418,6 +420,76 @@ describe("ContextBuilder meta user context", () => {
     expect(providerText).not.toContain("M package.json");
     expect(providerText).not.toContain("## 项目信息");
     expect(providerText).not.toContain("# user_instructions");
+  });
+
+  it("aligns the stable body with the Claude harness sections", () => {
+    const result = createContextBuilder({
+      workingDirectory: "/workspace",
+      envInfo: {
+        cwd: "/workspace",
+        platform: "linux",
+        shell: "bash",
+        osVersion: "Linux 6.6.0",
+        nodeVersion: "v24.14.0",
+      },
+    }).build();
+
+    const stableBody = String(result.systemMessages[1]?.content ?? "");
+
+    // URL 边界行紧跟在安全 IMPORTANT 行之后（无空行）。
+    expect(stableBody).toContain(
+      "authorized security testing, defensive security, CTF challenges, and educational contexts. Refuse requests for destructive techniques, DoS attacks, mass targeting, supply chain compromise, or detection evasion for malicious purposes. Dual-use security tools (C2 frameworks, credential testing, exploit development) require clear authorization context: pentesting engagements, CTF competitions, security research, or defensive use cases.\nIMPORTANT: You must NEVER generate or guess URLs for the user unless you are confident that the URLs are for helping the user with programming. You may use URLs provided by the user in their messages or local files.",
+    );
+
+    // 三段新增稳定块按 Claude harness 顺序排在 # Harness 之后。
+    const harness = stableBody.indexOf("# Harness");
+    const doingTasks = stableBody.indexOf("# Doing tasks");
+    const tone = stableBody.indexOf("# Tone and style");
+    const corrections = stableBody.indexOf("# Corrections");
+    expect(harness).toBeGreaterThanOrEqual(0);
+    expect(harness).toBeLessThan(doingTasks);
+    expect(doingTasks).toBeLessThan(tone);
+    expect(tone).toBeLessThan(corrections);
+
+    expect(stableBody).toContain("Don't add features, refactor, or introduce abstractions");
+    expect(stableBody).toContain("Default to writing no comments");
+    expect(stableBody).toContain("start the dev server and use the feature in a browser");
+    expect(stableBody).toContain("Only use emojis if the user explicitly requests it");
+    expect(stableBody).toContain("Do not use a colon before tool calls");
+    expect(stableBody).toContain("Avoid unnecessary or excessive self-correction");
+
+    // Delivering work 在 dynamic body，且先于 # Context management。
+    const dynamicSystem = String(result.systemMessages[2]?.content ?? "");
+    const delivering = dynamicSystem.indexOf("# Delivering work");
+    expect(delivering).toBeGreaterThanOrEqual(0);
+    expect(delivering).toBeLessThan(dynamicSystem.indexOf("# Context management"));
+    expect(dynamicSystem).toContain("The requested scope is the deliverable");
+    expect(dynamicSystem).toContain("Reserve blocking questions");
+  });
+
+  it("drops the doing-tasks block when an output style sets keepCodingInstructions false", () => {
+    const result = createContextBuilder({
+      workingDirectory: "/workspace",
+      envInfo: {
+        cwd: "/workspace",
+        platform: "linux",
+        shell: "bash",
+        osVersion: "Linux 6.6.0",
+        nodeVersion: "v24.14.0",
+      },
+      outputStyle: {
+        name: "Custom",
+        prompt: "Use the custom response style.",
+        keepCodingInstructions: false,
+      },
+    }).build();
+
+    const stableBody = String(result.systemMessages[1]?.content ?? "");
+    expect(stableBody).not.toContain("# Doing tasks");
+    // Harness 与 tone/corrections 不受该字段影响。
+    expect(stableBody).toContain("# Harness");
+    expect(stableBody).toContain("# Tone and style");
+    expect(stableBody).toContain("# Corrections");
   });
 
   it("renders first-batch dynamic system sections in reference relative order", () => {

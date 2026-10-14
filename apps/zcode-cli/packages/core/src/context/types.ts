@@ -38,15 +38,18 @@ export type ContextSource =
   | "request_user_context" // request-level user context provider-visible 组合块
   | "memory" // 长期 memory read path
   | "current_date" // 当前日期
+  | "main_system_prompt" // 设置中的主代理正文，保留自动注入
   | "custom_system_prompt" // 自定义 stable system body
   | "workflow_actor_identity" // 动态工作流子代理身份：契约 + persona 叠加
   | "subagent_agent_prompt" // 子 agent 专属身份/任务 prompt
   | "subagent_notes" // 子 agent 通用操作提醒
   | "subagent_environment" // 子 agent 环境和模型上下文
   | "dynamic_behavior" // 动态行为边界
+  | "delivering_work" // 交付范围与完成度纪律（Claude harness parity）
   | "session_guidance" // 当前可用内置能力指导
   | "output_style" // 输出风格
   | "context_management" // 长上下文管理提示
+  | "thinkrail" // ThinkRail 常驻规则（spec ground truth + workflow 路由）
   | "desktop_context"; // ZCode Desktop 渲染与交互协议
 
 export type ContextInjectionTarget = "system" | "meta_user";
@@ -116,6 +119,8 @@ export interface ContextBuilderConfig {
   embeddedSearchEnabled?: boolean;
   skillMetadataBudget?: number;
   customSystemPrompt?: string;
+  /** 主代理设置只替换稳定正文；工作流 actor 与子代理不使用。 */
+  mainSystemPrompt?: string;
   /**
    * 动态工作流子代理（workflow child）的身份输入。在场即走 builder 的第三条路径：
    * 基座段（CLI prefix、安全行、Harness、memory）+ 工作流子代理契约 + persona 叠加，
@@ -126,6 +131,24 @@ export interface ContextBuilderConfig {
   outputStyle?: OutputStylePromptConfig;
   compact?: AutoCompactPolicyConfig;
   guidanceToolNames?: readonly string[];
+
+  /**
+   * ThinkRail 常驻规则的渲染条件（docs/thinkrail/design.md D3）。缺席 = 不渲染：
+   * 测试与「不参与该特性」的调用方无需显式传 false。
+   *
+   * 三条条件在 ContextBuilder 之外算好（工具表与工作区事实都在那边），这里只做合取；
+   * 规则的原文由 caller 传入而不是在 context 层硬编码，这样正文与领域包同源、可被单测直接断言。
+   */
+  thinkrail?: ThinkrailSectionInput;
+}
+
+export interface ThinkrailSectionInput {
+  /** 用户开关（`runtimeFeatures.thinkrail`）。 */
+  readonly enabled: boolean;
+  /** 工作区是否真的存在至少一个 spec（`workspaceHasSpec` 的结论，调用点记忆化）。 */
+  readonly hasSpec: boolean;
+  readonly specRule: string;
+  readonly workflowRule: string;
 }
 
 /**

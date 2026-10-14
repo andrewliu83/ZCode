@@ -3369,6 +3369,10 @@ async function createRecord(
       modelSelection: "model" in params ? toRuntimeModelSelection(initialModel) : undefined,
       parentSessionId,
       taskType,
+      // ThinkRail 总开关（docs/thinkrail/design.md D2）：Host 从用户设置读出后经
+      // workspace/updateThinkrailToolPolicy 推到这个进程；这里只读进程缓存写进 runtimeFeatures，
+      // 与 nodeRepl / browserUse 同一层。缺省 false → spec_* 工具不注册（fail-closed）。
+      runtimeFeatures: { thinkrail: context.appRuntimePreferences.thinkrailEnabled },
       // 动态工作流灰度门（docs/dynamic-workflow/launch.md「Gray release」「On demand: activation」）：
       // 与 offPeakPort 同一套读法——本次 create/resume 参数优先，缺席时读 Host 同步到进程的
       // workspace 级结论。取值与「必须显式布尔」的理由收在 resolveDynamicWorkflowRuntimeGate。
@@ -3419,6 +3423,8 @@ async function createRecord(
     context.appRuntimePreferences.offPeakToolEnabled === true
       ? { offPeakPort: createProtocolOffPeakPort(context, () => ownSessionRecord) }
       : {}),
+    readThinkrailEnabled: () => context.appRuntimePreferences.thinkrailEnabled,
+    readMainSystemPrompt: () => context.appRuntimePreferences.mainSystemPrompt,
     resolveInitialBashShellSelection: startupPreferences.resolveInitialBashShellSelection,
     ...(startupPreferences.subagentRuntimeConfigEnabled &&
     !(workspace.workspaceIdentity && isRemoteWorkspaceIdentity(workspace.workspaceIdentity))

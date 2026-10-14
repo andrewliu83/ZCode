@@ -16,6 +16,7 @@ import {
   RESUME_WORKFLOW_RUN_TOOL_NAME,
   SAVE_WORKFLOW_TOOL_NAME,
   SUBMIT_RESULT_TOOL_NAME,
+  THINKRAIL_SPEC_TOOL_NAMES,
   type JsonSchema,
 } from "@zcode/contracts";
 import type { ToolEntry } from "../types.js";
@@ -71,6 +72,7 @@ import { getWorkflowRunToolEntry } from "./get-workflow-run.js";
 import { resumeWorkflowRunToolEntry } from "./resume-workflow-run.js";
 // import { workflowToolEntry } from "./workflow.js";
 import { createToolRuleNameSet } from "../tool-visibility.js";
+import { thinkrailSpecToolEntries } from "./thinkrail/index.js";
 
 // direct 分支保留 Glob/Grep 工具实现；embedded search 分支由 registerBuiltInTools
 // 统一隐藏 Glob/Grep，并通过 Bash find/grep 接管搜索。
@@ -140,6 +142,8 @@ export const builtInTools: ToolEntry[] = [
   // `subagent_model`。不进 WORKFLOW_CHILD_DISALLOWED_TOOLS
   // ——那条禁令的理由是 alwaysAsk 在 child 里无窗可弹，只读查询不适用。
   listModelsToolEntry,
+  // ThinkRail spec-graph 工具面（docs/thinkrail/design.md）：用户开关打开时才在工具表里。
+  ...thinkrailSpecToolEntries,
   // workflowToolEntry,
 ];
 
@@ -170,6 +174,17 @@ export function isDynamicWorkflowToolName(toolName: string): boolean {
   return DYNAMIC_WORKFLOW_TOOL_NAMES.has(toolName);
 }
 
+/**
+ * ThinkRail 工具面（七个 spec_*，P3 后加六个 worktree_*）由用户开关管辖。
+ * 与 DYNAMIC_WORKFLOW_TOOL_NAMES 共用同一套名字常量的来源（@zcode/contracts），
+ * 只是折叠方向相反：那个是「显式 false 下架」，这个是「显式 true 才上架」。
+ */
+const THINKRAIL_TOOL_NAMES: ReadonlySet<string> = new Set(THINKRAIL_SPEC_TOOL_NAMES);
+
+export function isThinkrailToolName(toolName: string): boolean {
+  return THINKRAIL_TOOL_NAMES.has(toolName);
+}
+
 interface RegisterBuiltInToolsOptions {
   bashTimeoutPolicy?: BashTimeoutPolicy;
   includeSkill?: boolean;
@@ -197,6 +212,12 @@ interface RegisterBuiltInToolsOptions {
   includeDynamicWorkflow?: boolean;
   /** node_repl（js）默认关闭，由官方 browser-use 插件启用。 */
   includeNodeRepl?: boolean;
+  /**
+   * ThinkRail 的七个 spec_* 工具。**只有显式 true 才注册**（与动态工作流的门相反）：
+   * 这是一个用户开关（AppSettings.thinkrailEnabled），默认关；「用户没打开」必须等于
+   * 「工具不在模型工具表里」，不能靠调用方记得传 false。
+   */
+  includeThinkrail?: boolean;
   /** browser-use 说明和 agent.browsers 注入由官方 browser-use 插件 + 宿主 browser bridge 共同启用。 */
   includeBrowserUse?: boolean;
   embeddedSearchEnabled?: boolean;
@@ -273,6 +294,9 @@ export function registerBuiltInTools(
       continue;
     }
     if (entry.metadata.name === "js" && options.includeNodeRepl !== true) {
+      continue;
+    }
+    if (isThinkrailToolName(entry.metadata.name) && options.includeThinkrail !== true) {
       continue;
     }
     registry.register(resolveBuiltInToolEntryForBranch(entry, options), {

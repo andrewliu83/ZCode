@@ -37,6 +37,9 @@ const WRITE_PROVIDER_DESCRIPTION = [
   "Writes a file to the local filesystem, overwriting if one exists.",
   "",
   "When to use: creating a new file, or fully replacing one you've already Read. Overwriting an existing file you haven't Read will fail. For partial changes, use Edit instead.",
+  "- Prefer the Edit tool for modifying existing files — it only sends the diff. Only use this tool to create new files or for complete rewrites.",
+  "- NEVER create documentation files (*.md) or README files unless explicitly requested by the User.",
+  "- Only use emojis if the user explicitly requests it. Avoid writing emojis to files unless asked.",
 ].join("\n");
 
 const WRITE_STORAGE_SUFFIX =

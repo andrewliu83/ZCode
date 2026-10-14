@@ -1,5 +1,15 @@
 # Tool Change Chain Spec
 
+## ThinkRail 审核回归（2026-10-13）
+
+Host 初始化与开关变更复用 workspace 串行策略队列，CLI 缺省关闭作为新进程基线，后续
+创建/恢复会话读取已同步结论。Agent 初始名单与每轮刷新复用同一合并函数，内置预设先放，
+用户/项目/插件 profile 后覆盖，工具白名单不得因开启功能被扩大。ThinkRail 常驻段仅在功能
+启用时重新做有界 spec 探测，不保留跨会话的存在性布尔缓存；spec 写工具无需另一条缓存失效
+路径。恢复契约见根目录 `docs/thinkrail/design.md` D2/D3/D6；工具名称、入参/输出、权限、
+执行、结果预算与 Desktop continuous / 手机 replayable 投递合同不变。回归覆盖初始化/关闭
+交错、同名 profile 限权、外部文件增删，以及设置乐观值结算后的广播更新。
+
 ## 工具内部模型请求的会话归因（2026-09-30）
 
 WebSearch、WebFetch processing、ReadSessionContext 的内部模型请求继承发起工具的宿主

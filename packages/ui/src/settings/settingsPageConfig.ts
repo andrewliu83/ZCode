@@ -18,6 +18,7 @@ import {
   WandSparkles,
   Keyboard,
   FileSearch,
+  ScrollText,
 } from "lucide-react";
 import { isSettingsSectionEnabled, type SettingsSectionId } from "@/lib/settingsNavigation.js";
 import type { Theme } from "@/useTheme.js";
@@ -72,6 +73,12 @@ const BASE_SETTINGS_SECTIONS: SettingsSectionDefinition[] = [
     icon: Package,
     titleId: "settings.modelProviderTitle",
     groupId: "basics",
+  },
+  {
+    id: "systemPrompt",
+    icon: ScrollText,
+    titleId: "settings.systemPrompt.title",
+    groupId: "agentCapabilities",
   },
   {
     id: "memory",

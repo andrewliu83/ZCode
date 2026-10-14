@@ -54,7 +54,9 @@ const EDIT_PROVIDER_DESCRIPTION = [
   "",
   "- You must Read the file in this conversation before editing, or the call will fail.",
   "- `old_string` must match the file exactly, including indentation, and be unique — the edit fails otherwise. Strip the Read line prefix (line number + tab) before matching.",
-  "- `replace_all: true` replaces every occurrence instead.",
+  "- `replace_all: true` replaces every occurrence instead. Useful for renaming a variable across the file.",
+  "- ALWAYS prefer editing existing files in the codebase. NEVER write new files unless explicitly required.",
+  "- Only use emojis if the user explicitly requests it. Avoid adding emojis to files unless asked.",
 ].join("\n");
 const NON_UNIQUE_OLD_STRING_MESSAGE =
   "old_string is not unique in the file. Provide more surrounding context or set replace_all to true.";

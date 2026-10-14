@@ -75,6 +75,7 @@ import {
   resolveExecutionModelRetryBudget,
 } from "./turn-model.js";
 import { rebuildContextPrefix } from "./context-refresh.js";
+import { refreshContextPolicy } from "./context-policy.js";
 
 const TARGET_RUN_HEARTBEAT_MS = 15_000;
 
@@ -113,6 +114,10 @@ export async function executeTurnCommand(
   // 这里在任何 await 之前冻结本轮事实；后续配置变化只作用于下一轮。
   const admittedModelSelection = options?.intent?.modelSelection ?? this.getSessionModelSelection();
   const admittedOutputStyle = this.config.outputStyle;
+  const admittedContextPolicy = {
+    thinkrailEnabled: this.readThinkrailEnabled?.(),
+    mainSystemPrompt: this.readMainSystemPrompt?.(),
+  };
   const compactInstructions = parseCompactCommand(input);
   const rewindCommand = parseRewindCommand(input);
   const turnId = startReservation?.turnId ?? createTurnId();
@@ -228,6 +233,8 @@ export async function executeTurnCommand(
         });
         throw coreError;
       }
+      // 原因：Host 开关以前只在会话创建时读取，旧会话永远缺少新技能和提示词。
+      await refreshContextPolicy(this, turnTraceContext, admittedContextPolicy);
       let phaseStartedAt = startTurnPhase("context_initialization");
       if (this.contextInitialized) {
         // 每个后续 model step 都按该步骤实际持有的 Model 重新投影 Context；
@@ -559,6 +566,7 @@ export async function executeTurnCommand(
         await this.prepareAgentDefinitions({
           signal: turnAbortSignal,
           traceContext: turnTraceContext,
+          thinkrailEnabled: this.config.runtimeFeatures?.thinkrail === true,
         });
         throwIfTurnAborted(turnAbortSignal);
         if (options?.skipInputRecord !== true && options?.inputVisibility !== "model-only") {

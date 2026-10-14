@@ -9,6 +9,7 @@ export interface SidePaneTabPresentationLabels {
   whiteboardTitle: string;
   modelTrajectoryTitle: string;
   developerToolsTitle: string;
+  specGraphTitle: string;
   browserPermissionsTitle: string;
   terminalTitle: string;
   subagentTypeLabel: string;
@@ -66,6 +67,9 @@ export function getSidePaneTabSearchHint(tab: WorkspaceSidePaneTab): string {
   if (tab.type === "model-trajectory") {
     return `${tab.title ?? ""} ${tab.taskId} model trajectory call io`;
   }
+  if (tab.type === "spec-graph") {
+    return "thinkrail spec graph specs requirements design";
+  }
   if (tab.type === "developer-tools") {
     return "developer tools token debug network status request response headers";
   }
@@ -88,6 +92,7 @@ export function getLocalizedSidePaneTabTitle(
       "whiteboard.title": labels.whiteboardTitle,
       "modelTrajectory.title": labels.modelTrajectoryTitle,
       "developerTools.title": labels.developerToolsTitle,
+      "thinkrail.specGraph.title": labels.specGraphTitle,
       "terminal.title": labels.terminalTitle,
       "sidePane.subagent": labels.subagentTypeLabel,
       "sidePane.subagentDirectory": labels.subagentDirectoryTitle,

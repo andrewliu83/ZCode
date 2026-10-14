@@ -30,6 +30,7 @@ import { TreemappingPane } from "@/TreemappingPane.js";
 import { WhiteboardPane } from "@/WhiteboardPane.js";
 import { ModelTrajectoryPane } from "@/ModelTrajectoryPane.js";
 import { DeveloperToolsPane } from "@/DeveloperToolsPane.js";
+import { SpecGraphPane } from "@/SpecGraphPane.js";
 import { cn } from "@/components/lib/utils.js";
 import { Button } from "@/components/ui/button.js";
 import {
@@ -70,6 +71,7 @@ import {
 } from "@/app-shell/animatedSidePanePanelModel.js";
 import type { BrowserNavigationRequest, RecentClosedSidePaneTab } from "@/hooks/useAppPanels.js";
 import { useDeveloperToolsVisibility } from "@/hooks/useDeveloperToolsVisibility.js";
+import { useSettings } from "@/hooks/useSettingService.js";
 import { usePlatform } from "@/hooks/usePlatform.js";
 import { useIsMobileTextInputViewport } from "@/lib/mobileTextInput.js";
 import { logger } from "@/logger.js";
@@ -94,6 +96,7 @@ import { getVisibleSidePaneTabs } from "@/lib/workspaceSidePane.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import {
   BugIcon,
+  NetworkIcon,
   FileDiffIcon,
   GlobeIcon,
   MessageSquareTextIcon,
@@ -320,6 +323,7 @@ export function AnimatedSidePanePanel({
   onOpenBrowserPermissionSettings,
   onOpenWhiteboard: _onOpenWhiteboard,
   onOpenDeveloperTools,
+  onOpenSpecGraph,
   onOpenTerminalTab,
   onOpenReviewTab,
   onOpenSelectionSideConversation,
@@ -389,6 +393,7 @@ export function AnimatedSidePanePanel({
   onOpenBrowserPermissionSettings?: (origin: string) => void;
   onOpenWhiteboard: () => void;
   onOpenDeveloperTools: () => void;
+  onOpenSpecGraph: () => void;
   onOpenTerminalTab: () => void;
   onOpenReviewTab: () => void;
   onOpenSelectionSideConversation: () => void;
@@ -418,6 +423,9 @@ export function AnimatedSidePanePanel({
   const { intl } = useZCodeIntl();
   const isOfficeMode = useIsOfficeMode();
   const developerToolsEnabled = useDeveloperToolsVisibility();
+  // ThinkRail 总开关（docs/thinkrail/design.md D2）：关着时 spec 图入口不出现。
+  // 面板本身不隐藏已开的 tab —— 用户关掉开关不会让他正在看的面板凭空消失。
+  const thinkrailEnabled = useSettings().settings?.thinkrailEnabled === true;
   const isMobileTextInputViewport = useIsMobileTextInputViewport();
   const isDragCollapsible = !isVisible;
   const isResizeDisabled = !isVisible;
@@ -775,6 +783,17 @@ export function AnimatedSidePanePanel({
           </DropdownMenuItem>
         ) : null}
         {/* 插件此前只接入空白页；已有 tab 后必须在加号菜单复用相同候选与打开动作。 */}
+        {thinkrailEnabled ? (
+          <DropdownMenuItem
+            data-side-pane-add-item="spec-graph"
+            onSelect={() => {
+              onOpenSpecGraph();
+            }}
+          >
+            <NetworkIcon className="size-4" />
+            <span>{intl.formatMessage({ id: "thinkrail.specGraph.title" })}</span>
+          </DropdownMenuItem>
+        ) : null}
         {onOpenPluginUi ? (
           <PluginUiLauncherItems
             variant="menu"
@@ -819,10 +838,17 @@ export function AnimatedSidePanePanel({
       icon: BugIcon,
       onOpen: onOpenDeveloperTools,
     },
+    "spec-graph": {
+      id: "spec-graph",
+      label: intl.formatMessage({ id: "thinkrail.specGraph.title" }),
+      icon: NetworkIcon,
+      onOpen: onOpenSpecGraph,
+    },
   };
   const openTabLauncherItems: OpenTabLauncherItem[] = resolveOpenTabLauncherItemIds({
     canOpenSelectionSideConversation,
     developerToolsEnabled,
+    thinkrailEnabled,
     hasReviewTab,
     supportsEmbeddedBrowser,
   })
@@ -923,6 +949,7 @@ export function AnimatedSidePanePanel({
         developerToolsTitle: intl.formatMessage({
           id: "developerTools.title",
         }),
+        specGraphTitle: intl.formatMessage({ id: "thinkrail.specGraph.title" }),
         browserPermissionsTitle: intl.formatMessage({
           id: "browser.permission.settings",
         }),
@@ -1299,6 +1326,13 @@ export function AnimatedSidePanePanel({
                             title={tab.title}
                             workspacePath={workspaceAbsPath}
                             workspaceIdentity={workspaceIdentity}
+                            onClose={() => onCloseTab(tab.id)}
+                          />
+                        ) : tab.type === "spec-graph" ? (
+                          <SpecGraphPane
+                            workspacePath={workspaceAbsPath}
+                            workspaceIdentity={workspaceIdentity}
+                            isVisible={isVisible && tab.id === visibleActiveTabId}
                             onClose={() => onCloseTab(tab.id)}
                           />
                         ) : tab.type === "developer-tools" ? (

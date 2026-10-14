@@ -175,6 +175,8 @@ export const ServiceChannels = {
   HighspeedCard: "highspeed-card",
   /** Onboarding 完成记录服务（本地持久化，后续上传服务器） */
   OnboardingRecord: "onboarding-record",
+  /** ThinkRail spec 图的只读派生视图（面板消费；写入只经 agent 的 spec_* 工具） */
+  SpecGraph: "spec-graph",
 } as const;
 
 export type ServiceChannelName = (typeof ServiceChannels)[keyof typeof ServiceChannels];

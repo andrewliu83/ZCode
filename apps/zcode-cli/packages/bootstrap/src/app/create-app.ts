@@ -20,7 +20,7 @@ import { createNodeSkillAdapter } from "@zcode/adapters/skills";
 import { createMcpAdapter } from "@zcode/adapters/mcp";
 import {
   AgentRuntime,
-  normalizeAgentProfiles,
+  createAgentDefinitionsReader,
   PermissionService,
   buildPluginReferenceCatalog,
   writeWorkflowDraft,
@@ -72,7 +72,7 @@ import { createPluginFacadeForApp } from "./plugin-facade.js";
 import { resolvePluginRuntimeFeatures } from "./plugin-runtime-features.js";
 import { createSessionFacade } from "./session-facade.js";
 import { resolveAppRuntimeConfig, runtimeConfigLogContext } from "./runtime-config.js";
-import { resolveBundledSkillRoots } from "./bundled-skills.js";
+import { resolveBundledSkillRoots, THINKRAIL_SKILL_NAMES } from "./bundled-skills.js";
 import { collectDynamicWorkflowDisabledSkillPaths } from "./dynamic-workflow-gate.js";
 import { createWorkspaceHookRuntimeSecurity } from "./workspace-hook-trust.js";
 import { createScriptWorkflowBridge } from "./script-workflow-methods.js";
@@ -806,24 +806,29 @@ export async function createZCodeApp(options: ZCodeAppOptions): Promise<ZCodeApp
                       },
                       pluginTemplates,
                     ).profiles;
-              return {
-                activeAgents: normalizeAgentProfiles(
-                  [
-                    ...(options.runtimeConfig?.subagents?.profiles ?? []),
-                    ...parsed.profiles,
-                    ...pluginProfiles,
-                  ],
-                  {
-                    builtInModelSelectionOverrides: {
-                      ...parsed.builtInModelSelectionOverrides,
-                      ...options.runtimeConfig?.subagents?.builtInModelSelectionOverrides,
-                    },
+              const thinkrailEnabled =
+                input.thinkrailEnabled ?? runtimeConfig.runtimeFeatures?.thinkrail === true;
+              const userProfiles = [
+                ...(options.runtimeConfig?.subagents?.profiles ?? []),
+                ...parsed.profiles,
+                ...pluginProfiles,
+              ];
+              // Bugfix：每轮刷新与初始名单必须复用同一合并顺序，内置不得覆盖用户的权限配置。
+              return createAgentDefinitionsReader(
+                userProfiles,
+                {
+                  builtInModelSelectionOverrides: {
+                    ...parsed.builtInModelSelectionOverrides,
+                    ...options.runtimeConfig?.subagents?.builtInModelSelectionOverrides,
                   },
-                ),
-              };
+                },
+                { enabled: thinkrailEnabled },
+              )();
             },
           }
         : {}),
+      readThinkrailEnabled: options.readThinkrailEnabled,
+      readMainSystemPrompt: options.readMainSystemPrompt,
       agentTelemetry: modelTelemetry.agentExecution,
       // 主代理的模型请求过治理器的 observer：立即放行，但让治理器看见它的 429 / 成功。
       modelRequestAdmission: workflowConcurrencyGovernor.observer(),
@@ -848,6 +853,12 @@ export async function createZCodeApp(options: ZCodeAppOptions): Promise<ZCodeApp
             createNodeSkillAdapter({
               extraRoots: configResult.config.skills.roots,
               extraResolvedRoots: [...pluginOutcome.skillRoots, ...bundledSkillRoots],
+              // 原因：构造期 disabledPaths 永久冻结，已有会话开启后仍无法加载路由技能。
+              isSkillEnabled: (skill) =>
+                skill.source !== "bundled" ||
+                !THINKRAIL_SKILL_NAMES.includes(skill.name) ||
+                (runtime?.isThinkrailEnabled() ??
+                  runtimeConfig.runtimeFeatures?.thinkrail === true),
               disabledPaths: [
                 ...collectDisabledPaths(configResult.config.skillOverrides),
                 // 动态工作流关闭时不提供 dynamic-workflows 技能：
@@ -1384,6 +1395,8 @@ export async function createZCodeApp(options: ZCodeAppOptions): Promise<ZCodeApp
           }),
       ...createPluginFacadeForApp({ configResult, options, workingDirectory }),
       getPluginReferenceCatalog: () => pluginReferenceCatalog,
+      getSystemPromptInspection: async () =>
+        await getRuntime().getSystemPromptInspection(traceContext),
       getSkillCatalog: async () => {
         // Skill 目录属于 context 初始化结果。冷恢复必须先恢复 Session 边界，再读取
         // 新 runtime 的快照，不能绕开 resume 后用旧工作目录独立扫描。

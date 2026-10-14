@@ -22,8 +22,10 @@ import { buildCurrentDateSection } from "./sections/current-date.js";
 import { buildMemorySection } from "./sections/memory.js";
 import { ACTIVE_PROJECT_MEMORY_RETRIEVAL_BRANCH } from "../memory/project-memory-retrieval-branch.js";
 import { buildDesktopContextSection } from "./sections/desktop.js";
+import { buildThinkrailSection } from "./sections/thinkrail.js";
 import {
   buildContextManagementSection,
+  buildDeliveringWorkSection,
   buildDynamicBehaviorSection,
   buildOutputStyleSection,
   buildSessionGuidanceSection,
@@ -85,7 +87,11 @@ export class ContextBuilder {
     const activeOutputStyle = this.config.outputStyle?.prompt.trim()
       ? this.config.outputStyle
       : undefined;
-    const customSystemPrompt = this.config.customSystemPrompt?.trim();
+    const mainSystemPrompt =
+      this.config.workflowActor === undefined ? this.config.mainSystemPrompt?.trim() : undefined;
+    const customSystemPrompt = mainSystemPrompt
+      ? undefined
+      : this.config.customSystemPrompt?.trim();
     const hasCustomSystemPrompt = Boolean(customSystemPrompt);
     // 工作流子代理身份：第三条路径。与
     // customSystemPrompt 互斥——两者同在只可能是接线错误（persona 该经 workflowActor 进来，
@@ -106,7 +112,18 @@ export class ContextBuilder {
     }
 
     // 2. Stable agent behavior or custom prompt body
-    if (hasCustomSystemPrompt) {
+    if (mainSystemPrompt) {
+      // 原因：传统 custom prompt 会跳过整个动态注入体系，设置编辑只替换稳定正文。
+      sections.push(
+        createSection({
+          name: "Main System Prompt",
+          source: "main_system_prompt",
+          injectionTarget: "system",
+          cacheHint: "stable",
+          content: `\n${mainSystemPrompt}`,
+        }),
+      );
+    } else if (hasCustomSystemPrompt) {
       sections.push(
         createSection({
           name: "Custom System Prompt",
@@ -149,6 +166,22 @@ export class ContextBuilder {
         sections.push(sessionGuidanceSection);
       }
 
+      // ThinkRail 常驻规则（docs/thinkrail/design.md D3）：spec ground truth 与 workflow 路由。
+      // 位置与 session guidance 相邻——与「探索与计划」相关的指令聚在同一段附近；
+      // 它自带三条渲染条件，不满足即返回 null。
+      const thinkrailSection = this.config.thinkrail
+        ? buildThinkrailSection({
+            enabled: this.config.thinkrail.enabled,
+            hasSpec: this.config.thinkrail.hasSpec,
+            specRule: this.config.thinkrail.specRule,
+            workflowRule: this.config.thinkrail.workflowRule,
+            toolNames: this.config.guidanceToolNames ?? [],
+          })
+        : null;
+      if (thinkrailSection) {
+        sections.push(thinkrailSection);
+      }
+
       // Memory
       if (this.config.memoryRoot) {
         const memorySection = buildMemorySection(
@@ -166,6 +199,10 @@ export class ContextBuilder {
       if (outputStyleSection) {
         sections.push(outputStyleSection);
       }
+
+      // Delivering work：行为纪律先于长上下文机制，与 Claude harness 的
+      // provider-visible 顺序一致。
+      sections.push(buildDeliveringWorkSection());
 
       // Context Management
       sections.push(buildContextManagementSection());

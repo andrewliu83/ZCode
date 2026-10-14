@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { ZCodeSkillReferenceCatalogEntry } from "@zcode/shared";
 import { useWorkspaceServicesResolution } from "@/hooks/useWorkspaceServices.js";
 import { logger } from "@/logger.js";
+import { useThinkrailCatalogStore } from "@/store/thinkrailCatalogStore.js";
 
 export interface ConversationSkillCatalogState {
   skills: ZCodeSkillReferenceCatalogEntry[];
@@ -47,6 +48,7 @@ export function useSkills(options: UseSkillsOptions): ConversationSkillCatalogSt
     options.preferredRemoteSessionId,
     options.workspaceIdentity,
   );
+  const catalogRevision = useThinkrailCatalogStore((state) => state.revision);
   const [scopedState, setScopedState] =
     useState<ScopedConversationSkillCatalogState>(EMPTY_SCOPED_STATE);
   const [runtimeRevision, setRuntimeRevision] = useState(0);
@@ -56,7 +58,7 @@ export function useSkills(options: UseSkillsOptions): ConversationSkillCatalogSt
     resolution.remoteSessionId ?? options.preferredRemoteSessionId ?? undefined;
   const services = resolution.services;
   const rpcReady = resolution.rpcReady;
-  const requestKey = `${workspaceKey}|${remoteSessionId ?? "local"}|${options.sessionId ?? "draft"}|runtime:${runtimeRevision}`;
+  const requestKey = `${workspaceKey}|${remoteSessionId ?? "local"}|${options.sessionId ?? "draft"}|runtime:${runtimeRevision}|catalog:${catalogRevision}`;
 
   useEffect(() => {
     if (!options.enabled || !options.sessionId || !rpcReady) return;
@@ -131,7 +133,12 @@ export function useSkills(options: UseSkillsOptions): ConversationSkillCatalogSt
     services,
   ]);
 
-  if (!options.enabled || !options.workspacePath || !rpcReady || scopedState.scope !== requestScope) {
+  if (
+    !options.enabled ||
+    !options.workspacePath ||
+    !rpcReady ||
+    scopedState.scope !== requestScope
+  ) {
     return EMPTY_STATE;
   }
   return scopedState.value;

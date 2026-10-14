@@ -11,6 +11,9 @@ import {
   type ChannelReplyResult,
 } from "@zcode/shared";
 import { requestPluginReferenceCatalog } from "#src/zcode-agent/pluginReferenceCatalogRequest.js";
+import { requestSkillReferenceCatalog } from "#src/zcode-agent/skillReferenceCatalogRequest.js";
+import { createMainSystemPromptPolicySync } from "./mainSystemPromptPolicy.js";
+import { zcodeSystemPromptReadResultSchema } from "@zcode/shared";
 import {
   localTtftFactsSchema,
   sessionDebugSnapshotSchema,
@@ -64,7 +67,6 @@ import {
   zcodePluginsOverviewResultSchema,
   zcodeProcessChildProcessesResultSchema,
   type ZCodeProcessChildProcess,
-  zcodeSkillsReferenceCatalogResultSchema,
   zcodeMcpReadResourceResultSchema,
   zcodeMcpUiCallToolResultSchema,
   zcodeMcpUiCancelCallResultSchema,
@@ -139,6 +141,7 @@ import {
   type ZCodeAutomation,
   type ZCodeAutomationRun,
   zcodeWorkspaceUpdateOffPeakToolPolicyResultSchema,
+  zcodeWorkspaceUpdateThinkrailToolPolicyResultSchema,
   zcodeWorkspaceUpdateDynamicWorkflowPolicyResultSchema,
   type DynamicWorkflowClientConfig,
   type DynamicWorkflowMode,
@@ -933,6 +936,12 @@ interface ActiveWorkspaceClient {
    * 只在 workspace/updateDynamicWorkflowPolicy 成功后更新；重同步据此跳过没有变化的请求。
    */
   dynamicWorkflowPolicyMode: DynamicWorkflowMode;
+  /**
+   * 该 CLI 进程当前持有的 ThinkRail 开关（docs/thinkrail/design.md D2）。CLI 启动时缺省关闭，
+   * 新进程以 false 为基线，后续只在 workspace/updateThinkrailToolPolicy 成功后更新；同步不清除已活跃会话的工具面
+   * （与 Off-Peak / 动态工作流「中途翻转不回收」的既有裁决一致）。
+   */
+  thinkrailEnabled?: boolean;
 }
 
 function createRuntimeUnavailableError(params: ZCodeAgentWorkspaceTarget): Error & {
@@ -992,6 +1001,16 @@ interface CreateZCodeAgentServiceOptions extends Omit<
   resolveDynamicWorkflowUserMode?: () => Promise<DynamicWorkflowMode | undefined>;
   /** 用户选择同步后交给装配层转发（Desktop Host 推给本窗口的远程 Host）；值取自本机设置。 */
   forwardDynamicWorkflowUserMode?: (mode: DynamicWorkflowMode | undefined) => void;
+  /** ThinkRail 开关变化后交给装配层转发（Desktop Host 推给本窗口的远程 Host），与上面同形。 */
+  forwardThinkrailEnabled?: (enabled: boolean | undefined) => void;
+  resolveMainSystemPrompt?: () => Promise<string | undefined>;
+  forwardMainSystemPrompt?: (value: string | undefined) => void | Promise<void>;
+  /**
+   * ThinkRail 总开关的读取点（docs/thinkrail/design.md D2）：拥有设置权威的 Host 注入，
+   * 每次 client work 前现读设置文件。desktop-attached remote Host 读不到桌面的设置，
+   * 由 desktop 推送（syncThinkrailEnabled），这里不注入。
+   */
+  resolveThinkrailEnabled?: () => Promise<boolean | undefined>;
   resolveOffPeakTaskService?: () =>
     | Pick<IOffPeakTaskService, "createTask" | "list" | "getCodingPlanSupport">
     | undefined;
@@ -1299,14 +1318,26 @@ export function createZCodeAgentService(
     PendingSessionRuntimePreferencesRequest
   >();
   const activeClientsByWorkspaceKey = new Map<string, ActiveWorkspaceClient>();
+  const mainSystemPromptPolicy = createMainSystemPromptPolicySync({
+    resolve: options?.resolveMainSystemPrompt,
+    forward: options?.forwardMainSystemPrompt,
+    entries: () => activeClientsByWorkspaceKey.values(),
+    workspaceKey: resolveWorkspaceKey,
+    workspaceRef: buildWorkspaceRef,
+    methodNotFound: isProtocolMethodNotFoundError,
+  });
   const interactionPreferenceSyncByWorkspaceKey = new Map<string, Promise<void>>();
   let latestAppRuntimePreferences: ZCodeAgentAppRuntimePreferences | undefined;
   /** 服务端「提供」的进程内单次读取；见 resolveDynamicWorkflowGate 的注释。 */
   let dynamicWorkflowOffer: Promise<DynamicWorkflowClientConfig | undefined> | undefined;
   /** desktop 推来的用户选择；只在没有本机设置权威（未注入 resolveDynamicWorkflowUserMode）时使用。 */
   let pushedDynamicWorkflowUserMode: DynamicWorkflowMode | undefined;
+  /** desktop 推来的 ThinkRail 开关；只在没有本机设置权威（未注入 resolveThinkrailEnabled）时使用。 */
+  let pushedThinkrailEnabled: boolean | undefined;
   /** 每个 workspace 的策略同步链：后入队的步骤在前一步落地后才读取生效模式并发送。 */
   const dynamicWorkflowPolicySyncByWorkspaceKey = new Map<string, Promise<void>>();
+  /** ThinkRail 开关的同步链，与上面同构（同一 workspace 串行，避免旧请求落在新结论之后）。 */
+  const thinkrailPolicySyncByWorkspaceKey = new Map<string, Promise<void>>();
   const waitingWorkspaceStartups = new Map<string, WaitingWorkspaceStartup>();
   function cancelWaitingWorkspaceStartup(workspaceKey: string): void {
     const waiting = waitingWorkspaceStartups.get(workspaceKey);
@@ -3207,6 +3238,7 @@ export function createZCodeAgentService(
     if (active && isReusableActiveClientEntry(params, active)) {
       active.workspace = params;
       await active.interactionPreferencesReady;
+      await mainSystemPromptPolicy.update(active);
       return active;
     }
 
@@ -3219,6 +3251,7 @@ export function createZCodeAgentService(
     if (concurrent && isReusableActiveClientEntry(params, concurrent)) {
       concurrent.workspace = params;
       await concurrent.interactionPreferencesReady;
+      await mainSystemPromptPolicy.update(concurrent);
       return concurrent;
     }
 
@@ -3227,6 +3260,8 @@ export function createZCodeAgentService(
       modelExecutionEnabled: false,
       workspace: params,
       dynamicWorkflowPolicyMode: "disabled",
+      // 新进程的协议缺省为关闭；以该事实为基线，无变化时不打扰旧 CLI。
+      thinkrailEnabled: false,
     };
     activeClientsByWorkspaceKey.set(workspaceKey, entry);
     const interactionPreferencesReady = (async () => {
@@ -3241,6 +3276,9 @@ export function createZCodeAgentService(
         appliedSnapshot = snapshot;
       }
     })();
+    // Bugfix：初始化曾绕过变更队列，迟到的旧 true 会覆盖用户刚同步的 false。
+    // 初始化与设置变更共用一条串行链，权威值在各自步骤执行时读取（design.md D2）。
+    const thinkrailPolicyReady = enqueueThinkrailPolicySync(entry);
     // Off-Peak 本地支持能力是 workspace 级事实，在允许任何 session 工作前同步到 CLI，
     // 让 v4 冷恢复（没有 per-request flag 通道）也能拿到工具面。旧 CLI method-not-found 降级忽略。
     // CLI 缺省即 false，且每个 agent 进程只服务一个 workspace，门禁关闭时不发请求（对未实现该
@@ -3273,6 +3311,8 @@ export function createZCodeAgentService(
       interactionPreferencesReady,
       offPeakToolPolicyReady,
       dynamicWorkflowPolicyReady,
+      thinkrailPolicyReady,
+      mainSystemPromptPolicy.update(entry),
     ]).then(() => undefined);
     try {
       // 新建或重启 runtime 在允许任何 session 工作前追平缓存；同步期间的新开关
@@ -3576,6 +3616,29 @@ export function createZCodeAgentService(
   }
 
   /**
+   * ThinkRail 总开关：本机设置权威每次现读（与动态工作流的用户选择同一取法）；
+   * 没有设置权威（desktop-attached remote Host）时用 desktop 推来的值。读失败按关闭处理——
+   * 读不到用户意图时不能替他打开工具面。
+   */
+  async function resolveThinkrailEnabled(): Promise<boolean> {
+    const read = options?.resolveThinkrailEnabled;
+    if (!read) return pushedThinkrailEnabled === true;
+    try {
+      return (await read()) === true;
+    } catch (error) {
+      logger.warn(undefined, "ThinkRail 开关读取失败，按关闭处理", {
+        errorMessage: error instanceof Error ? error.message : String(error),
+      });
+      return false;
+    }
+  }
+
+  /** 有本机设置权威时注入者恒存在；没有时看 desktop 是否推过。用来跳过对旧 CLI 的无谓请求。 */
+  function isThinkrailSupported(): boolean {
+    return options?.resolveThinkrailEnabled !== undefined || pushedThinkrailEnabled !== undefined;
+  }
+
+  /**
    * 生效模式 = 闩住的「提供」+ 此刻的用户选择。策略同步与三条创建路径同源调用，所以不会出现
    * "策略说开、create 说关"的裂口；选择不闩，改设置后下一次建会话立刻拿到新值。
    * `onDemand` 原样送到 CLI：它决定十个工具是首请求就注册还是等首次 `/workflow`。
@@ -3584,6 +3647,39 @@ export function createZCodeAgentService(
     const offer = await resolveDynamicWorkflowOffer();
     if (!offer) return "disabled";
     return applyDynamicWorkflowUserMode(offer, await resolveDynamicWorkflowUserMode()).mode;
+  }
+
+  /**
+   * 把一个 workspace 的 ThinkRail 开关同步给它的 CLI。与动态工作流的策略同步同构（同一 workspace
+   * 串行、按已持有值跳过重复），但**双向**：关闭时同样要发 enabled:false，否则已推到 true 的
+   * CLI 进程会一直开着工具面——dwf 那套有「服务端提供」闩住，关不掉，这里没有那一层的理由。
+   */
+  function enqueueThinkrailPolicySync(entry: ActiveWorkspaceClient): Promise<void> {
+    const workspaceKey = resolveWorkspaceKey(entry.workspace);
+    const previous = thinkrailPolicySyncByWorkspaceKey.get(workspaceKey) ?? Promise.resolve();
+    const current = previous.then(async () => {
+      if (!isThinkrailSupported()) return;
+      const enabled = await resolveThinkrailEnabled();
+      // 新进程以协议缺省 false 为基线；已有进程只在成功同步后更新缓存。
+      if (entry.thinkrailEnabled !== undefined && entry.thinkrailEnabled === enabled) return;
+      try {
+        await entry.client.request(
+          zcodeProtocolMethods.workspaceUpdateThinkrailToolPolicy,
+          { workspace: buildWorkspaceRef(entry.workspace), enabled },
+          zcodeWorkspaceUpdateThinkrailToolPolicyResultSchema,
+        );
+        entry.thinkrailEnabled = enabled;
+      } catch (error) {
+        if (!isProtocolMethodNotFoundError(error)) {
+          logger.warn(undefined, "ThinkRail 开关同步失败，CLI 维持原策略", {
+            workspaceKey,
+            errorMessage: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+    });
+    thinkrailPolicySyncByWorkspaceKey.set(workspaceKey, current);
+    return current;
   }
 
   /**
@@ -3753,6 +3849,27 @@ export function createZCodeAgentService(
           ...(providerNotReady ? { reasonCode: ZCODE_AGENT_PROVIDER_NOT_READY_REASON } : {}),
         };
       }
+    },
+
+    /**
+     * ThinkRail 开关的变更入口（设置页写入后由 Host 调用）。与 syncDynamicWorkflowUserMode 同形：
+     * 本机有设置权威时传入值只是变更信号（以设置文件为准），desktop-attached remote Host 没有本机
+     * 设置，推来的值就是选择。
+     *
+     * 已有会话在下一轮命令边界采用进程策略；正在执行的 turn 保持原工具与技能快照。
+     */
+    async syncMainSystemPrompt(params: { mainSystemPrompt?: string }): Promise<void> {
+      await mainSystemPromptPolicy.sync(params.mainSystemPrompt);
+    },
+
+    async syncThinkrailEnabled(params: { enabled?: boolean }): Promise<void> {
+      const pushed =
+        params.enabled === true || params.enabled === false ? params.enabled : undefined;
+      pushedThinkrailEnabled = pushed;
+      options?.forwardThinkrailEnabled?.(await resolveThinkrailEnabled());
+      await Promise.all(
+        [...activeClientsByWorkspaceKey.values()].map((entry) => enqueueThinkrailPolicySync(entry)),
+      );
     },
 
     async syncDynamicWorkflowUserMode(params: { mode?: DynamicWorkflowMode }): Promise<void> {
@@ -4289,18 +4406,40 @@ export function createZCodeAgentService(
       });
     },
 
+    async getSystemPromptSnapshot(params) {
+      const client = await getReadOnlyClient(params);
+      const entry = activeClientsByWorkspaceKey.get(resolveWorkspaceKey(params));
+      if (entry)
+        await Promise.all([
+          mainSystemPromptPolicy.update(entry),
+          enqueueThinkrailPolicySync(entry),
+        ]);
+      return client.request(
+        zcodeProtocolMethods.systemPromptRead,
+        {
+          workspace: buildWorkspaceRef(params),
+          ...(params.sessionId ? { sessionId: params.sessionId } : {}),
+          // 原因：Host 的 desktop 是启动表面，CLI wire 使用 zcode_desktop；直接传值会被严格校验拒绝。
+          presentationSurface:
+            options?.presentationSurface === "desktop"
+              ? "zcode_desktop"
+              : options?.presentationSurface,
+        },
+        zcodeSystemPromptReadResultSchema,
+      );
+    },
+
     async getSkillReferenceCatalog(params: ZCodeAgentSkillReferenceCatalogParams) {
       // 与 Plugin 引用一样，Session 快照只存在于 workspace agent 进程；独立管理进程
       // 没有 resident Session，不能作为对话 authority。
       const client = await getReadOnlyClient(params);
-      return client.request(
-        zcodeProtocolMethods.skillsReferenceCatalog,
-        {
-          workspace: buildWorkspaceRef(params),
-          ...(params.sessionId ? { sessionId: params.sessionId } : {}),
-        },
-        zcodeSkillsReferenceCatalogResultSchema,
-      );
+      // 设置广播后的目录读取可能先于 Root 的信号；排进同一队列后才能读到权威策略。
+      const entry = activeClientsByWorkspaceKey.get(resolveWorkspaceKey(params));
+      if (entry) await enqueueThinkrailPolicySync(entry);
+      return requestSkillReferenceCatalog(client, {
+        workspace: buildWorkspaceRef(params),
+        ...(params.sessionId ? { sessionId: params.sessionId } : {}),
+      });
     },
 
     async openMcpUiInstance(params) {
