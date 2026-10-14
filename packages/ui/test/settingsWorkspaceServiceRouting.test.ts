@@ -1,8 +1,19 @@
 import { readFile } from "node:fs/promises";
+import { Node, Project, SyntaxKind } from "ts-morph";
 import { describe, expect, it } from "vitest";
 
 function readSource(path: string): Promise<string> {
   return readFile(new URL(`../${path}`, import.meta.url), "utf8");
+}
+
+function findSettingsComponent(source: string, name: string) {
+  const project = new Project({ useInMemoryFileSystem: true });
+  const file = project.createSourceFile("SettingsPage.tsx", source);
+  const component = file
+    .getDescendantsOfKind(SyntaxKind.JsxSelfClosingElement)
+    .find((node) => node.getTagNameNode().getText() === name);
+  if (!component) throw new Error(`Missing settings component: ${name}`);
+  return component;
 }
 
 describe("Settings target workspace service routing", () => {
@@ -15,10 +26,31 @@ describe("Settings target workspace service routing", () => {
     expect(source).toContain("connectivityWorkspaceRequired={isRemoteModelProviderWorkspace}");
     expect(source).not.toContain("modelProviderServiceResolution");
 
-    const modelProviderStart = source.indexOf('activeSection === "modelProvider"');
-    const modelProviderEnd = source.indexOf('activeSection === "memory"', modelProviderStart);
-    const modelProviderSection = source.slice(modelProviderStart, modelProviderEnd);
-    expect(modelProviderSection).not.toContain("workspaceIdentity={activeWorkspaceIdentity}");
+    // 修复依据：按相邻 memory 分支截断会把新增提示词入口的 identity 错算给供应商。
+    // 直接校验组件和包裹它的服务所有者，新增/调整其他设置页不会改变这一断言的边界。
+    const modelProvider = findSettingsComponent(source, "ModelProviderSection");
+    const serviceOwner = modelProvider
+      .getAncestors()
+      .filter(Node.isJsxElement)
+      .find((node) => node.getOpeningElement().getTagNameNode().getText() === "ServiceProvider");
+    expect(serviceOwner?.getOpeningElement().getAttribute("services")?.getText()).toBe(
+      "services={localHostServices}",
+    );
+    expect(modelProvider.getAttribute("workspaceIdentity")).toBeUndefined();
+  });
+
+  it("passes the selected workspace identity to System Prompt inspection", async () => {
+    const source = await readSource("src/SettingsPage.tsx");
+    const systemPrompt = findSettingsComponent(source, "SystemPromptSettingsSection");
+    expect(systemPrompt.getAttribute("workspacePath")?.getText()).toBe(
+      "workspacePath={activeWorkspacePath}",
+    );
+    expect(systemPrompt.getAttribute("workspaceIdentity")?.getText()).toBe(
+      "workspaceIdentity={activeWorkspaceIdentity}",
+    );
+    expect(systemPrompt.getAttribute("remoteSessionId")?.getText()).toBe(
+      "remoteSessionId={activeWorkspaceTab?.remoteSessionId}",
+    );
   });
 
   it("does not expose remote Provider settings or a manual sync action", async () => {

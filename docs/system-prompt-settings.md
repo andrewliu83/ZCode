@@ -84,26 +84,29 @@ sequenceDiagram
 | invariant-only | subagent / workflow actor / legacy systemPrompt                   | 既有身份和专用提示词不被全局设置覆盖    |
 | invariant-only | remote identity / continuous / replayable / queue                 | 不新增业务状态所有者，不改变交付语义    |
 
+- invariant-only：模型供应商配置继续由 Local Environment 所有；系统提示词的查询独立携带目标工作区 identity。路由回归按 JSX 节点校验各入口，不以相邻设置分支作为源码截断边界。
+
 codegraph 已确认 ContextBuilder、AgentRuntime、createZCodeApp、SettingsPage、AppSettings 为装配和状态入口。
 使用深度 2 验证调用方；源文件与接口以当前检出内容为准。功能图新增 system-prompt-settings 能力与设置入口，
 连接 ThinkRail 提示词来源、settings owner 和 CLI runtime owner。
 
 ## 已接受验收场景
 
-| ID    | 设置/动作                                | 断言                                                        | 证据                       |
-| ----- | ---------------------------------------- | ----------------------------------------------------------- | -------------------------- |
-| SP-01 | 默认配置打开设置                         | 显示 Runtime 默认正文、只读来源与角色；不发送模型请求       | protocol + UI E2E          |
-| SP-02 | 编辑保存正文                             | 落盘；下一轮 system 含新正文，同时保留 ThinkRail/其他来源   | service + runtime + UI E2E |
-| SP-03 | 恢复默认                                 | 删除/清空 override，恢复原默认正文；只读来源不变            | settings + runtime         |
-| SP-04 | ThinkRail 开/关与无 spec                 | 显示实际规则；开启无 spec 仍有 workflow 指令                | request + snapshot         |
-| SP-05 | 正在运行时保存，随后排队输入             | 当前轮次保留旧正文，下一轮采用新正文                        | gated runtime integration  |
-| SP-06 | 远程身份相同路径、迟到查询               | 只接受当前目标的结果；不退回其他 workspace/session          | hook/service               |
-| SP-07 | 子代理/工作流 actor/legacy custom prompt | 专用身份不被 mainSystemPrompt 覆盖                          | builder/runtime            |
-| SP-08 | 最后一次模型请求                         | 实际 system 字符串与发给 model 的请求一致；不是 UI 拼接常量 | request capture            |
-| SP-09 | Desktop/terminal 提示词查询              | 启动表面转换为 wire 值，通过严格参数校验                    | service protocol boundary  |
+| ID    | 设置/动作                                | 断言                                                                             | 证据                        |
+| ----- | ---------------------------------------- | -------------------------------------------------------------------------------- | --------------------------- |
+| SP-01 | 默认配置打开设置                         | 显示 Runtime 默认正文、只读来源与角色；不发送模型请求                            | protocol + UI E2E           |
+| SP-02 | 编辑保存正文                             | 落盘；下一轮 system 含新正文，同时保留 ThinkRail/其他来源                        | service + runtime + UI E2E  |
+| SP-03 | 恢复默认                                 | 删除/清空 override，恢复原默认正文；只读来源不变                                 | settings + runtime          |
+| SP-04 | ThinkRail 开/关与无 spec                 | 显示实际规则；开启无 spec 仍有 workflow 指令                                     | request + snapshot          |
+| SP-05 | 正在运行时保存，随后排队输入             | 当前轮次保留旧正文，下一轮采用新正文                                             | gated runtime integration   |
+| SP-06 | 远程身份相同路径、迟到查询               | 只接受当前目标的结果；不退回其他 workspace/session                               | hook/service                |
+| SP-07 | 子代理/工作流 actor/legacy custom prompt | 专用身份不被 mainSystemPrompt 覆盖                                               | builder/runtime             |
+| SP-08 | 最后一次模型请求                         | 实际 system 字符串与发给 model 的请求一致；不是 UI 拼接常量                      | request capture             |
+| SP-09 | Desktop/terminal 提示词查询              | 启动表面转换为 wire 值，通过严格参数校验                                         | service protocol boundary   |
+| SP-10 | 系统提示词入口与模型供应商入口相邻       | 模型供应商继续使用本地服务且不带远程 identity；提示词查询携带自己的目标 identity | settings routing regression |
 
 未定义项：无阻断实现的产品问题。采用显式保存、恢复默认和只读来源框；不加入强制调用路由或按关键词分支。
-本轮修改源码与相关测试，不自动创建提交或重新打包。
+提交与打包遵循当前任务的明确授权。
 
 ## 验证记录
 
@@ -116,4 +119,6 @@ codegraph 已确认 ContextBuilder、AgentRuntime、createZCodeApp、SettingsPag
 - CLI core/bootstrap 包级 Lint 仍有既有 `max-lines` 等错误，不标记为通过；新增独立模块没有报告对应错误。
 - 修改范围格式已执行，`git diff --check` 通过。验证输出在 `/tmp/zcode-system-prompt-*.log`，E2E 报告位于 `packages/desktop/.e2e-artifacts/desktop-e2e-20261014-040122-592/summary.md`。
 - SP-01/02 桌面夹具仅验证本地设置与只读 CLI 查询，不播种 ZCode OAuth JWT，避免假凭据触发真实控制面的登录过期弹窗。
-- 本轮未重新生成 macOS 安装包，之前产物不包含系统提示词设置。
+- 提交前关联检查执行 18,210 项用例：18,199 项通过、10 项跳过；唯一失败是旧路由测试按相邻 memory 分支截断源码，误包含新增系统提示词入口。修正为 JSX 组件/服务所有者边界后，路由文件 10 项全部通过，实现代码保持不变。
+- 后续推送检查以已执行关联回归的 `b7a6359` 为差异基线，验证新增路由回归及文档修正，保留 Lint、架构与单测钩子。
+- macOS arm64 Preview 包已由当前源码生成，按要求不做产物启动验收；安装包不进入 Git。
