@@ -1,0 +1,29 @@
+{
+  "name": "@zcode/thinkrail",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./spec": "./src/spec/index.ts",
+    "./vocabulary": "./src/spec/vocabulary.ts",
+    "./rules": "./src/rules.ts"
+  },
+  "scripts": {
+    "build": "tsc",
+    "clean": "node ../../scripts/clean-dist.mjs",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --root ../.. packages/thinkrail/test",
+    "coverage": "vitest run --root ../.. packages/thinkrail/test --coverage",
+    "lint": "oxlint",
+    "lint:fix": "oxlint --write"
+  },
+  "dependencies": {
+    "yaml": "^2.9.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^6.0.2",
+    "vitest": "^4.1.1"
+  }
+}

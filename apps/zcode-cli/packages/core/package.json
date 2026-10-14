@@ -37,6 +37,7 @@
     "@zcode/dynamic-workflow": "workspace:*",
     "@zcode/shared": "workspace:*",
     "@zcode/shared-types": "workspace:*",
+    "@zcode/thinkrail": "link:../../../../packages/thinkrail",
     "@zcode/zcode-cua": "workspace:*",
     "cheerio": "^1.0.0",
     "diff": "^9.0.0",

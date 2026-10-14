@@ -55,6 +55,9 @@ export * from "./resolve-workflow-question.js";
 // 留白补全（docs/dynamic-workflow/launch.md「The `FillWorkflowHole` tool」）：名字常量被 core 的注册、
 // 权限服务的 owner 规则、workflow child 的禁用名单与 display 分派读走。
 export * from "./fill-workflow-hole.js";
+// ThinkRail spec-graph 工具面：名字常量与 schema 被 core 的注册门、
+// 处理器与测试读走（docs/thinkrail/design.md）。
+export * from "./thinkrail.js";
 export * from "./workflow-observation-display.js";
 export * from "./tool-result-metadata.js";
 export * from "./performance.js";
