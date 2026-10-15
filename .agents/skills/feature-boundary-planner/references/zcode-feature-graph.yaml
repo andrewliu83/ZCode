@@ -21,7 +21,13 @@ nodes:
     kind: "capability"
     label: "Choose the conversation Agent kernel explicitly at creation"
     aliases: ["Agent 内核", "Claude SDK", "聊天内核", "zcode claude 切换"]
-    docs: ["docs/agent-kernel-and-skills.md", "docs/ui/chat-agent-kernel.md"]
+    docs:
+      [
+        "docs/agent-kernel-and-skills.md",
+        "docs/ui/chat-agent-kernel.md",
+        "docs/composer-native-cache-repair.md",
+        "docs/context-cache-hit-rate.md",
+      ]
     codeSeeds:
       - file: "apps/zcode-cli/packages/bootstrap/src/zcode-protocol-v4/commands/handlers/session-mgmt.ts"
         symbol: "createSession"
@@ -33,6 +39,8 @@ nodes:
         symbol: "executeNativeAgentTurn"
     invariants:
       - "Composer draft owns the choice; creation and ACK carry the explicit kernel; Runtime snapshot owns the bound fact."
+      - "Valid submission clears the current Lexical document and JSON atomically; rejection restores its frozen draft only if no newer edit superseded it. Stale document notifications cannot resurrect submitted text."
+      - "Native main-request usage is canonical total input including cache; SDK assistant blocks coalesce by message ID, and per-request persisted usage drives live/cold weighted cache aggregates for both delivery modes."
       - "Existing history and native IDs are immutable across default or draft changes; another kernel creates another persisted session."
       - "Running, queued and interaction work blocks switching; prewarm generations cannot adopt late results from another kernel."
       - "Claude executes the bundled SDK/runtime, never a user PATH CLI or a silent ZCode fallback."

@@ -486,6 +486,8 @@ export interface ModelToolContract {
   outputSchema?: JsonSchema;
   /** 见 ToolContractDeclaration.strict：严格模式的资格声明，adapter 按 provider/model 落地。 */
   strict?: boolean;
+  /** 原生模型请求的工具定义缓存边界，由具体协议适配器序列化。 */
+  cacheControl?: ModelCacheControl;
   readOnly?: boolean;
   destructive?: boolean;
   concurrentSafe?: boolean;

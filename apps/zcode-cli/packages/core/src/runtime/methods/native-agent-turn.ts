@@ -62,11 +62,6 @@ export async function executeNativeAgentTurn(
     await runtime.appendEvent(event, trace);
     events.push(event);
   };
-  const projection = createNativeTurnProjection(
-    runtime,
-    { trace, turnId, userMessageId, startedAt, signal: scope.signal, modelSelection },
-    emit,
-  );
   try {
     throwIfTurnAborted(scope.signal);
     if (!reservation) runtime.reserveTurnStart(turnId, trace, "regular");
@@ -81,6 +76,19 @@ export async function executeNativeAgentTurn(
               entry.modelId === modelSelection.modelId,
           )?.contextWindow
       : undefined;
+    const projection = createNativeTurnProjection(
+      runtime,
+      {
+        trace,
+        turnId,
+        userMessageId,
+        startedAt,
+        signal: scope.signal,
+        modelSelection,
+        contextWindow,
+      },
+      emit,
+    );
     await runtime.ensureContextInitialized(trace);
     await refreshContextPolicy(runtime, trace, {
       thinkrailEnabled: enabled,

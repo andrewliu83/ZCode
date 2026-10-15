@@ -27,6 +27,12 @@ it.each(
     const nativeRun = vi.fn<NativeAgentKernelPort["run"]>(async (request) => {
       await request.onEvent({ type: "session", sessionId: "663c9d0f-c5ff-433c-a977-8db9ec04bd17" });
       await request.onEvent({ type: "text", messageId: "native-message", delta: "SDK complete" });
+      await request.onEvent({
+        type: "model-complete",
+        messageId: "native-message",
+        content: "SDK complete",
+        usage: { inputTokens: 100, outputTokens: 4, cacheReadTokens: 70, cacheWriteTokens: 10 },
+      });
       return { sessionId: "663c9d0f-c5ff-433c-a977-8db9ec04bd17", response: "SDK complete" };
     });
     const generateText = vi.fn(async () => {
@@ -122,6 +128,20 @@ it.each(
       });
       expect(sent.status).toBe("accepted");
       await vi.waitFor(() => expect(nativeRun).toHaveBeenCalledOnce());
+      await nativeRun.mock.results[0]!.value;
+      await request("usage-snapshot", V4_METHODS.conversationSubscribe, {
+        topic: conversationTopic(sessionId),
+        connectionId: "test-connection",
+        clientMode,
+      });
+      const usageFrames = reassembleTopicWireFrames(
+        server
+          .takePostResponseMessages("usage-snapshot")
+          .map((message) => routedTopicWireFrameSchema.parse(message.params)),
+        routedTopicFrameSchema,
+      );
+      expect(JSON.stringify(usageFrames)).toContain('"hitRate":0.7');
+      expect(JSON.stringify(usageFrames)).toContain('"hitRateRequestCount":1');
       expect(generateText).not.toHaveBeenCalled();
     } finally {
       await server.shutdown();

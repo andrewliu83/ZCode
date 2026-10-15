@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { randomUUID } from "node:crypto";
 import type { NativeAgentRequest, NativeAgentEvent } from "@zcode/contracts";
 import type { query } from "@anthropic-ai/claude-agent-sdk/core";
+import { ClaudeStreamProjection } from "../src/agent-kernel/claude-stream-projection.js";
 import { ClaudeAgentKernel } from "../src/agent-kernel/claude.js";
 import { nativeSdkPrompt } from "../src/agent-kernel/prompt.js";
 
@@ -28,7 +29,10 @@ function stream() {
     yield {
       type: "stream_event",
       parent_tool_use_id: null,
-      event: { type: "message_start", message: { id: "message-1" } },
+      event: {
+        type: "message_start",
+        message: { id: "message-1", usage: { input_tokens: 0, output_tokens: 0 } },
+      },
     };
     yield {
       type: "stream_event",
@@ -66,6 +70,149 @@ function stream() {
 }
 
 describe("bundled Claude Agent SDK bridge", () => {
+  it("does not close streaming usage when early tool results interleave before final message_delta", async () => {
+    const events: NativeAgentEvent[] = [];
+    const state = new ClaudeStreamProjection(
+      request({
+        onEvent: async (event) => {
+          events.push(event);
+        },
+      }),
+    );
+    const accept = (message: unknown) =>
+      state.accept(message as Parameters<ClaudeStreamProjection["accept"]>[0]);
+    await accept({
+      type: "stream_event",
+      parent_tool_use_id: null,
+      event: {
+        type: "message_start",
+        message: {
+          id: "interleaved",
+          usage: {
+            input_tokens: 20,
+            output_tokens: 0,
+            cache_read_input_tokens: 70,
+            cache_creation_input_tokens: 10,
+          },
+        },
+      },
+    });
+    await accept({
+      type: "assistant",
+      parent_tool_use_id: null,
+      message: {
+        id: "interleaved",
+        content: [],
+        usage: {
+          input_tokens: 20,
+          output_tokens: 0,
+          cache_read_input_tokens: 70,
+          cache_creation_input_tokens: 10,
+        },
+      },
+    });
+    await accept({ type: "user", parent_tool_use_id: null, message: { content: [] } });
+    expect(events.filter((event) => event.type === "model-complete")).toHaveLength(0);
+    await accept({
+      type: "stream_event",
+      parent_tool_use_id: null,
+      event: { type: "message_delta", usage: { output_tokens: 9 } },
+    });
+    await accept({
+      type: "stream_event",
+      parent_tool_use_id: null,
+      event: { type: "message_stop" },
+    });
+    expect(events.filter((event) => event.type === "model-complete")).toEqual([
+      expect.objectContaining({
+        usage: { inputTokens: 100, outputTokens: 9, cacheReadTokens: 70, cacheWriteTokens: 10 },
+      }),
+    ]);
+  });
+  it("counts final usage once per native message across text/tool fragments and excludes children", async () => {
+    const completions: NativeAgentEvent[] = [];
+    const rawUsage = {
+      input_tokens: 20,
+      output_tokens: 1,
+      cache_read_input_tokens: 70,
+      cache_creation_input_tokens: 10,
+    };
+    const native = Object.assign(
+      (async function* () {
+        yield { type: "system", subtype: "init", session_id: "native-fixture", model: "test" };
+        for (const output of [1, 4, 9])
+          yield {
+            type: "assistant",
+            parent_tool_use_id: null,
+            message: {
+              id: "request-1",
+              content: [{ type: "text", text: "first" }],
+              usage: { ...rawUsage, output_tokens: output },
+            },
+          };
+        yield { type: "user", parent_tool_use_id: null, message: { content: [] } };
+        yield {
+          type: "assistant",
+          parent_tool_use_id: "child-tool",
+          message: { id: "child", content: [], usage: rawUsage },
+        };
+        yield {
+          type: "assistant",
+          parent_tool_use_id: null,
+          message: {
+            id: "request-2",
+            content: [{ type: "text", text: "second" }],
+            usage: { ...rawUsage, output_tokens: 11 },
+          },
+        };
+        yield {
+          type: "result",
+          subtype: "success",
+          is_error: false,
+          session_id: "native-fixture",
+          result: "second",
+          total_cost_usd: 0,
+          usage: {
+            input_tokens: 40,
+            output_tokens: 20,
+            cache_read_input_tokens: 140,
+            cache_creation_input_tokens: 20,
+          },
+        };
+      })(),
+      { close: vi.fn() },
+    );
+    const kernel = new ClaudeAgentKernel({
+      query: vi.fn(() => native) as unknown as typeof query,
+      resolveConnection: () => ({ model: "test", apiKey: "fixture" }),
+      env: {},
+    });
+    const result = await kernel.run(
+      request({
+        onEvent: async (event) => {
+          if (event.type === "model-complete") completions.push(event);
+        },
+      }),
+    );
+    expect(completions).toEqual([
+      expect.objectContaining({
+        messageId: "request-1",
+        content: "first",
+        usage: { inputTokens: 100, outputTokens: 9, cacheReadTokens: 70, cacheWriteTokens: 10 },
+      }),
+      expect.objectContaining({
+        messageId: "request-2",
+        content: "second",
+        usage: { inputTokens: 100, outputTokens: 11, cacheReadTokens: 70, cacheWriteTokens: 10 },
+      }),
+    ]);
+    expect(result.usage).toEqual({
+      inputTokens: 200,
+      outputTokens: 20,
+      cacheReadTokens: 140,
+      cacheWriteTokens: 20,
+    });
+  });
   it.each([false, true])(
     "releases the per-turn model connection on completion or failure: invalid=%s",
     async (invalid) => {

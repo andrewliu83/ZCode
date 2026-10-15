@@ -137,12 +137,13 @@ function message(
   const messages: ModelInputMessage[] = [];
   let ordinary: Block[] = [];
   let calls: NonNullable<ModelInputMessage["toolCalls"]> = [];
-  const flush = () => {
+  const flush = (cacheControl?: Block["cache_control"]) => {
     if (ordinary.length || calls.length) {
       messages.push({
         role,
         content: content(ordinary),
         ...(calls.length ? { toolCalls: calls } : {}),
+        ...(cacheControl ? { cacheControl } : {}),
       });
       ordinary = [];
       calls = [];
@@ -169,8 +170,11 @@ function message(
         toolCallId: block.tool_use_id,
         toolName,
         isError: block.is_error,
+        ...(block.cache_control ? { cacheControl: block.cache_control } : {}),
       });
     } else ordinary.push(block);
+    // 以显式缓存断点切分消息，保留稳定前缀，不把标记移动到后续动态内容。
+    if (block.cache_control) flush(block.cache_control);
   }
   flush();
   return messages;
@@ -191,6 +195,7 @@ export function toGatewayModelRequest(body: NativeMessagesBody, signal: AbortSig
     description: tool.description,
     inputSchema: tool.input_schema,
     strict: tool.strict,
+    ...(tool.cache_control ? { cacheControl: tool.cache_control } : {}),
   }));
   const toolNames = new Map<string, string>();
   return {

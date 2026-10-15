@@ -43,7 +43,7 @@ export function toAiSdkTools(
       ),
       ...(strictSchema === undefined ? {} : { strict: true }),
       needsApproval: contract.needsApproval,
-      ...providerOptionsForClientTool(options),
+      ...providerOptionsForClientTool(options, contract),
     };
 
     if (!contract.execute) {
@@ -222,9 +222,10 @@ function asPlainRecord(value: unknown): Record<string, unknown> | undefined {
     : undefined;
 }
 
-function providerOptionsForClientTool(options: AiSdkToolTransformOptions): {
-  providerOptions?: Record<string, Record<string, boolean>>;
-} {
+function providerOptionsForClientTool(
+  options: AiSdkToolTransformOptions,
+  contract: ModelToolContract,
+) {
   if (options.providerKind !== "anthropic") {
     return {};
   }
@@ -237,6 +238,7 @@ function providerOptionsForClientTool(options: AiSdkToolTransformOptions): {
     providerOptions: {
       anthropic: {
         eagerInputStreaming: false,
+        ...(contract.cacheControl ? { cacheControl: { ...contract.cacheControl } } : {}),
       },
     },
   };

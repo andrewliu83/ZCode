@@ -18,6 +18,7 @@ import {
   LexicalChatInput,
   type ChatComposerPasteEvent,
   type LexicalChatInputHandle,
+  type LexicalChatInputChange,
 } from "@/LexicalChatInput.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import type { AppSlashCommand } from "@/slashCommandHelpers.js";
@@ -137,7 +138,7 @@ export function ChatPromptEditor({
   shellClassName?: string;
   avoidIosInputFocusZoom?: boolean;
   compactPlaceholder?: boolean;
-  onChange?: (value: string) => void;
+  onChange?: (value: string, change?: LexicalChatInputChange) => void;
   // 适配：返回 false 表示业务层拒绝/延迟本次提交，Lexical 不自行 reset（草稿保留）。
   onSubmit: (value: string) => boolean | void;
   onModifiedSubmit?: (value: string) => boolean | void;
@@ -206,9 +207,10 @@ export function ChatPromptEditor({
   }, [initialValue, resolvedInputApiRef, syncInitialValueOnMount]);
 
   const handleTextChange = useCallback(
-    (value: string) => {
+    (value: string, change?: LexicalChatInputChange) => {
+      if (change && !change.isCurrent()) return;
       latestTextRef.current = value;
-      onChange?.(value);
+      onChange?.(value, change);
     },
     [onChange],
   );
@@ -342,9 +344,9 @@ export function ChatPromptEditor({
       disabled={disabled}
       submitDisabled={submitDisabled}
       allowSubmitWhenEmpty={allowSubmitWhenEmpty}
-          enterSubmits={enterSubmits}
-          onSubmit={handleEditorSubmit}
-          onModifiedSubmit={onModifiedSubmit}
+      enterSubmits={enterSubmits}
+      onSubmit={handleEditorSubmit}
+      onModifiedSubmit={onModifiedSubmit}
       onChange={handleTextChange}
       onFocus={onFocus}
       triggerPanelContainer={resolvedTriggerPanelContainer}

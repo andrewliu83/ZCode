@@ -24,7 +24,8 @@
 
 - Composer 正文由已有草稿 owner 保存；延迟恢复只在挂载或 workspace/session scope 改变时发生。配置水合、回调引用变化、模型切换不能触发同 scope 的正文重放。
 - 每个恢复任务绑定目标 scope、创建时的正文 revision 与提交代次。用户编辑、开始一次有效提交或离开目标后，旧任务失效；不能在 accepted 清空后重新填回已发送正文。
-- ACK 只清理本次提交的正文；等待期间的新正文（包括改过再改回原文）保留。拒绝、失败和待确认继续沿既有草稿恢复路径，不复制 accepted queue。
+- 完成有效提交校验后，正文与草稿同步清空，不等待 ACK 或附件 adoption；拒绝、失败和待确认在没有新编辑时恢复冻结快照。等待期间的新正文（包括改过再改回原文）保留，不复制 accepted queue。
+- Lexical clear 返回时，Markdown 与 editor JSON 必须已经提交为空，防止 blur、隐藏和 promotion 把旧 JSON 再写入。正文通知附带当前文档身份，过期通知无权改写草稿；用户真实重新输入相同正文仍有效。
 - Desktop continuous 与 Web remote replayable 共用这套 renderer 草稿规则；Host/Runtime 仍是已接受输入的唯一所有者，恢复任务不发送或重放命令。
 
 ```mermaid
@@ -35,9 +36,9 @@ sequenceDiagram
   participant Host as Host / Runtime
   Owner->>Restore: 绑定 scope、revision、提交代次
   UI->>Owner: 编辑或提交使旧恢复失效
+  UI->>UI: 同步清空本次文档与 JSON
   UI->>Host: 既有 sendText 命令
-  Host-->>UI: accepted
-  UI->>UI: 仅清空本次未被更新的正文
+  Host-->>UI: accepted（拒绝时仅恢复未被新编辑替代的快照）
   Restore->>Owner: 校验恢复令牌
   Owner-->>Restore: 已失效，禁止回填
 ```

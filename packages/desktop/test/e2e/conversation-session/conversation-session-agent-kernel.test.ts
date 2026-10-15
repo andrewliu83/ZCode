@@ -137,13 +137,24 @@ describe("聊天输入框 Agent 内核", () => {
       timeout,
       timeoutMsg: "Claude accepted 后已提交正文未清空",
     });
+    expect(
+      await browser.execute((id) => {
+        const input = document.querySelector(`[data-testid="${id}"]`) as
+          | (HTMLElement & {
+              __zcodeLexicalInputE2E?: { getEditorState: () => { toJSON: () => unknown } };
+            })
+          | null;
+        return JSON.stringify(input?.__zcodeLexicalInputE2E?.getEditorState().toJSON());
+      }, TID_V4_COMPOSER_INPUT),
+    ).not.toContain("E2E_AK_NATIVE");
+    await setInputValueByTestIdDom(TID_V4_COMPOSER_INPUT, "NEXT_UNSENT_DRAFT");
     await waitForV4TimelineContaining("AK_NATIVE_OK", 60_000);
     await waitForV4Pane(
       (s) => !s.canStop && s.sessionId !== "draft",
       "Native turn did not complete",
       timeout,
     );
-    expect(await getV4ComposerText()).toBe("");
+    expect(await getV4ComposerText()).toBe("NEXT_UNSENT_DRAFT");
     const completedRows = (await getV4PaneSnapshot()).rowCount;
     await sendV4Prompt("E2E_AK_NATIVE 同一会话再次发送，验证 accepted 后没有旧草稿回填");
     await waitForV4Pane(

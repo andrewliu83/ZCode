@@ -4,6 +4,7 @@ import {
   nativeMessagesSchema,
   toGatewayModelRequest,
 } from "../src/agent-kernel/model-gateway-request.js";
+import { gatewayUsage } from "../src/agent-kernel/model-gateway-response.js";
 import { getCurrentModelInvocationContext } from "@zcode/contracts";
 import type { Model, ModelRequest } from "@zcode/contracts";
 
@@ -43,6 +44,63 @@ const body = {
 const controller = () => new AbortController();
 
 describe("native model protocol gateway", () => {
+  it("converts total input back to Anthropic uncached input without counting cache twice", () => {
+    expect(
+      gatewayUsage({
+        inputTokens: 100,
+        outputTokens: 4,
+        cacheReadTokens: 70,
+        cacheWriteTokens: 10,
+      }),
+    ).toEqual({
+      input_tokens: 20,
+      output_tokens: 4,
+      cache_read_input_tokens: 70,
+      cache_creation_input_tokens: 10,
+    });
+  });
+  it("preserves cache boundaries on system segments, tool definitions and tool results", () => {
+    const cache = { type: "ephemeral", ttl: "1h" };
+    const request = toGatewayModelRequest(
+      nativeMessagesSchema.parse({
+        ...body,
+        system: [
+          { type: "text", text: "stable", cache_control: cache },
+          { type: "text", text: "dynamic" },
+        ],
+        tools: [{ name: "Read", input_schema: { type: "object" }, cache_control: cache }],
+        messages: [
+          {
+            role: "assistant",
+            content: [{ type: "tool_use", id: "call-1", name: "Read", input: {} }],
+          },
+          {
+            role: "user",
+            content: [
+              {
+                type: "tool_result",
+                tool_use_id: "call-1",
+                content: "result",
+                cache_control: cache,
+              },
+              { type: "text", text: "next" },
+            ],
+          },
+        ],
+      }),
+      controller().signal,
+    );
+    expect(request.messages[0]).toMatchObject({ role: "system", cacheControl: cache });
+    expect(request.messages[1]).toMatchObject({
+      role: "system",
+      content: [{ type: "text", text: "dynamic" }],
+    });
+    expect(request.messages[1]?.cacheControl).toBeUndefined();
+    expect(request.tools?.[0]).toMatchObject({ cacheControl: cache });
+    expect(request.messages.find((message) => message.role === "tool")).toMatchObject({
+      cacheControl: cache,
+    });
+  });
   it("keeps tool IDs, structured outputs, image/PDF bytes and requested tool choice in the standard Model contract", () => {
     const request = toGatewayModelRequest(
       nativeMessagesSchema.parse({
@@ -86,6 +144,7 @@ describe("native model protocol gateway", () => {
     expect(request.messages[0]).toEqual({
       role: "system",
       content: [{ type: "text", text: "BASE" }],
+      cacheControl: { type: "ephemeral" },
     });
     expect(request.messages[1]?.toolCalls?.[0]).toEqual({
       id: "call-1",

@@ -1,13 +1,8 @@
 import { randomUUID } from "node:crypto";
-import {
-  query,
-  tool,
-  createSdkMcpServer,
-  type SDKMessage,
-  type Options,
-} from "@anthropic-ai/claude-agent-sdk/core";
+import { query, tool, createSdkMcpServer, type Options } from "@anthropic-ai/claude-agent-sdk/core";
 import { z } from "zod";
 import { prepareClaudeSkillPlugins } from "./skills.js";
+import { ClaudeStreamProjection } from "./claude-stream-projection.js";
 import { nativeSdkPrompt } from "./prompt.js";
 import type {
   NativeAgentKernelPort,
@@ -175,121 +170,5 @@ export class ClaudeAgentKernel implements NativeAgentKernelPort {
       request.signal.removeEventListener("abort", cancel);
       stream?.close();
     }
-  }
-}
-
-class ClaudeStreamProjection {
-  result?: NativeAgentResult;
-  private currentMessageId = "";
-  private readonly text = new Map<string, string>();
-  private readonly declaredTools = new Set<string>();
-  private model?: string;
-  constructor(private readonly request: NativeAgentRequest) {}
-
-  async accept(message: SDKMessage): Promise<void> {
-    if (message.type === "system" && message.subtype === "init") {
-      this.model = message.model;
-      await this.request.onEvent({
-        type: "session",
-        sessionId: message.session_id,
-        model: message.model,
-      });
-    } else if (message.type === "stream_event" && !message.parent_tool_use_id) {
-      const event = message.event;
-      if (event.type === "message_start") this.currentMessageId = event.message.id;
-      else if (event.type === "content_block_delta") {
-        if (event.delta.type === "text_delta")
-          await this.appendText(this.currentMessageId, event.delta.text);
-        else if (event.delta.type === "thinking_delta")
-          await this.request.onEvent({
-            type: "reasoning",
-            messageId: this.currentMessageId,
-            delta: event.delta.thinking,
-          });
-      }
-    } else if (message.type === "assistant" && !message.parent_tool_use_id) {
-      const id = message.message.id;
-      const full = message.message.content
-        .filter((block) => block.type === "text")
-        .map((block) => block.text)
-        .join("");
-      const previous = this.text.get(id) ?? "";
-      if (full && !full.startsWith(previous))
-        throw new Error("Claude SDK streamed text differs from completed message");
-      if (full.length > previous.length) await this.appendText(id, full.slice(previous.length));
-      for (const block of message.message.content) {
-        if (block.type !== "tool_use" || this.declaredTools.has(block.id)) continue;
-        this.declaredTools.add(block.id);
-        await this.request.onEvent({
-          type: "tool-start",
-          messageId: id,
-          toolCallId: block.id,
-          name: block.name,
-          input:
-            typeof block.input === "object" && block.input !== null
-              ? (block.input as Record<string, unknown>)
-              : {},
-        });
-      }
-      const usage = message.message.usage;
-      if (usage)
-        await this.request.onEvent({
-          type: "model-complete",
-          messageId: id,
-          content: full,
-          usage: {
-            inputTokens: usage.input_tokens,
-            outputTokens: usage.output_tokens,
-            cacheReadTokens: usage.cache_read_input_tokens ?? 0,
-            cacheWriteTokens: usage.cache_creation_input_tokens ?? 0,
-          },
-        });
-    } else if (
-      message.type === "user" &&
-      !message.parent_tool_use_id &&
-      Array.isArray(message.message.content)
-    ) {
-      for (const block of message.message.content) {
-        if (block.type !== "tool_result") continue;
-        const output =
-          typeof block.content === "string"
-            ? block.content
-            : (block.content ?? [])
-                .map((part) => (part.type === "text" ? part.text : JSON.stringify(part)))
-                .join("\n");
-        await this.request.onEvent({
-          type: "tool-result",
-          toolCallId: block.tool_use_id,
-          output,
-          isError: block.is_error === true,
-        });
-      }
-    } else if (message.type === "result") {
-      if (message.subtype !== "success" || message.is_error) {
-        throw new Error(message.subtype === "success" ? message.result : message.errors.join("\n"));
-      }
-      this.result = {
-        sessionId: message.session_id,
-        response: message.result,
-        model: this.model,
-        costUsd: message.total_cost_usd,
-        ...(message.usage
-          ? {
-              usage: {
-                inputTokens: message.usage.input_tokens,
-                outputTokens: message.usage.output_tokens,
-                cacheReadTokens: message.usage.cache_read_input_tokens ?? 0,
-                cacheWriteTokens: message.usage.cache_creation_input_tokens ?? 0,
-              },
-            }
-          : {}),
-      };
-    }
-  }
-
-  private async appendText(messageId: string, delta: string) {
-    if (!messageId) throw new Error("SDK text arrived before message_start");
-    this.text.set(messageId, (this.text.get(messageId) ?? "") + delta);
-    await this.request.onEvent({ type: "text", messageId, delta });
   }
 }

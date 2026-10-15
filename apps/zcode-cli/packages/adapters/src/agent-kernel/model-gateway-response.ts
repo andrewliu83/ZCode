@@ -10,7 +10,16 @@ import type {
 export function gatewayUsage(usage: ModelUsage): Record<string, number> {
   return Object.fromEntries(
     [
-      ["input_tokens", usage.inputTokens],
+      // Model inputTokens 已含 cache read/write；Anthropic input_tokens 只统计未命中部分。
+      [
+        "input_tokens",
+        usage.inputTokens === undefined
+          ? undefined
+          : Math.max(
+              0,
+              usage.inputTokens - (usage.cacheReadTokens ?? 0) - (usage.cacheWriteTokens ?? 0),
+            ),
+      ],
       ["output_tokens", usage.outputTokens],
       ["cache_read_input_tokens", usage.cacheReadTokens],
       ["cache_creation_input_tokens", usage.cacheWriteTokens],

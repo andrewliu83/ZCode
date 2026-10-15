@@ -68,6 +68,11 @@ export interface ChatComposerPasteEvent {
   stopPropagation?: () => void;
 }
 
+export interface LexicalChatInputChange {
+  /** 仅接受仍对应当前文档的通知，旧状态不得在 clear/scope 更新后写回。 */
+  isCurrent: () => boolean;
+}
+
 export interface LexicalChatInputHandle {
   clear: () => void;
   focus: () => void;
@@ -203,7 +208,7 @@ function replaceEditorText(editor: LexicalEditor, text: string) {
 
       root.getLastChild()?.selectEnd();
     },
-    { tag: PROGRAMMATIC_UPDATE_TAG },
+    { discrete: true, tag: PROGRAMMATIC_UPDATE_TAG },
   );
 }
 
@@ -321,6 +326,7 @@ function replaceEditorStateJson(editor: LexicalEditor, editorStateJson: string) 
 }
 
 function resetEditor(editor: LexicalEditor) {
+  // 清空后 Composer 会立即读取 JSON 或提升 scope；异步 commit 会让已发送正文重新落盘。
   replaceEditorText(editor, "");
 }
 
@@ -814,7 +820,7 @@ function TextContentPlugin({
   onChange,
   taskId,
 }: {
-  onChange?: (text: string) => void;
+  onChange?: (text: string, change?: LexicalChatInputChange) => void;
   taskId?: string | null;
 }) {
   const [editor] = useLexicalComposerContext();
@@ -865,7 +871,7 @@ function TextContentPlugin({
           return;
         }
 
-        onChange(nextText);
+        onChange(nextText, { isCurrent: () => editor.getEditorState() === editorState });
 
         const lagMs = performance.now() - startedAt;
         // 程序化改写与 IME 组合态不算打字卡顿(判定在 recordInputLag 内统一短路)。
@@ -907,7 +913,8 @@ function E2ELexicalInputBridgePlugin({ inputTestId }: { inputTestId?: string }) 
       getEditorState: () => editor.getEditorState(),
       getText: () => getEditorMarkdown(editor.getEditorState()),
       setText: (text: string) => replaceEditorText(editor, text),
-      setTextWithPluginMentions: (text: string) => replaceEditorTextWithPluginMentions(editor, text),
+      setTextWithPluginMentions: (text: string) =>
+        replaceEditorTextWithPluginMentions(editor, text),
       setEditorStateJson: (editorStateJson: string) =>
         replaceEditorStateJson(editor, editorStateJson),
     };
@@ -1287,7 +1294,8 @@ function EditorApiPlugin({
       setMention: (mention, trailingText) =>
         replaceEditorWithMention(editor, mention, trailingText),
       setText: (text: string) => replaceEditorText(editor, text),
-      setTextWithPluginMentions: (text: string) => replaceEditorTextWithPluginMentions(editor, text),
+      setTextWithPluginMentions: (text: string) =>
+        replaceEditorTextWithPluginMentions(editor, text),
       setEditorStateJson: (editorStateJson: string) =>
         replaceEditorStateJson(editor, editorStateJson),
       setSkillMention: (skillName: string, markdown = `$${skillName}`, trailingText = " ") =>
@@ -1315,7 +1323,7 @@ interface LexicalChatInputProps {
   enterSubmits?: boolean;
   onSubmit: (text: string) => LexicalSubmitResult;
   onModifiedSubmit?: (text: string) => LexicalSubmitResult;
-  onChange?: (text: string) => void;
+  onChange?: (text: string, change?: LexicalChatInputChange) => void;
   onFocus?: () => void;
   triggerPanelContainer?: HTMLElement | null;
   workspacePath: string;

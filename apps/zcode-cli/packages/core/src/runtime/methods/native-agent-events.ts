@@ -19,6 +19,16 @@ import type {
 } from "@zcode/contracts";
 import type { AgentRuntimeInternal } from "../internal.js";
 import { throwIfTurnAborted } from "../helpers/turn-errors.js";
+import { recordMainTurnCacheHitUsage, querySourceForTask } from "./turn-cache-usage.js";
+
+type NativeProjectedMessage = {
+  id: MessageId;
+  text: string;
+  reasoning: string;
+  started: number;
+  model?: string;
+  usage?: ModelUsage;
+};
 
 /** SDK 事实只写入 CLI 的同一展示序列，不执行工具或维护另一份会话状态。 */
 export function createNativeTurnProjection(
@@ -30,20 +40,19 @@ export function createNativeTurnProjection(
     startedAt: number;
     signal: AbortSignal;
     modelSelection?: ModelSelection;
+    contextWindow?: number;
   },
   emit: (type: SessionEvent["type"], payload: unknown) => Promise<void>,
 ) {
   const { trace, turnId, userMessageId, startedAt, signal, modelSelection } = options;
-  const messages = new Map<
-    string,
-    { id: MessageId; text: string; reasoning: string; started: number; model?: string }
-  >();
+  const messages = new Map<string, NativeProjectedMessage>();
+  const completedRequests = new Set<string>();
   const tools = new Map<string, { part: ToolPart; started: number }>();
   let model: string | undefined;
   const saveMessage = async (
-    message: { id: MessageId; started: number; model?: string },
+    message: { id: MessageId; started: number; model?: string; usage?: ModelUsage },
     completed: boolean,
-    usage?: ModelUsage,
+    usage: ModelUsage | undefined = message.usage,
     cost = 0,
   ) => {
     await runtime.persistMessage(
@@ -85,7 +94,7 @@ export function createNativeTurnProjection(
   const ensureMessage = async (nativeId: string) => {
     const previous = messages.get(nativeId);
     if (previous) return previous;
-    const message = {
+    const message: NativeProjectedMessage = {
       id: createMessageId(`msg_claude_${turnId}_${nativeId}`),
       text: "",
       reasoning: "",
@@ -173,12 +182,22 @@ export function createNativeTurnProjection(
       return;
     }
     if (event.type === "model-complete") {
+      if (completedRequests.has(event.messageId)) return;
+      completedRequests.add(event.messageId);
       const message = await ensureMessage(event.messageId);
+      message.usage = event.usage;
+      await saveMessage(message, true);
+      const querySource = querySourceForTask(runtime.config.taskType);
+      const cacheHit =
+        querySource === "main_turn" ? recordMainTurnCacheHitUsage(runtime, event.usage) : undefined;
       await emit(SessionEventType.ModelComplete, {
         assistantMessageId: message.id,
         content: event.content,
         stopReason: "end_turn",
         usage: event.usage,
+        contextWindow: options.contextWindow,
+        querySource,
+        cacheHit,
       });
       return;
     }
@@ -233,12 +252,13 @@ export function createNativeTurnProjection(
         });
       const completed = [...messages.values()];
       for (const [index, message] of completed.entries()) {
-        // 冷恢复必须看到回复终态；SDK 整轮用量只在终态消息保存一次，避免重复累计内部请求。
+        // 各主请求已独立记录用量；SDK 汇总可能包含子调用，不能覆盖这些事实。
+        // 未提供逐请求事件的内核继续使用 result 兼容路径。
         const last = index === completed.length - 1;
         await saveMessage(
           message,
           true,
-          last ? result.usage : undefined,
+          completedRequests.size ? message.usage : last ? result.usage : undefined,
           last ? result.costUsd : undefined,
         );
         await emit(SessionEventType.ModelStreaming, {

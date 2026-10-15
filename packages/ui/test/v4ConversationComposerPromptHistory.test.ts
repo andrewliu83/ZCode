@@ -403,6 +403,65 @@ afterEach(() => {
 });
 
 describe("ConversationComposer prompt history", () => {
+  it("有效提交立即清空可见正文，不等待 ACK 或附件 adoption", async () => {
+    let accept!: () => void;
+    let adopt!: () => void;
+    const ack = new Promise<void>((resolve) => {
+      accept = resolve;
+    });
+    const adopted = new Promise<void>((resolve) => {
+      adopt = resolve;
+    });
+    attachmentState.adoptSentAttachments.mockImplementationOnce(() => adopted);
+    const { root } = renderComposer(vi.fn(() => ack));
+    await act(async () => {
+      (chatPromptEditorProps.at(-1)!.onChange as (text: string) => void)("提交正文");
+      editorState.text = "提交正文";
+    });
+    await act(async () => {
+      (chatPromptEditorProps.at(-1)!.onSubmit as (text: string) => void)("提交正文");
+      await flushAsyncWork();
+    });
+    expect(editorState.text).toBe("");
+    await act(async () => {
+      accept();
+      await flushAsyncWork();
+    });
+    expect(editorState.text).toBe("");
+    await act(async () => {
+      adopt();
+      await flushAsyncWork();
+      root.unmount();
+    });
+  });
+
+  it("提交后新输入不被旧 ACK 清除，也允许重新输入完全相同正文", async () => {
+    let accept!: () => void;
+    const ack = new Promise<void>((resolve) => {
+      accept = resolve;
+    });
+    const { root } = renderComposer(vi.fn(() => ack));
+    await act(async () => {
+      (chatPromptEditorProps.at(-1)!.onChange as (text: string) => void)("重复正文");
+      editorState.text = "重复正文";
+    });
+    await act(async () => {
+      (chatPromptEditorProps.at(-1)!.onSubmit as (text: string) => void)("重复正文");
+      await flushAsyncWork();
+    });
+    expect(editorState.text).toBe("");
+    await act(async () => {
+      editorState.text = "重复正文";
+      (chatPromptEditorProps.at(-1)!.onChange as (text: string) => void)("重复正文");
+      accept();
+      await flushAsyncWork();
+    });
+    expect(editorState.text).toBe("重复正文");
+    expect(readV4ComposerDraft("/workspace", undefined, V4_DRAFT_SCOPE_ROOT)?.text).toBe(
+      "重复正文",
+    );
+    await act(async () => root.unmount());
+  });
   it("真实编辑器文本变更会推进草稿 revision，保护迟到的推荐 Prompt", async () => {
     const { root } = renderComposer(vi.fn(async () => {}));
     const revisionBefore = getComposerDraftRevision("/workspace");
@@ -621,7 +680,7 @@ describe("ConversationComposer prompt history", () => {
   });
 
   it.each(["zcode", "claude"] as const)(
-    "%s 发送期间相同正文回调不产生新草稿，accepted 后清空正文",
+    "%s clear 后旧文档通知不能回填，accepted 后正文保持为空",
     async (agentKernel) => {
       let resolveSend!: () => void;
       const onSendText = vi.fn(
@@ -653,7 +712,11 @@ describe("ConversationComposer prompt history", () => {
           await flushAsyncWork();
         });
         const submittedRevision = getComposerDraftRevision("/workspace");
-        await act(async () => onChange("已发送正文"));
+        await act(async () =>
+          (onChange as (text: string, change: { isCurrent: () => boolean }) => void)("已发送正文", {
+            isCurrent: () => false,
+          }),
+        );
         expect(getComposerDraftRevision("/workspace")).toBe(submittedRevision);
         expect(readV4ComposerDraft("/workspace", undefined, V4_DRAFT_SCOPE_ROOT)?.text).toBe("");
         await act(async () => {
@@ -686,12 +749,16 @@ describe("ConversationComposer prompt history", () => {
         submit("失败后可重试");
         await flushAsyncWork();
       });
-      await act(async () => onChange("失败后可重试"));
+      await act(async () =>
+        (onChange as (text: string, change: { isCurrent: () => boolean }) => void)("失败后可重试", {
+          isCurrent: () => false,
+        }),
+      );
       await act(async () => {
         rejectSend(new Error("fixture admission failed"));
         await flushAsyncWork();
       });
-      expect(inputClear).not.toHaveBeenCalled();
+      expect(inputClear).toHaveBeenCalledOnce();
       expect(readV4ComposerDraft("/workspace", undefined, V4_DRAFT_SCOPE_ROOT)?.text).toBe(
         "失败后可重试",
       );
@@ -723,7 +790,7 @@ describe("ConversationComposer prompt history", () => {
         resolveSend();
         await flushAsyncWork();
       });
-      expect(inputClear).not.toHaveBeenCalled();
+      expect(inputClear).toHaveBeenCalledOnce();
       expect(readV4ComposerDraft("/workspace", undefined, V4_DRAFT_SCOPE_ROOT)?.text).toBe(
         "第一条",
       );
@@ -753,7 +820,7 @@ describe("ConversationComposer prompt history", () => {
       resolveSend();
       await flushAsyncWork();
     });
-    expect(inputClear).not.toHaveBeenCalled();
+    expect(inputClear).toHaveBeenCalledOnce();
     expect(readV4ComposerDraft("/workspace", undefined, V4_DRAFT_SCOPE_ROOT)?.text).toBe("下一条");
     await act(async () => root.unmount());
   });
@@ -840,7 +907,7 @@ describe("ConversationComposer prompt history", () => {
     });
 
     expect(onSendText).toHaveBeenCalledWith("/goal 保留这段输入", expectedTelemetrySendOptions());
-    expect(inputClear).not.toHaveBeenCalled();
+    expect(inputClear).toHaveBeenCalledOnce();
     expect(attachmentState.adoptSentAttachments).not.toHaveBeenCalled();
     expect(readPromptHistoryEntries("/workspace")).toEqual([]);
     expect(readV4ComposerDraft("/workspace", undefined, V4_DRAFT_SCOPE_ROOT)?.text).toBe(
@@ -863,7 +930,7 @@ describe("ConversationComposer prompt history", () => {
     });
 
     expect(dialogOpenStates.at(-1)).toBe(true);
-    expect(inputClear).not.toHaveBeenCalled();
+    expect(inputClear).toHaveBeenCalledOnce();
     expect(attachmentState.adoptSentAttachments).not.toHaveBeenCalled();
     expect(readPromptHistoryEntries("/workspace")).toEqual([]);
     expect(readV4ComposerDraft("/workspace", undefined, V4_DRAFT_SCOPE_ROOT)?.text).toBe(

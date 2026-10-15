@@ -28,6 +28,14 @@ Main-session `model_complete` payloads may also carry `contextUsageBreakdown`, w
 
 Runtime snapshots can arrive while a follow-up turn is already running. During that window the snapshot may have fresher token/cache usage but no new source breakdown yet, because the next `model_complete` has not happened. The renderer keeps the last known breakdown for the same context window instead of clearing the popover, then replaces it when a newer `usage_update.breakdown` arrives.
 
+## Native kernel cache usage
+
+Claude SDK can emit several assistant frames for the same native message ID. Text and tools remain incremental, while model completion is emitted once after the request closes. Final streamed message-delta usage overrides partial block usage. Child frames do not enter main-session totals.
+
+Anthropic `input_tokens` is uncached input. The adapter adds cache read/write exactly once when normalizing into total Model `inputTokens`; the model gateway subtracts those fields when serializing back to Anthropic. System/message/tool cache boundaries and TTL survive the gateway. Other provider protocols continue using their own supported wire options.
+
+Native main requests use the same runtime aggregate as ZCode model requests. Per-request usage is persisted on its own assistant message so SDK turn totals (which may include children) cannot overwrite main-thread usage. Context capacity and weighted cache fields are carried by the same `ModelComplete` to both delivery modes.
+
 ## Recovery
 
 Runtime snapshots restore aggregate cache hit information from persisted non-summary assistant messages. This keeps visible main-session history recoverable without mixing in title generation or other sidecar requests that do not create normal assistant messages.

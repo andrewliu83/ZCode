@@ -1447,10 +1447,9 @@ function ConversationComposerImpl({
           }
         }
         claimSubmittedDraft();
-        if (requestedDelivery === "startNow") {
-          // 原子抢占需要等旧 turn 退出并提交新 TurnStarted ACK；
-          // 若编辑器也等整条链路才清空，用户会误以为快捷键未生效。
-          // 先清空可见正文；命令拒绝时用冻结 editor state 原样恢复。
+        if (contentRevisionRef.current === cleanupRevision) {
+          // 所有投递共用一次正文占用；旧文档不能在 ACK/promotion 等待期间继续作为草稿。
+          // clear 同步提交 Lexical，拒绝时按冻结快照恢复，期间真实新输入由 revision 保护。
           inputApiRef.current?.clear();
           updateText("");
           cleanupRevision = contentRevisionRef.current;
@@ -1524,13 +1523,11 @@ function ConversationComposerImpl({
           return;
         }
         setHeldQueueConfirmation(null);
-        // 暂存内容只有在发送成功后才移交给 task；失败仍保留为可重试草稿。
+        // ACK 已接受即完成正文占用，附件 adoption 仅做已接受引用的后处理。
+        // 再次 clear 会让等待期间输入的下一条草稿被旧 ACK 影响。
+        finalizeSubmittedDraft();
+        promptHistoryWasPersisted = false;
         await attachmentsApi.adoptSentAttachments(submittedAttachmentIds);
-        // Bug 原因：发送等待期间产生的新正文属于下一次 Submission，旧 ACK 不能清除。
-        if (contentRevisionRef.current === cleanupRevision) {
-          inputApiRef.current?.clear();
-          updateText("");
-        }
         attachmentsApi.clearAttachments(submittedAttachmentIds);
         // 与附件相同，只移除本次冻结的引用；等待期间新加入的引用属于下一条消息。
         currentCodeCommentContexts.forEach(removeCodeCommentContext);
@@ -1542,16 +1539,13 @@ function ConversationComposerImpl({
         currentConversationSelections.forEach((reference) =>
           removeConversationSelectionReference(reference.id),
         );
-        // 发送成功：清本次提交捕获的 scope 草稿；prompt history 已在真实发送前同步写盘，
-        // 避免首发 promote 丢失或误清 promotion 后的新 scope。
-        finalizeSubmittedDraft();
         sendAction.complete({ resultSource: "authority_ack", admissionResult: "accepted" });
       } catch (error) {
         rollbackPromptHistory();
         restoreSubmittedDraft();
         if (telemetrySeed.localTtft)
           getLocalTtftObserver()?.exclude(telemetrySeed.localTtft, "failed");
-        // 发送失败草稿保留在输入框（不清空），仅记录原因。
+        // 提交拒绝时恢复原草稿，accepted 后的后处理错误不能复活已发送正文。
         logger.warn(`[v4-composer] 发送失败: ${String(error)}`);
         // ACK 侧失败已由 SessionPane 落定；能走到这里的是 composer 自身链路异常。
         conversationTelemetry?.settleSendResult({
@@ -1599,7 +1593,9 @@ function ConversationComposerImpl({
 
   // Lexical onChange（首字符也稳定回传，见 LexicalChatInput.TextContentPlugin）。
   const handleEditorChange = useCallback(
-    (value: string) => {
+    (value: string, change?: { isCurrent: () => boolean }) => {
+      // 文档身份区分旧通知和真实重新输入，不能按正文字符串永久屏蔽。
+      if (change && !change.isCurrent()) return;
       if (!updateText(value)) return;
       conversationTelemetry?.recordComposerTextChange(value);
       // 正文先进入与 mode/model 相同的内存 Draft；防抖只负责补充最新 Lexical JSON。
@@ -1621,11 +1617,10 @@ function ConversationComposerImpl({
     });
   }, [conversationTelemetry, sessionId]);
 
-  // 编辑器提交（Enter / 发送键 form submit 同路径）。返回 false：编辑器不自行 reset，
-  // 由 submit 成功后经 inputApiRef.clear() 清空——失败时草稿留在输入框。
+  // 统一提交路径占用并同步清空文档，拒绝时恢复；Lexical 不另行 reset。
   const handleEditorSubmit = useCallback(
     (value: string) => {
-      textRef.current = value;
+      updateText(value);
       const reverseDelivery = reversePointerDeliveryRef.current;
       reversePointerDeliveryRef.current = false;
       const followupMode = snapshotRef.current?.config.followupMode;
@@ -1637,13 +1632,13 @@ function ConversationComposerImpl({
       );
       return false;
     },
-    [submit],
+    [submit, updateText],
   );
 
   const handleModifiedEditorSubmit = useCallback(
     (value: string) => {
       const followupMode = snapshotRef.current?.config.followupMode;
-      textRef.current = value;
+      updateText(value);
       // inputRouting 在 turn 启动初期可能仍为 startNow，不能用它
       // 推断空闲。组合键始终表达单次反向 delivery；空闲时 CLI 自然 startNow。
       void submit(
@@ -1654,7 +1649,7 @@ function ConversationComposerImpl({
       );
       return false;
     },
-    [submit],
+    [submit, updateText],
   );
 
   const handleClearQueueSend = useCallback(() => {
