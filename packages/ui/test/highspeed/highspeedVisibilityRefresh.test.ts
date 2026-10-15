@@ -150,7 +150,9 @@ vi.mock("@/v4/composer/useDraftConfigControl.js", async (importOriginal) => {
     // modelSelectionRead.state.status，stub 缺这个字段会读 undefined 崩溃。
     useDraftConfigControl: () => ({
       modelSelectionRead: { state: { status: "loading" as const }, reload: vi.fn() },
-      draftConfigRef: { current: {} },
+      // 预热读取当前内核，夹具与 DraftConfigControl 的必需快照字段保持一致。
+      draftConfig: { agentKernel: "zcode" },
+      draftConfigRef: { current: { agentKernel: "zcode" } },
       resolveInitialDraftConfig: () => undefined,
       captureAcceptedModelSelection: () => vi.fn(),
       handleDraftSelectModel: () => {},

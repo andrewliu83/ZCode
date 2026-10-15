@@ -1896,6 +1896,7 @@ describe("SessionPane model switch recovery", () => {
     expect(composerRecentMocks.acceptSubmission).toHaveBeenCalledWith(
       "/workspace",
       {
+        agentKernel: "zcode",
         modelSelection: {
           providerId: "alternate-provider",
           modelId: "deepseek-v4-pro",
@@ -1982,6 +1983,7 @@ describe("SessionPane model switch recovery", () => {
     expect(composerRecentMocks.acceptSubmission).toHaveBeenCalledWith(
       "/workspace",
       {
+        agentKernel: "zcode",
         modelSelection: {
           providerId: "alternate-provider",
           modelId: "deepseek-v4-pro",

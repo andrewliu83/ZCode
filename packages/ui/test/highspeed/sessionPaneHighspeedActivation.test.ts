@@ -157,7 +157,9 @@ vi.mock("@/v4/composer/useDraftConfigControl.js", () => ({
   useDraftConfigControl: () => ({
     modelSelectionRead: { state: { status: "loading" }, reload: vi.fn() },
     captureAcceptedModelSelection: () => vi.fn(),
-    draftConfigRef: { current: {} },
+    // 预热读取当前内核，夹具与 DraftConfigControl 的必需快照字段保持一致。
+    draftConfig: { agentKernel: "zcode" },
+    draftConfigRef: { current: { agentKernel: "zcode" } },
     draftConfigSeedSignal: 0,
     handleDraftSelectModel: vi.fn(),
     handleDraftSelectThought: vi.fn(),

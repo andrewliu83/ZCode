@@ -232,18 +232,21 @@ describe("buildDraftCreateConfigPayload", () => {
     });
   });
 
-  it("有草稿选择 → 携带 config 键；无选择 → 空对象（createSession 不带 config）", () => {
+  it("草稿模型选择位于 config，缺省内核也显式传入创建参数", () => {
     expect(buildDraftCreateConfigPayload({ provider: "glm", model: "glm-4.7" })).toEqual({
+      agentKernel: "zcode",
       config: { provider: "glm", model: "glm-4.7" },
     });
-    expect(buildDraftCreateConfigPayload({})).toEqual({});
+    expect(buildDraftCreateConfigPayload({})).toEqual({ agentKernel: "zcode" });
   });
 
   it("app 交互行为偏好 → createSession.config.followupMode", () => {
     expect(buildDraftCreateConfigPayload({}, "guide")).toEqual({
+      agentKernel: "zcode",
       config: { followupMode: "guide" },
     });
     expect(buildDraftCreateConfigPayload({ provider: "glm", model: "glm-4.7" }, "queue")).toEqual({
+      agentKernel: "zcode",
       config: {
         provider: "glm",
         model: "glm-4.7",
@@ -256,6 +259,7 @@ describe("buildDraftCreateConfigPayload", () => {
     expect(
       buildDraftCreateConfigPayload({ model: "deepseek-v4-pro", thought: "low" }, "queue"),
     ).toEqual({
+      agentKernel: "zcode",
       config: {
         model: "deepseek-v4-pro",
         thought: "low",
@@ -264,8 +268,8 @@ describe("buildDraftCreateConfigPayload", () => {
     });
   });
 
-  it("空 Composer 不制造 config", () => {
-    expect(buildDraftCreateConfigPayload({}, null)).toEqual({});
+  it("空 Composer 只传内核，不制造 config", () => {
+    expect(buildDraftCreateConfigPayload({}, null)).toEqual({ agentKernel: "zcode" });
   });
 });
 
