@@ -71,6 +71,7 @@ export async function refreshContextPolicy(
         const nextThinkrail = discovered.skills.filter(belongsToThinkrail);
         runtime.skillLoadOutcome = {
           ...previousSkills,
+          preloadedSkills: discovered.preloadedSkills,
           skills: [
             ...previousSkills.skills.filter((skill) => !belongsToThinkrail(skill)),
             ...nextThinkrail,

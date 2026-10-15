@@ -198,7 +198,11 @@ describe("bundled Claude Agent SDK bridge", () => {
     const options = (
       runQuery.mock.calls as unknown as [{ options: Parameters<typeof query>[0]["options"] }][]
     )[0]![0].options!;
-    expect(options.systemPrompt).toBe("CLAUDE OVERRIDE\n\nKeep ThinkRail");
+    expect(options.systemPrompt).toEqual({
+      type: "custom",
+      prompt: "CLAUDE OVERRIDE\n\nKeep ThinkRail",
+      snapshot: false,
+    });
     expect(options.verbatimPrompts).toBe(false);
     await kernel.run(request({ baseSystemPrompt: " " }));
     expect(
@@ -251,7 +255,12 @@ describe("bundled Claude Agent SDK bridge", () => {
     expect(options).not.toHaveProperty("pathToClaudeCodeExecutable");
     expect(options).toMatchObject({
       verbatimPrompts: false,
-      systemPrompt: { type: "preset", preset: "claude_code", append: "Keep ThinkRail" },
+      systemPrompt: {
+        type: "preset",
+        preset: "claude_code",
+        append: "Keep ThinkRail",
+        snapshot: false,
+      },
       tools: ["Read", "Skill"],
       disallowedTools: ["Bash"],
     });

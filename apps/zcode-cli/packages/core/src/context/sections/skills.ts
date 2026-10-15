@@ -2,22 +2,23 @@
 // Claude-compatible skill matching catalog (docs/agent-kernel-and-skills.md)
 // ============================================================
 
-import type { SkillLoadOutcome, SkillMetadata } from "@zcode/contracts";
+import {
+  resolveSkillListingPolicy,
+  type SkillLoadOutcome,
+  type SkillMetadata,
+  type SkillListingPolicyOptions,
+} from "@zcode/contracts";
 import type { ContextSection } from "../types.js";
 import { estimateTokens } from "../utils.js";
 
-export const DEFAULT_SKILL_LISTING_BUDGET_FRACTION = 0.01;
-export const DEFAULT_SKILL_LISTING_MAX_DESCRIPTION_CHARS = 1536;
-const DEFAULT_CONTEXT_WINDOW = 200_000;
-const CHARS_PER_TOKEN = 4;
+export {
+  DEFAULT_SKILL_LISTING_BUDGET_FRACTION,
+  DEFAULT_SKILL_LISTING_MAX_DESCRIPTION_CHARS,
+} from "@zcode/contracts";
 const CATALOG_HEADER = "The following skills are available for use with the Skill tool:\n\n";
 
-export interface SkillsSectionOptions {
+export interface SkillsSectionOptions extends SkillListingPolicyOptions {
   outcome: SkillLoadOutcome;
-  metadataBudget?: number;
-  contextWindow?: number;
-  listingBudgetFraction?: number;
-  maxDescriptionChars?: number;
 }
 
 export function buildSkillsSection(options: SkillsSectionOptions): ContextSection | null {
@@ -25,21 +26,8 @@ export function buildSkillsSection(options: SkillsSectionOptions): ContextSectio
     (skill) => skill.policy?.allowImplicitInvocation !== false,
   );
   if (skills.length === 0) return null;
-  const fraction = options.listingBudgetFraction ?? DEFAULT_SKILL_LISTING_BUDGET_FRACTION;
-  const limit = options.maxDescriptionChars ?? DEFAULT_SKILL_LISTING_MAX_DESCRIPTION_CHARS;
-  if (!Number.isFinite(fraction) || fraction <= 0 || fraction > 1) {
-    throw new RangeError("skillListingBudgetFraction must be greater than 0 and at most 1");
-  }
-  if (!Number.isInteger(limit) || limit < 1)
-    throw new RangeError("skillListingMaxDescChars must be a positive integer");
-  const window =
-    options.contextWindow && Number.isFinite(options.contextWindow) && options.contextWindow > 0
-      ? options.contextWindow
-      : DEFAULT_CONTEXT_WINDOW;
-  const budget = options.metadataBudget ?? Math.floor(window * fraction * CHARS_PER_TOKEN);
-  if (!Number.isFinite(budget) || budget < 0)
-    throw new RangeError("skill metadata character budget must be nonnegative");
-  const content = buildSkillsContent(skills, Math.floor(budget), limit);
+  const policy = resolveSkillListingPolicy(options);
+  const content = buildSkillsContent(skills, policy.characterBudget, policy.maxDescriptionChars);
   return {
     name: "Skills",
     source: "skills",

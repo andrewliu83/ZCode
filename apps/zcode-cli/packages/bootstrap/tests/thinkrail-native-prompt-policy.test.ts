@@ -56,6 +56,17 @@ it("Claude 已有代码但无 spec 时也注入 spec 规则，已有会话下一
       ).toBe(value);
       expect(request.appendSystemPrompt.includes("mcp__zcode_thinkrail__spec_graph")).toBe(value);
       expect(request.tools.some((tool) => tool.name === "spec_graph")).toBe(value);
+      expect(request.skillListingPolicy).toEqual({
+        characterBudget: 40_000,
+        maxDescriptionChars: 1536,
+      });
+      expect(
+        request.appendSystemPrompt.includes("Existing code without a spec graph takes priority"),
+      ).toBe(value);
+      expect(request.appendSystemPrompt.includes('<preloaded_skill name="spec-graph">')).toBe(
+        value,
+      );
+      expect(request.appendSystemPrompt).not.toContain("/skills/thinkrail:choosing-a-workflow");
       const inspection = await app.getSystemPromptInspection();
       expect(inspection.nativeKernel).toBe("claude");
       const section = inspection.sections.find((section) => section.source === "thinkrail");

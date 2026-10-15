@@ -15,8 +15,12 @@ export function nativeThinkrailRules(runtime: AgentRuntimeInternal, enabled: boo
     buildThinkrailSection({
       enabled,
       toolNames: runtime.getTools().map((tool) => tool.name),
+      preloadedSkills: runtime.skillLoadOutcome?.preloadedSkills,
+      formatRules: runtime.nativeAgentKernel?.formatSystemPromptExtension?.bind(
+        runtime.nativeAgentKernel,
+      ),
       specRule: SPEC_RULE,
       workflowRule: WORKFLOW_RULE,
     })?.content ?? "";
-  return runtime.nativeAgentKernel?.formatSystemPromptExtension?.(prompt) ?? prompt;
+  return prompt;
 }

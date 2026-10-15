@@ -1490,7 +1490,7 @@ describe("ContextBuilder meta user context", () => {
     });
 
     expect(section?.content).toContain("superpowers:test-driven-development");
-    expect(section?.content).toContain("also loadable as test-driven-development");
+    expect(section?.content).not.toContain("also loadable as test-driven-development");
   });
 });
 

@@ -9,6 +9,7 @@ import { nativeThinkrailRules } from "./native-agent-prompt.js";
 import { nativeAgentProfiles } from "./native-agent-profiles.js";
 import { createNativeTurnProjection } from "./native-agent-events.js";
 import {
+  resolveSkillListingPolicy,
   CoreErrorType,
   SessionEventType,
   createChildTraceContext,
@@ -70,6 +71,16 @@ export async function executeNativeAgentTurn(
     throwIfTurnAborted(scope.signal);
     if (!reservation) runtime.reserveTurnStart(turnId, trace, "regular");
     await runtime.ensureSessionPersisted(displayInput, trace);
+    // 原生内核可能自行管理模型；只读 Catalog 能力，不能为目录预算强制创建 ZCode Model。
+    const contextWindow = modelSelection
+      ? runtime.modelCatalogPort
+          ?.listModels()
+          .find(
+            (entry) =>
+              entry.providerId === modelSelection.providerId &&
+              entry.modelId === modelSelection.modelId,
+          )?.contextWindow
+      : undefined;
     await runtime.ensureContextInitialized(trace);
     await refreshContextPolicy(runtime, trace, {
       thinkrailEnabled: enabled,
@@ -115,6 +126,12 @@ export async function executeNativeAgentTurn(
       prompt: input,
       inputContent: resolvedAttachments.map((attachment) => attachment.contentBlock),
       modelSelection,
+      skillListingPolicy: resolveSkillListingPolicy({
+        contextWindow,
+        metadataBudget: runtime.config.skillMetadataBudget,
+        listingBudgetFraction: runtime.config.skillListingBudgetFraction,
+        maxDescriptionChars: runtime.config.skillListingMaxDescChars,
+      }),
       modelFactory: (selection) =>
         createTurnModel(runtime, {
           selection,

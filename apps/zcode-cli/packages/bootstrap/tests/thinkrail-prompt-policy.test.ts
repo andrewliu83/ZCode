@@ -59,11 +59,15 @@ it("已有会话在下一轮同步 spec 开关，无 spec 时实际模型请求�
       expect(systemText(request).includes("read the choosing-a-workflow skill FIRST")).toBe(value);
       expect(systemText(request).includes("Specs are this project's ground truth.")).toBe(value);
       expect(toolNames(request).includes("spec_grep")).toBe(value);
+      expect(
+        systemText(request).includes("Existing code without a spec graph takes priority"),
+      ).toBe(value);
       if (value)
         expect(
           JSON.stringify(request.messages.filter((message) => message.role === "tool")),
         ).toContain("Existing code without a spec graph takes priority");
       const catalog = await app.getSkillCatalog();
+      expect(catalog).not.toHaveProperty("preloadedSkills");
       expect(catalog.skills.some((skill) => skill.name === "choosing-a-workflow")).toBe(value);
       expect(catalog.skills.some((skill) => skill.name === "known-user-skill")).toBe(true);
       expect(catalog.skills.some((skill) => skill.name === "late-user-skill")).toBe(false);

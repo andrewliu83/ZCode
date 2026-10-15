@@ -145,6 +145,7 @@ export interface ContextBuilderConfig {
 }
 
 export interface ThinkrailSectionInput {
+  readonly formatRules?: (content: string) => string;
   /** 用户开关（`runtimeFeatures.thinkrail`）。 */
   readonly enabled: boolean;
   readonly specRule: string;

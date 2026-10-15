@@ -261,46 +261,7 @@ export function logMemorySkipped(
   });
 }
 
-export async function discoverSkillsForContext(
-  this: AgentRuntimeInternal,
-  traceContext: TraceContext,
-): Promise<SkillLoadOutcome | undefined> {
-  if (!this.skillPort) {
-    return undefined;
-  }
-
-  try {
-    const outcome = await this.skillPort.discoverSkills({
-      workingDirectory: this.workingDirectory,
-      trace: traceContext,
-    });
-    this.logger?.debug("Skills discovered", {
-      ...traceContextToLogContext(traceContext),
-      diagnosticCount: outcome.diagnostics.length,
-      module: "core.runtime",
-      skillCount: outcome.skills.length,
-      totalDiscovered: outcome.totalDiscovered,
-    });
-    return outcome;
-  } catch (error) {
-    this.logger?.warn("Skill discovery failed", {
-      ...traceContextToLogContext(traceContext),
-      error: error instanceof Error ? error.message : String(error),
-      module: "core.runtime",
-    });
-    return {
-      skills: [],
-      diagnostics: [
-        {
-          code: "skill_scan_failed",
-          severity: "warning",
-          message: error instanceof Error ? error.message : String(error),
-        },
-      ],
-      totalDiscovered: 0,
-    };
-  }
-}
+export { discoverSkillsForContext } from "./skills-context.js";
 
 export function createConfigOnlyContextSnapshot(
   this: AgentRuntimeInternal,

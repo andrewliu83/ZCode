@@ -2,6 +2,8 @@
 // Skill Contracts - reusable local instruction packs
 // ============================================================
 
+export * from "./catalog-policy.js";
+
 import type { ExecutionContext, TraceContext } from "../tracing/tracer.js";
 
 export type SkillScope = "project" | "user" | "system" | "admin";
@@ -75,6 +77,8 @@ export interface SkillDiagnostic {
 }
 
 export interface SkillLoadOutcome {
+  /** Runtime 实际加载的可信入口，不作为 Skill 调用或调用次数。目录 RPC 不返回正文。 */
+  preloadedSkills?: readonly SkillContent[];
   skills: SkillMetadata[];
   diagnostics: SkillDiagnostic[];
   totalDiscovered: number;

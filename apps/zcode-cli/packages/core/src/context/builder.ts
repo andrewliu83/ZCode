@@ -172,6 +172,8 @@ export class ContextBuilder {
       const thinkrailSection = this.config.thinkrail
         ? buildThinkrailSection({
             enabled: this.config.thinkrail.enabled,
+            formatRules: this.config.thinkrail.formatRules,
+            preloadedSkills: this.config.skills?.preloadedSkills,
             specRule: this.config.thinkrail.specRule,
             workflowRule: this.config.thinkrail.workflowRule,
             toolNames: this.config.guidanceToolNames ?? [],

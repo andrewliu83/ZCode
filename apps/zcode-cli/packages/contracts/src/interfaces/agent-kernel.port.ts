@@ -39,6 +39,7 @@ export interface NativeAgentRequest {
   baseSystemPrompt?: string;
   appendSystemPrompt: string;
   pluginRoots: string[];
+  skillListingPolicy?: import("../skills/catalog-policy.js").SkillListingPolicy;
   skills?: readonly SkillMetadata[];
   agents?: Record<
     string,

@@ -74,15 +74,37 @@ export class ClaudeAgentKernel implements NativeAgentKernelPort {
       request.tools.map((entry) => `mcp__zcode_thinkrail__${entry.name}`),
     );
     const env = createClaudeEnvironment(this.options, connection);
+    // SDK 独立配置目录不会读取 ZCode 的预算；使用本轮已解析策略，不能继承外部 CLI 值。
+    if (request.skillListingPolicy)
+      env.SLASH_COMMAND_TOOL_CHAR_BUDGET = String(request.skillListingPolicy.characterBudget);
     const nativeOptions: Options = {
+      ...(request.skillListingPolicy
+        ? {
+            settings: JSON.stringify({
+              skillListingMaxDescChars: request.skillListingPolicy.maxDescriptionChars,
+            }),
+          }
+        : {}),
       cwd: request.cwd,
       model: connection.model,
       env,
       abortController: abort,
       // 用户覆盖只替换基座；ThinkRail/会话扩展仍独立拼接，SDK 动态技能发现继续保留。
+      // SDK 整会话快照会忽略 resume 的新 append；正文已按本轮冻结，禁用跨轮旧快照。
       systemPrompt: request.baseSystemPrompt?.trim()
-        ? [request.baseSystemPrompt.trim(), request.appendSystemPrompt].filter(Boolean).join("\n\n")
-        : { type: "preset", preset: "claude_code", append: request.appendSystemPrompt },
+        ? {
+            type: "custom",
+            prompt: [request.baseSystemPrompt.trim(), request.appendSystemPrompt]
+              .filter(Boolean)
+              .join("\n\n"),
+            snapshot: false,
+          }
+        : {
+            type: "preset",
+            preset: "claude_code",
+            append: request.appendSystemPrompt,
+            snapshot: false,
+          },
       includePartialMessages: true,
       settingSources: ["project", "local"],
       // 原因：verbatimPrompts 会跳过首轮 skills/rules 附加，不能开启此选项。

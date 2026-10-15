@@ -41,6 +41,47 @@ sequenceDiagram
 
 标准目录不再为每项附加绝对路径。超预算从调用频率低的技能开始逐项去掉描述，频率相同时按稳定规则排序；保留全部名字，不得再整份退化。显式禁止模型调用的技能不进入模型可用目录；用户显式调用仍按独立权限验证。调用统计只记录成功加载的规范化技能身份，异步持久化，不记正文、用户输入或凭据。技能设置与模型工具说明均应区分匹配目录与加载后的步骤；调用前不得凭摘要执行技能。匹配仍由模型判断，这项对齐不引入针对中文输入的关键字硬编码路由。
 
+## 原生内核目录策略与必需入口（2026-10-15）
+
+Runtime 是本轮技能策略与已加载入口的唯一所有者。目录预算从本轮所选模型的能力计算（ZCode 使用 Model.properties，原生内核通过只读 ModelCatalogPort 读取同一注册表容量，不为预算创建 ZCode 模型句柄），优先级为显式字符预算 > 容量 × 比例 × 4；未知容量回落 200,000，单项默认上限 1,536。ZCode builder 和 NativeAgentRequest 复用同一 resolver。Claude 适配器将冻结后的预算显式传到 SDK 的 SLASH_COMMAND_TOOL_CHAR_BUDGET，并传递单项上限设置；不借用外部 CLI 配置，不伪造 [1m]，不在模型协议桥推断容量。SDK 保持原生目录生成和频率策略，不声称复用了 ZCode 的频率数据库。
+
+ThinkRail 开启、主代理具备 Skill 时，Runtime 经已有 SkillPort 从获准 bundled 快照加载 choosing-a-workflow；具备 spec 读侧工具时同时加载 spec-graph。完整正文作为只读 ThinkRail 扩展进入两种内核请求及提示词检查，不受目录预算裁剪影响。入口已经加载应明确标识，不伪造 Skill 调用或成功统计，模型继续按正文加载 downstream 技能。用户/插件同名文件不作为可信入口自动加载；子代理、workflow actor、关闭和受限工具 scope 不获得超出权限的入口。加载失败或截断应明确失败，不以缺失正文继续执行。
+
+SDK 0.3.299 默认记录整会话 system prompt，resume 会忽略新的 append/custom prompt。ZCode 要求下一轮采用新的正文/开关，因此 preset 与 custom 都显式使用 `snapshot: false`；NativeAgentRequest 在 admission 后持有冻结字符串，运行中的 query 不读设置。保留 `verbatimPrompts: false` 以启用原生技能目录。策略变化会改变提示词缓存前缀，SDK 也可能丢弃不再适用的旧 thinking；不能通过保留旧快照违背用户的下一轮生效要求。真实 SDK 回归需复用同一 native session ID，确认新入口进入供应商请求，关闭后移除旧入口。
+
+入口随会话技能/开关快照加载，运行中不重读策略；下一轮切换清除或更新入口，保留用户/插件发现快照。workspace preview 无模型调用，使用相同 loader/renderer；会话检查使用已冻结的快照。原路由拥有调查、澄清、采纳和写作步骤，此次不另建通用工作流引擎或绕过写入审批。
+
+```mermaid
+sequenceDiagram
+  participant Inbox as CLI CommandInbox
+  participant Runtime as Runtime 技能快照
+  participant Port as SkillPort
+  participant Kernel as 已绑定内核
+  Inbox->>Runtime: 接纳输入并冻结策略/模型
+  Runtime->>Port: 发现获准技能并加载可信入口
+  Port-->>Runtime: metadata + 完整入口正文
+  Runtime->>Kernel: 已解析目录预算 + 只读入口上下文
+  Kernel-->>Inbox: 原有事件和终态（continuous / replayable）
+```
+
+验收：SKL-04 不同真实模型容量、显式预算、描述上限经 NativeAgentRequest 传入真实 SDK；SKL-05 大目录中即使路由名称没有描述，实际首轮请求仍含完整路由与规范查询；SKL-06 开关/受限 scope/子代理不越权，切换后删除旧入口，加载失败不发模型请求；SKL-07 正文显示只读，保存基础提示词不覆盖入口，冷恢复与两种 v4 链路维持同一 owner。验证将使用真实 SDK + 本地协议夹具观察实际 skill_listing 和供应商请求，不把夹具当作真实模型遵从率证明。
+
+### 本轮目录与入口修复验证
+
+- 18 个测试文件、119 项单测与集成测试通过：覆盖共用预算、实际请求、可信加载、取消/受限 scope、目录 admission 并发、开关、提示词预览、会话恢复和两种 v4 delivery。
+- 2 项发行 CommonJS / 真实 SDK 回归通过，无跳过。SDK 使用准备好的随包运行时、隔离 HOME/PATH 和本地模型接口，不读取外部 CLI 配置。96 项应用技能之外另有 SDK 自带技能，以下只统计这 96 项应用技能：
+
+| 字符预算 | 单项描述上限 | 保留描述的应用技能 |
+| --- | --- | --- |
+| 8,000 | 1,536 | 1 / 96 |
+| 40,000 | 1,536 | 96 / 96 |
+| 40,000 | 80 | 96 / 96，实际单项均不超过 80 |
+| 0 | 1,536 | 0 / 96，但全部名字保留 |
+
+- 四种预算的供应商首轮请求都含完整路由与 spec-graph 正文，未产生 Skill 调用。真实 SDK 同一会话先模拟旧版 `snapshot: true`，再以新模式恢复，确认新 append 可见、关闭后移除入口，native session ID 不变；同时验证默认 preset 与自定义正文两条路径。
+- 根目录 typecheck、lint（63 warnings / 0 errors）、architecture:check 通过；CLI contracts/adapters/core/bootstrap 类型检查及修改文件定向 lint（0 errors）通过。CLI 包级 lint 仍被 contracts 的未修改文件 max-lines 错误阻断，如 session-store.port.ts、event-reducer.ts、model/index.ts；未将其记录为通过。
+- 上述真实 SDK 使用本地模型夹具，证明目录与上下文交付，不证明线上 GLM/DeepSeek 必然遵从初始化流程。本轮没有修改 UI 交互，也没有启动桌面 E2E、提交或打包。
+
 ## UI Surface Matrix
 
 | 场景                 | 入口                  | 所有者 / 提交                     | 隔离规则                            |

@@ -47,7 +47,8 @@ describe("Skill integration", () => {
     });
 
     const result = builder.build();
-    const system = result.systemMessages.find((message) => message.role === "system")?.content ?? "";
+    const system =
+      result.systemMessages.find((message) => message.role === "system")?.content ?? "";
     const skillReminder =
       result.metaUserAttachments.find((attachment) => attachment.source === "skills_listing")
         ?.content ?? "";
@@ -142,6 +143,7 @@ describe("Skill integration", () => {
 
     expect(reported).toEqual([
       {
+        name: "demo-skill",
         qualifiedName: "document-skills:pptx",
         pluginId: "document-skills@zcode-plugins-official",
         source: "plugin",

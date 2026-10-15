@@ -32,16 +32,44 @@ it("目录查询等待已接纳 turn 的技能快照更新，不返回工具门�
     safeToAutoLoad: true,
     frontmatterKeys: [],
   };
+  const graphSkill: SkillMetadata = {
+    ...skill,
+    name: "spec-graph",
+    path: "/builtin/spec-graph/SKILL.md",
+    directory: "/builtin/spec-graph",
+  };
+  let enterLoad!: () => void;
+  const loading = new Promise<void>((resolve) => {
+    enterLoad = resolve;
+  });
+  let finishLoad!: () => void;
+  const loadGate = new Promise<void>((resolve) => {
+    finishLoad = resolve;
+  });
   const skillPort: SkillPort = {
     async discoverSkills() {
       if (enabled) {
         enterDiscovery();
         await gate;
       }
-      return { skills: enabled ? [skill] : [], diagnostics: [], totalDiscovered: enabled ? 1 : 0 };
+      return {
+        skills: enabled ? [skill, graphSkill] : [],
+        diagnostics: [],
+        totalDiscovered: enabled ? 2 : 0,
+      };
     },
-    async loadSkill() {
-      throw new Error("not needed");
+    async loadSkill(request) {
+      enterLoad();
+      await loadGate;
+      const metadata = request.name === "spec-graph" ? graphSkill : skill;
+      return {
+        metadata,
+        content: `LOADED_${metadata.name}`,
+        baseDirectory: metadata.directory,
+        bytesRead: 20,
+        sizeBytes: 20,
+        truncated: false,
+      };
     },
   };
   const runtime = createTestAgentRuntime(
@@ -70,6 +98,14 @@ it("目录查询等待已接纳 turn 的技能快照更新，不返回工具门�
   await Promise.resolve();
   expect(catalogResolved).toBe(false);
   finishDiscovery();
+  await loading;
+  expect(catalogResolved).toBe(false);
+  finishLoad();
   await turn;
-  expect((await catalog).skills.map((entry) => entry.name)).toEqual(["choosing-a-workflow"]);
+  const loadedCatalog = await catalog;
+  expect(loadedCatalog.skills.map((entry) => entry.name)).toEqual([
+    "choosing-a-workflow",
+    "spec-graph",
+  ]);
+  expect(loadedCatalog).not.toHaveProperty("preloadedSkills");
 });

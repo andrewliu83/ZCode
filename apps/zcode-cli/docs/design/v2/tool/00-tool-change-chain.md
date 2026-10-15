@@ -1,5 +1,9 @@
 # Tool Change Chain Spec
 
+## 原生目录预算与必需技能上下文（2026-10-15）
+
+本轮 Model 能力与 Runtime 配置通过共享 resolver 形成冻结目录策略，再经 NativeAgentRequest 传给 SDK；不依赖外部 CLI 用户配置或模型名猜测。ThinkRail 必需入口由 SkillPort 从获准 bundled 快照只读加载，正文直接作为扩展交付，不伪造 Skill tool call、成功计数或工具事件。关闭、受限 scope 和 child actor 不越权；两种内核及工作区/会话提示词检查共用正文渲染。工具 schema、执行、审批、spec 写入路径和两种 delivery 保持原合同。范围与验收见根 docs/agent-kernel-and-skills.md 的 SKL-04..07。
+
 ## 多内核子代理与模型边界（2026-10-15）
 
 官方文档 visual-judge 默认继承发起者模型，不硬编码账号 Provider；用户显式覆盖仍优先。

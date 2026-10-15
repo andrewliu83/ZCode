@@ -196,8 +196,7 @@ read the choosing-a-workflow skill FIRST and follow it: it routes the work to th
 that governs it, or tells you none applies.
 ```
 
-两条都是**指针而不是复述**：路由表只住在 `choosing-a-workflow` 技能里，每个工作流的步骤只住在
-它自己的技能里。规则短且字节稳定，才不会搅动 provider 的 prompt 缓存。
+两条常驻规则继续引用同源技能；运行时另外从获准 bundled 快照加载必需入口正文（`choosing-a-workflow` 和能力满足时的 `spec-graph`），作为只读扩展交付。路由表和步骤只住在技能资产中，目录预算可以裁描述，但不能剥夺必需入口。SDK 名称空间映射只作用于常驻规则；技能正文通过 SDK 插件本名保持资源引用完整，不伪造工具执行。范围与验收见 `docs/agent-kernel-and-skills.md` 的“原生内核目录策略与必需入口”。
 
 ### D4. 工具面：13 个工具，裸名
 

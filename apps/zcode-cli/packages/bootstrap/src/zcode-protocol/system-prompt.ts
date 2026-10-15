@@ -1,7 +1,13 @@
 import { createConfig } from "@zcode/adapters/config";
 import { formatClaudeSystemPromptExtension } from "@zcode/adapters/agent-kernel";
 import { createNodeContextSourceAdapter } from "@zcode/adapters/context";
-import { createContextBuilder, inspectSystemPrompt, registerBuiltInTools } from "@zcode/core";
+import { NodeSkillAdapter } from "@zcode/adapters/skills";
+import {
+  createContextBuilder,
+  inspectSystemPrompt,
+  registerBuiltInTools,
+  preloadThinkrailSkills,
+} from "@zcode/core";
 import { SPEC_RULE, WORKFLOW_RULE } from "@zcode/thinkrail";
 import {
   zcodeProtocolErrorCodes,
@@ -82,7 +88,7 @@ export async function readSystemPrompt(
     workingDirectory: cwd,
     userInstructions: { workingDirectory: cwd },
   });
-  const skills = filterBundledSkillCatalog(
+  const discoveredSkills = filterBundledSkillCatalog(
     await listZCodeSkills({
       env: context.deps.env,
       workingDirectory: cwd,
@@ -108,6 +114,13 @@ export async function readSystemPrompt(
       includeDynamicWorkflow: context.appRuntimePreferences.dynamicWorkflowEnabled,
     },
   );
+  const skills = await preloadThinkrailSkills({
+    enabled: thinkrailEnabled,
+    toolNames: guidanceToolNames,
+    outcome: discoveredSkills,
+    port: new NodeSkillAdapter(),
+    workingDirectory: cwd,
+  });
   const result = createContextBuilder({
     ...snapshot,
     workingDirectory: cwd,
@@ -118,6 +131,7 @@ export async function readSystemPrompt(
     guidanceToolNames,
     thinkrail: {
       enabled: thinkrailEnabled,
+      formatRules: kernel === "claude" ? formatClaudeSystemPromptExtension : undefined,
       specRule: SPEC_RULE,
       workflowRule: WORKFLOW_RULE,
     },
@@ -128,10 +142,7 @@ export async function readSystemPrompt(
     const sections = inspection.sections
       .filter((section) => section.source === "thinkrail")
       .map((section) => {
-        const content =
-          kernel === "claude"
-            ? formatClaudeSystemPromptExtension(section.content)
-            : section.content;
+        const content = section.content;
         return {
           ...section,
           content,
