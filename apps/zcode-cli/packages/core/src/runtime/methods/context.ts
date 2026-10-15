@@ -36,7 +36,6 @@ import {
   resolveGenUiOutputDirectory,
 } from "../helpers/gen-ui-output.js";
 import { SPEC_RULE, WORKFLOW_RULE } from "@zcode/thinkrail";
-import { thinkrailHasSpec } from "../../tool/handlers/thinkrail/index.js";
 
 export { buildContextHistoryEntries };
 
@@ -152,6 +151,8 @@ export function createContextBuilderFromSnapshot(
       envInfo,
       model: options.model,
       skillMetadataBudget: this.config.skillMetadataBudget,
+      skillListingBudgetFraction: this.config.skillListingBudgetFraction,
+      skillListingMaxDescChars: this.config.skillListingMaxDescChars,
       skills: this.skillLoadOutcome,
       userInstructions: this.config.subagentContext.userInstructions,
     });
@@ -172,6 +173,8 @@ export function createContextBuilderFromSnapshot(
     agentProfiles: this.config.subagents?.profiles,
     embeddedSearchEnabled: resolveRuntimeEmbeddedSearchEnabled(this),
     skillMetadataBudget: this.config.skillMetadataBudget,
+    skillListingBudgetFraction: this.config.skillListingBudgetFraction,
+    skillListingMaxDescChars: this.config.skillListingMaxDescChars,
     customSystemPrompt: this.config.systemPrompt,
     mainSystemPrompt: this.config.subagentContext ? undefined : this.config.mainSystemPrompt,
     workflowActor: this.config.workflowActor,
@@ -179,13 +182,9 @@ export function createContextBuilderFromSnapshot(
     outputStyle: this.config.outputStyle,
     compact: this.config.compact,
     guidanceToolNames: this.getTools(options.model).map((tool) => tool.name),
-    // ThinkRail 常驻段的三条条件（docs/thinkrail/design.md D3）：开关、工具表锚点由
-    // section 内部判；启用时有界探测当前文件系统，关闭时不产生探测 IO。
+    // 与 DSH 一致，首次建立 spec 前也提供常驻规则；只按开关和工具能力渲染。
     thinkrail: {
       enabled: this.config.runtimeFeatures?.thinkrail === true,
-      hasSpec:
-        this.config.runtimeFeatures?.thinkrail === true &&
-        thinkrailHasSpec(snapshot.workingDirectory),
       specRule: SPEC_RULE,
       workflowRule: WORKFLOW_RULE,
     },

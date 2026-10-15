@@ -231,6 +231,12 @@ export interface AgentRuntimeConfig {
    */
   dynamicWorkflowToolsOnDemand?: boolean;
 
+  /** 新会话固定的 Agent 内核；恢复由 session entry 覆盖，历史缺省 zcode。 */
+  agentKernel?: import("@zcode/contracts").AgentKernelKind;
+  availableAgentKernels?: readonly import("@zcode/shared").AgentKernelDescriptor[];
+  nativeAgentSessionId?: string;
+  nativeAgentPluginRoots?: string[];
+
   // Context Builder config
   systemPrompt?: string;
   /** Host settings 的主代理正文，不覆盖注入或子代理。 */
@@ -267,6 +273,8 @@ export interface AgentRuntimeConfig {
   userInstructions?: UserInstructionsOptions; // P1: AGENTS.md
   projectContext?: ProjectContext; // P2: auto-detected if not provided
   skillMetadataBudget?: number;
+  skillListingBudgetFraction?: number;
+  skillListingMaxDescChars?: number;
 }
 
 export interface ResumeSessionOptions {
@@ -328,13 +336,14 @@ export interface MemoryRuntimeConfig {
 }
 
 export interface AgentRuntimeDeps {
+  nativeAgentKernel?: import("@zcode/contracts").NativeAgentKernelPort;
   /** 只读目录入口；必须同步读取内存，不在请求收集阶段进行 I/O。 */
   getAgentDefinitions?: GetAgentDefinitions;
   /** 新父上下文读取一次；子执行不得继承此加载器。 */
   loadAgentDefinitions?: LoadAgentDefinitions;
   /** Host 的进程策略；只在新 turn 或空闲目录边界读取。 */
   readThinkrailEnabled?: () => boolean;
-  readMainSystemPrompt?: () => string | undefined;
+  readMainSystemPrompt?: (kernel?: import("@zcode/shared").AgentKernelId) => string | undefined;
   agentTelemetry?: AgentExecutionTelemetryPort;
   agentTelemetryCausation?: AgentTelemetryCausation;
   agentTelemetryCausationMode?: "child" | "linked_root";

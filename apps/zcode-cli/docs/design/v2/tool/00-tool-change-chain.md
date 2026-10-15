@@ -1,5 +1,13 @@
 # Tool Change Chain Spec
 
+## 多内核子代理与模型边界（2026-10-15）
+
+官方文档 visual-judge 默认继承发起者模型，不硬编码账号 Provider；用户显式覆盖仍优先。
+Explore/explorer 归为同一内置探索身份，旧名称只作调用兼容，不在目录或 SDK 中重复登记。
+内核由注册表创建，core 仅调度通用端口，CommandInbox、权限与已执行工具事件保持唯一所有者。
+可选模型协议桥只转换 SDK 模型请求与流，不执行工具；严格保留工具 ID/结果、取消和上游错误。
+规格、所有者和验收见根目录 docs/agent-kernel-extension.md，desktop continuous 与手机 replayable 不增加执行主体。
+
 ## ThinkRail 审核回归（2026-10-13）
 
 Host 初始化与开关变更复用 workspace 串行策略队列，CLI 缺省关闭作为新进程基线，后续

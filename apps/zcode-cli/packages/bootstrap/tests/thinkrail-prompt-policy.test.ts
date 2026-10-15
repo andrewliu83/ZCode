@@ -9,7 +9,7 @@ const systemText = (request: ModelRequest) =>
   JSON.stringify(request.messages.filter((message) => message.role === "system"));
 const toolNames = (request: ModelRequest) => request.tools?.map((tool) => tool.name) ?? [];
 
-it("已有会话在下一轮同步 spec 开关，无 spec 时实际模型请求仍包含 choosing-a-workflow 路由", async () => {
+it("已有会话在下一轮同步 spec 开关，无 spec 时实际模型请求仍包含两条常驻规则", async () => {
   const root = await mkdtemp(join(tmpdir(), "thinkrail-prompt-policy-"));
   let enabled = false;
   let shouldReadRouter = false;
@@ -50,13 +50,14 @@ it("已有会话在下一轮同步 spec 开关，无 spec 时实际模型请求�
         },
       },
     });
+    await writeFile(join(root, "index.ts"), "export const existingCode = true;\n");
     for (const value of [false, true, false]) {
       enabled = value;
       shouldReadRouter = value;
       await app.submitPrompt("熟悉当前项目");
       const request = requests.at(-1)!;
       expect(systemText(request).includes("read the choosing-a-workflow skill FIRST")).toBe(value);
-      expect(systemText(request)).not.toContain("Specs are this project's ground truth.");
+      expect(systemText(request).includes("Specs are this project's ground truth.")).toBe(value);
       expect(toolNames(request).includes("spec_grep")).toBe(value);
       if (value)
         expect(

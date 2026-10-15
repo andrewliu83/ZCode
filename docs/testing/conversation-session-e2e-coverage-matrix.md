@@ -1949,6 +1949,28 @@ Todo96 新增前置（待复跑）：SR87-06 / SM96-02、05 在当前 Team 下�
 | I72  | covered      | AR     | 正式 Desktop spec 按 case-local fixture 顺序覆盖 HTTP 400 修复成功、首内容前 SSE 400 修复成功、完整重启后恢复 unsigned-only 历史但无可清理变化、无关 400、第二次拒绝与可见 text 后 SSE 400；抓包断言 attempt 数、fixture 顺序、新 requestId、第二 attempt 的精确 reasoning 投影及后续 logical request 仍从 canonical history 恢复 signed reasoning。unsigned cold-resume 400 的既定行为：首次请求带回 reasoning，但只失败一次且不 strip/retry                                                                                                          |
 | I73  | covered      | ER     | formal `conversation-session-empty-completion-retry.test.ts` 使用 case-local Anthropic SSE 构造首个 `finish=other` 且 text/reasoning/tool/usage 全为 0、第二个正常文本响应；断言首个空 attempt 不泄漏到 timeline、物理请求严格为 2 次且 fixture 顺序为 first-empty → second-success，最终 assistant 可见并回到 idle。非流式 `generateText` 分支由 adapter focused test 覆盖（桌面协议默认 `modelStreaming=on`，无对应 UI 入口）                                                                                                                                 |
 
+## AK. 聊天输入框 Agent 内核
+
+`AK` = `conversation-session-agent-kernel.test.ts`（新交互代表，待执行）；focused 证据来自 prewarm/composer/attachment 测试与 `v4-agent-kernel`、原生冷恢复测试。每项采用目录、执行、绑定三层证据，不用 UI 文案代替 Runtime。
+
+| ID | 覆盖状态 | 自动化 | 备注 |
+| --- | --- | --- | --- |
+| AK01 | pending | AK + focused | 右下角选择、设置入口移除；真实 v4 首发进入 SDK；ZCode / Claude accepted 后均清空已提交正文，重复同文回调不改 revision，真实新草稿与失败恢复由 focused 覆盖 |
+| AK02 | covered | focused | 在飞旧创建回收、显式内核 ACK 确认和预热换代 |
+| AK03 | pending | AK + focused | 空闲新建，正文/附件保留和重绑定；即时持久化 |
+| AK04 | pending | AK | 运行时禁用，不创建新会话 |
+| AK05 | covered | focused | SDK 冷恢复绑定和 ID；草稿/snapshot 缺省 ZCode |
+| AK06 | covered | focused | workspace identity 隔离及两种 v4 delivery 的 SDK 执行 |
+| AK07 | covered | focused | 旧 Agent 未确认 Claude 拒绝绑定，SDK 错误不换内核 |
+
+2026-10-15 发送后正文清理增量：117 项相关单测通过，包含两种内核的相同正文回调去重、
+真实新编辑（包括改回原文）保护、失败恢复、草稿 promotion 与附件/预热回归。
+`conversation-session-agent-kernel.test.ts` 3/3 桌面场景通过，新增硬断言确认 ZCode 和真实
+随包 Claude SDK 首发 accepted 后编辑器正文为空；保留原有换内核、草稿附件移交和运行中禁用。
+本轮执行证据位于 `packages/desktop/.e2e-artifacts/desktop-e2e-20261015030424995-p85238-9f2bb983d37acf8a/`。
+根目录 typecheck、lint（63 warnings / 0 errors）、架构检查及 CLI core/bootstrap typecheck 通过。
+此为本轮局部回归证据，不替代目录的完整 formal promotion 流程。
+
 ## J. 多 Session 并发
 
 | ID  | 覆盖状态 | 自动化 | 备注                                                                                                                                                                                                            |

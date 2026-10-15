@@ -490,6 +490,53 @@ describe("useComposerAttachments eager upload", () => {
     act(() => root.unmount());
   });
 
+  it("内核选择导致预热 session 更换时，远端附件重新上传并拒绝旧会话 ref", async () => {
+    const transfer = createTransferService();
+    mocks.service = transfer.service;
+    transfer.stage.mockImplementation(async (request) => resultFor(request.operationId));
+    const { rerender, root } = renderProbe({
+      attachmentSessionId: "draft-zcode",
+      scopeId: "kernel-draft",
+    });
+    await addPaths(["/tmp/kernel.png"]);
+    await vi.waitFor(() => expect(latestApi?.attachments[0]?.uploadStatus).toBe("ready"));
+    const original = latestApi!.attachments[0]!;
+    rerender({ attachmentSessionId: null, scopeId: "kernel-draft" });
+    expect(latestApi?.attachments[0]?.uploadStatus).toBe("waitingSession");
+    expect(await latestApi?.prepareForSend()).toBeNull();
+    rerender({ attachmentSessionId: "draft-claude", scopeId: "kernel-draft" });
+    await vi.waitFor(() => expect(latestApi?.attachments[0]?.uploadStatus).toBe("ready"));
+    expect(transfer.stage).toHaveBeenCalledTimes(2);
+    expect(transfer.stage.mock.calls.map(([request]) => request.sessionId)).toEqual([
+      "draft-zcode",
+      "draft-claude",
+    ]);
+    expect(latestApi?.attachments[0]?.operationId).not.toBe(original.operationId);
+    expect(latestApi?.attachments[0]?.attachmentRef?.ref).not.toBe(original.attachmentRef?.ref);
+    expect(latestApi?.attachments[0]?.runtimeRebuildRetryCount).toBe(0);
+    act(() => root.unmount());
+  });
+
+  it("更换内核时移动本地文件草稿保持文件和零拷贝 ref，原 scope 为空", async () => {
+    const transfer = createTransferService();
+    mocks.service = transfer.service;
+    const { rerender, root } = renderProbe({
+      attachmentSessionId: "old",
+      localDesktop: true,
+      scopeId: "old",
+    });
+    await addPaths(["/tmp/draft-kernel.txt"]);
+    const original = latestApi!.attachments[0]!;
+    act(() => {
+      expect(latestApi?.moveToScope("new")).toBe(true);
+    });
+    expect(latestApi?.attachments).toHaveLength(0);
+    rerender({ attachmentSessionId: "new", localDesktop: true, scopeId: "new" });
+    expect(latestApi?.attachments[0]).toEqual(original);
+    expect(transfer.stage).not.toHaveBeenCalled();
+    act(() => root.unmount());
+  });
+
   it("session 尚未预热时停在 waitingSession，session ready 后再进入上传", async () => {
     const transfer = createTransferService();
     mocks.service = transfer.service;

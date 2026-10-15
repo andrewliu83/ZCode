@@ -1,4 +1,5 @@
 import type { AiSdkModelAdapter } from "@zcode/adapters/model";
+import type { ClaudeSdkConnection } from "@zcode/adapters/agent-kernel";
 import type { Model } from "@zcode/contracts";
 import type { AgentRuntimeDeps } from "@zcode/core";
 import {
@@ -53,6 +54,48 @@ export class ApiProviderModelRuntime {
     return this.#createRegistryModel(provider, registryModel, target);
   };
 
+  readonly requiresClaudeModelGateway = (selection: ModelSelection | undefined): boolean => {
+    if (!this.#started || !selection)
+      throw new Error("Select a model connection before using the Claude engine");
+    const validation = this.#registry.validateSelection(selection);
+    if (!validation.ok) throw createRegistrySelectionProtocolError(validation);
+    const provider = this.#registry.getProvider(selection.providerId);
+    return (
+      provider?.config.api?.type !== "anthropic-messages" ||
+      provider.config.access.type === "zhipu-account"
+    );
+  };
+
+  readonly claudeSdkConnection = (selection: ModelSelection | undefined): ClaudeSdkConnection => {
+    if (!this.#started || !selection)
+      throw new Error("Select a model connection before using the Claude SDK engine");
+    const validation = this.#registry.validateSelection(selection);
+    if (!validation.ok) throw createRegistrySelectionProtocolError(validation);
+    const provider = this.#registry.getProvider(selection.providerId);
+    const model = this.#registry.getModel(selection.providerId, selection.modelId);
+    if (!provider || !model) throw new Error("Native SDK model registry selection is unavailable");
+    const api = provider.config.api;
+    const access = provider.config.access;
+    if (
+      api?.type !== "anthropic-messages" ||
+      !access ||
+      access.type === "zhipu-account" ||
+      !access.apiKey
+    ) {
+      throw new Error(
+        "Claude Agent SDK requires an Anthropic-compatible API key connection configured in ZCode",
+      );
+    }
+    // SDK 使用 API 根路径；Vercel Anthropic adapter 的配置入口包含 /v1。
+    const baseUrl = api.baseUrl?.replace(/\/v1\/?$/u, "");
+    return {
+      model: model.modelId,
+      apiKey: access.apiKey,
+      baseUrl,
+      headers: api.headers ? { ...api.headers } : undefined,
+    };
+  };
+
   start(): void {
     if (this.#started) return;
     this.#started = true;
@@ -81,8 +124,7 @@ export class ApiProviderModelRuntime {
       // 门禁一一对应：漏掉 highspeed 会在这里丢掉 source，导致 runner 端 requestAuth 缺失、
       // 本轮在发送前抛 model_request_auth_missing。
       ...(provider.config.access.type === "zhipu-account" &&
-      (provider.config.access.mode === "off-peak" ||
-        provider.config.access.mode === "highspeed")
+      (provider.config.access.mode === "off-peak" || provider.config.access.mode === "highspeed")
         ? {
             requestDependencies: {
               requestAuth: {

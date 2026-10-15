@@ -240,6 +240,8 @@ function hookExecutionDisplayName(
  * 触碰」的字段——日志重放值永远优先（"最终值以日志为准"）。
  */
 export interface SessionConfigSeed {
+  agentKernel?: import("@zcode/shared").AgentKernelId;
+  availableAgentKernels?: readonly import("@zcode/shared").AgentKernelDescriptor[];
   permissionGrant?: { interactionId: string };
   planEnabled?: boolean;
   modelSelection?: ModelSelectedPayload["modelSelection"];
@@ -579,6 +581,20 @@ export class ProductProjection {
   seedConfig(seed: SessionConfigSeed): void {
     const config = { ...this.snapshot.config };
     let changed = false;
+    // 内核不由模型/模式事件修改，始终以实际 Runtime 的绑定作为只读事实。
+    if (seed.agentKernel !== undefined && config.agentKernel !== seed.agentKernel) {
+      config.agentKernel = seed.agentKernel;
+      changed = true;
+    }
+    if (
+      seed.availableAgentKernels &&
+      JSON.stringify(config.availableAgentKernels) !== JSON.stringify(seed.availableAgentKernels)
+    ) {
+      config.availableAgentKernels = seed.availableAgentKernels.map((descriptor) => ({
+        ...descriptor,
+      }));
+      changed = true;
+    }
     if (!config.permissionGrant && seed.permissionGrant) {
       config.permissionGrant = seed.permissionGrant;
       changed = true;

@@ -747,6 +747,44 @@ describe("createZCodeTaskIndexSyncer", () => {
     env.configEmitter.dispose();
   });
 
+  it("列表接纳已经保存的空会话，预热仍隐藏；持久化提升只广播一次", async () => {
+    const env = setupEnv({ initialSessions: [summaryOf("saved-empty", "draft")] });
+    const syncer = createZCodeTaskIndexSyncer({ agentService: env.agent, taskIndexRepo: env.repo });
+    const broadcasts: ZCodeWorkspaceEvent[] = [];
+    const subscription = syncer.onDynamicWorkspaceEvent({ workspacePath: "/repo" })((event) =>
+      broadcasts.push(event),
+    );
+    syncer.ensureSessionSubscription({ workspacePath: "/repo", sessionId: "saved-empty" });
+    await subscribed(env);
+    expect(
+      await env.repo.getTaskMeta({ workspacePath: "/repo", taskId: "saved-empty" }),
+    ).toBeNull();
+    env.indexEmitter.fire(
+      indexUpsertFrame(summaryOf("saved-empty", "draft", { persisted: true }), 2),
+    );
+    await vi.waitFor(async () =>
+      expect(
+        await env.repo.getTaskMeta({ workspacePath: "/repo", taskId: "saved-empty" }),
+      ).not.toBeNull(),
+    );
+    env.indexEmitter.fire(
+      indexUpsertFrame(
+        summaryOf("saved-empty", "draft", { persisted: true, lastActivityAt: 200 }),
+        3,
+      ),
+    );
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(
+      broadcasts.filter(
+        (event) => event.type === "workspace_task_list_changed" && event.reason === "task_created",
+      ),
+    ).toHaveLength(1);
+    subscription.dispose();
+    syncer.disposeAll();
+    env.indexEmitter.dispose();
+    env.configEmitter.dispose();
+  });
+
   it("silently seeds missing rows from the first sessions-index snapshot and skips drafts", async () => {
     const env = setupEnv({
       initialSessions: [summaryOf("sess_history", "completedSuccess", { title: "历史会话" })],

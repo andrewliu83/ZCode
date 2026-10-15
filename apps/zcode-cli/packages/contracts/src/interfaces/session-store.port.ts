@@ -1093,6 +1093,8 @@ export interface LocalSettingStorePort {
 }
 
 export interface SessionStorePort {
+  /** 从成功完成的 Skill 工具历史派生，不维护另一份调用计数。 */
+  getSkillInvocationCounts?(): Promise<Record<string, number>>;
   createSession(input: CreateSessionInput): Promise<SessionInfo>;
   /** legacy 兼容原语；V4 stable/compact-edit fork 禁止调用，统一走 commitForkBundle。 */
   createForkedSessionWithMetadata?(

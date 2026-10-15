@@ -54,6 +54,8 @@ describe("系统提示词设置 E2E", () => {
     await rule.waitForDisplayed({ timeout });
     expect(await rule.getAttribute("readonly")).not.toBeNull();
     expect(await rule.getValue()).toContain("choosing-a-workflow");
+    expect(await rule.getValue()).toContain("Specs are this project's ground truth.");
+    expect(await rule.getValue()).toContain("spec_graph");
     const sourceBefore = await rule.getValue();
     await editor.waitForEnabled({ timeout });
     await setInputValueByTestIdDom("settings-system-prompt-editor", "CUSTOM E2E BASE PROMPT", {
@@ -101,5 +103,75 @@ describe("系统提示词设置 E2E", () => {
       async () => !(await $('[data-prompt-source="thinkrail"]').isExisting()),
       { timeout },
     );
+  });
+
+  it("各内核正文独立保存、恢复默认和跨窗口更新，ThinkRail 保持只读", async function () {
+    this.timeout(150_000);
+    await prepareV4ConversationE2E({ skipProvider: true });
+    await clickTestIdByDom(TID_TASK_SETTINGS_BUTTON);
+    await $(sel(TID_SETTINGS_PAGE)).waitForDisplayed({ timeout });
+    await clickTestIdByDom(testId(TID_SETTINGS_SECTION_NAV, "general"));
+    const thinkrail = $(sel(TID_SETTINGS_THINKRAIL_ENABLED_SWITCH));
+    if ((await thinkrail.getAttribute("aria-checked")) !== "true")
+      await clickTestIdByDom(TID_SETTINGS_THINKRAIL_ENABLED_SWITCH);
+    await clickTestIdByDom(testId(TID_SETTINGS_SECTION_NAV, "systemPrompt"));
+    const editor = $('[data-testid="settings-system-prompt-editor"]');
+    const selectKernel = async (id: string) => {
+      await clickTestIdByDom("settings-system-prompt-kernel");
+      await clickTestIdByDom(`settings-system-prompt-kernel-${id}`);
+      await browser.waitUntil(
+        async () =>
+          (await $('[data-prompt-source="base_prompt"]').getAttribute("data-native-kernel")) === id,
+        { timeout },
+      );
+    };
+    await editor.waitForDisplayed({ timeout });
+    await browser.waitUntil(async () => (await editor.getValue()).length > 0, { timeout });
+    const originalZCode = await editor.getValue();
+    await selectKernel("claude");
+    expect(await editor.getValue()).toBe("");
+    await setInputValueByTestIdDom("settings-system-prompt-editor", "CLAUDE KERNEL ONLY", {
+      timeout,
+    });
+    await clickTestIdByDom("settings-system-prompt-save");
+    const path = join(getE2EAppDataPaths().appDataDir, "setting.json");
+    await browser.waitUntil(
+      async () =>
+        ((await readSettings(path)).kernelSystemPrompts as Record<string, string>)?.claude ===
+        "CLAUDE KERNEL ONLY",
+      { timeout },
+    );
+    const rule = $('[data-prompt-source="thinkrail"] textarea');
+    expect(await rule.getAttribute("readonly")).not.toBeNull();
+    expect(await rule.getValue()).toContain("thinkrail:choosing-a-workflow");
+    expect(await rule.getValue()).toContain("Specs are this project's ground truth.");
+    expect(await rule.getValue()).toContain("mcp__zcode_thinkrail__spec_graph");
+    await selectKernel("zcode");
+    expect(await editor.getValue()).toBe(originalZCode);
+    await selectKernel("claude");
+    expect(await editor.getValue()).toBe("CLAUDE KERNEL ONLY");
+    const current = await readSettings(path);
+    await writeFile(
+      path,
+      JSON.stringify({
+        ...current,
+        kernelSystemPrompts: {
+          ...(current.kernelSystemPrompts as Record<string, string>),
+          claude: "EXTERNAL CLAUDE ONLY",
+        },
+      }),
+    );
+    await browser.electron.execute((electron, channel) => {
+      for (const window of electron.BrowserWindow.getAllWindows())
+        if (!window.isDestroyed()) window.webContents.send(channel);
+    }, PlatformChannels.SettingsChanged);
+    await browser.waitUntil(async () => (await editor.getValue()) === "EXTERNAL CLAUDE ONLY", {
+      timeout,
+    });
+    await clickTestIdByDom("settings-system-prompt-restore");
+    await browser.waitUntil(async () => !(await editor.getValue()), { timeout });
+    expect(await rule.getAttribute("readonly")).not.toBeNull();
+    await selectKernel("zcode");
+    expect(await editor.getValue()).toBe(originalZCode);
   });
 });

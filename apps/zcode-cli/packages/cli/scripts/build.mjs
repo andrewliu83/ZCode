@@ -120,6 +120,16 @@ export const readRootPackageVersion = async ({ root = projectRoot } = {}) => {
   return packageJson.version;
 };
 
+// SDK 的 ESM 依赖会调用 createRequire(import.meta.url)。CJS/SEA 内联时 esbuild 默认
+// 把 import.meta 置空，导致只在真实发行形态下创建 Claude 失败；统一使用运行中 bundle 的
+// 文件 URL。可执行资源仍由 sdkRuntimePath/SEA 提供，不依赖源仓库目录或用户 PATH。
+export const resolveCjsModuleMetadata = () => ({
+  banner: {
+    js: '#!/usr/bin/env node\nvar __zcode_bundle_file_url = require("node:url").pathToFileURL(__filename).href;',
+  },
+  define: { "import.meta.url": "__zcode_bundle_file_url" },
+});
+
 export const resolveBuildOptions = (args = [], env = process.env) => {
   const desktopAgent = args.includes(desktopAgentBuildFlag);
   const e2eCoverage = env.ZCODE_E2E_COVERAGE === "1";
@@ -228,12 +238,12 @@ export const buildCli = async ({
     env,
   });
 
+  const moduleMetadata = resolveCjsModuleMetadata();
   await build({
-    banner: {
-      js: "#!/usr/bin/env node",
-    },
+    ...moduleMetadata,
     bundle: true,
     define: {
+      ...moduleMetadata.define,
       __CLI_VERSION__: JSON.stringify(cliVersion),
     },
     entryPoints: [resolve(cliDirectory, "src/main.ts")],

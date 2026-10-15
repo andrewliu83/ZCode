@@ -144,7 +144,15 @@ export function resolveAppRuntimeConfig(input: {
       workingDirectory: userInstructions.workingDirectory ?? workingDirectory,
     },
     skillMetadataBudget:
-      options.runtimeConfig?.skillMetadataBudget ?? configResult.config.skills.metadataBudget,
+      options.runtimeConfig?.skillMetadataBudget ??
+      configResult.config.skills.metadataBudget ??
+      parseSkillListingCharacterBudget(options.env?.SLASH_COMMAND_TOOL_CHAR_BUDGET),
+    skillListingBudgetFraction:
+      options.runtimeConfig?.skillListingBudgetFraction ??
+      configResult.config.skills.skillListingBudgetFraction,
+    skillListingMaxDescChars:
+      options.runtimeConfig?.skillListingMaxDescChars ??
+      configResult.config.skills.skillListingMaxDescChars,
     toolConcurrency: {
       maxConcurrency:
         options.runtimeConfig?.toolConcurrency?.maxConcurrency ??
@@ -268,6 +276,14 @@ function mergeRuntimeHooks(
     maxOutputBytes: base?.maxOutputBytes ?? 32768,
     timeoutMs: base?.timeoutMs ?? 60000,
   };
+}
+
+function parseSkillListingCharacterBudget(value: string | undefined): number | undefined {
+  if (value === undefined || value.trim() === "") return undefined;
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 0)
+    throw new Error("SLASH_COMMAND_TOOL_CHAR_BUDGET must be a nonnegative integer");
+  return parsed;
 }
 
 export function runtimeConfigLogContext(

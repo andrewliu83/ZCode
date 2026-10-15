@@ -24,6 +24,9 @@ it("开关控制设置和 @ 目录中的五个共享只读预设，同名用户�
   try {
     for (const mode of ["settingsUserOnly", "allRuntimeScopes"] as const) {
       const { agents } = await service.list({ workspacePath, mode });
+      // 内置探索实体应唯一，旧 explorer 名只用于调用兼容。
+      expect(agents.filter(agent => agent.name === "Explore" && agent.source === "built-in")).toHaveLength(1);
+      expect(agents.some(agent => agent.name === "explorer" && agent.source === "built-in")).toBe(false);
       for (const preset of createThinkrailAgentProfiles()) {
         expect(agents).toContainEqual(
           expect.objectContaining({

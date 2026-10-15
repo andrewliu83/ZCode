@@ -1,7 +1,7 @@
 /* eslint-disable max-lines -- desktop runtime/env 解析需要集中维护 main/host/remote assets 的启动边界，拆分会扩大远程连接回归面。 */
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join, resolve, win32 } from "node:path";
+import { dirname, join, resolve, win32 } from "node:path";
 import type { ConnectOptions } from "@zcode/server/remote";
 import { listSSHConfigAliasesFromLocalConfig } from "@zcode/services/node";
 import { DEV_HELPER_APP_NAME, HELPER_APP_NAME } from "@zcode/zcode-cua/broker/helperConstants";
@@ -353,8 +353,11 @@ export function resolveRemoteAssetDirs(
 }
 
 function resolveBundledZCodeAgentBinaryPath(): string | undefined {
+  return resolveBundledAgentAssetPath(ZCODE_AGENT_RUNTIME.resolveEntrySegments(process.platform));
+}
+
+function resolveBundledAgentAssetPath(entrySegments: string[]): string | undefined {
   const runtime = ZCODE_AGENT_RUNTIME;
-  const entrySegments = runtime.resolveEntrySegments(process.platform);
   const platformKey = resolvePlatformKeyForPackagedApp();
   const candidates = [
     isElectronAppPackaged()
@@ -555,6 +558,12 @@ export function buildHostProcessEnv(hostProcessLocalEnv: Record<string, string>)
   // 三层里有两层不写这个键，空对象无法覆盖 inheritedEnv，所以先无条件删掉继承值再按决策 spread 回去。
   // 少了这一行，production 包和 dev 的非法取值都会原样穿透到 Host。
   delete inheritedEnv[ZCODE_DYNAMIC_WORKFLOW_MODE_ENV];
+  // SDK 资源与纯 JS Agent 同目录，不能以存在原生 zcode-agent 二进制作为判断依据。
+  delete inheritedEnv.ZCODE_CLAUDE_SDK_RUNTIME_PATH;
+  const sdkRuntimePath = resolveBundledAgentAssetPath([
+    "claude-sdk",
+    process.platform === "win32" ? "claude.exe" : "claude",
+  ]);
 
   return {
     ...inheritedEnv,
@@ -584,6 +593,8 @@ export function buildHostProcessEnv(hostProcessLocalEnv: Record<string, string>)
       ? { [ZCODE_CUA_BUNDLED_HELPER_APP_PATH_ENV]: bundledCuaHelperAppPath }
       : {}),
     ...(resolvedGlmBinaryPath ? { GLM_BINARY_PATH: resolvedGlmBinaryPath } : {}),
+    // 修复依据：Electron utilityProcess.fork 拒绝 env 中的 undefined；缺失资源只在选择 SDK 时报告。
+    ...(sdkRuntimePath ? { ZCODE_CLAUDE_SDK_RUNTIME_PATH: sdkRuntimePath } : {}),
     ...(resolvedLarkCliBinaryPath ? { ZCODE_LARK_CLI_BINARY: resolvedLarkCliBinaryPath } : {}),
   };
 }

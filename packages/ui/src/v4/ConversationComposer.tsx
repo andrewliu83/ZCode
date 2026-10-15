@@ -95,6 +95,8 @@ import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { advanceComposerDraftRevision } from "@/v4/composer/composerDraftRevision.js";
 import type { AppSlashCommand } from "@/slashCommandHelpers.js";
 import { useOptionalServices } from "@/hooks/useServices.js";
+import { toast } from "@/components/ui/toast.js";
+import { AgentKernelSelect } from "@/v4/composer/AgentKernelSelect.js";
 import { logger } from "@/logger.js";
 import { runUserAction, startUserAction } from "@/lib/userActionTelemetry.js";
 import { useZCodeSessionStore } from "@/store/zcodeSessionStore.js";
@@ -454,6 +456,8 @@ export interface ConversationComposerProps {
   /** 选中思考深度；同时带上用户操作时看到的模型，避免异步回流后把 thought 归到另一模型。 */
   onSelectThought: (thought: string, modelContext: { provider: string; model: string }) => void;
   onSwitchMode: (mode: string) => void;
+  onSelectAgentKernel?: (kernel: import("@zcode/shared").AgentKernelId) => Promise<string | null>;
+  onAgentKernelSessionCreated?: (sessionId: string) => void;
   /** 打开当前 session 的 Status panel，并直达 Running 明细。 */
   onOpenRunningBackgroundWorks?: () => void;
   /**
@@ -521,7 +525,7 @@ function ConversationComposerImpl({
   contextHeader,
   centered = false,
   blockingRequestId = null,
-  disabled = false,
+  disabled: disabledProp = false,
   highspeedCard = null,
   highspeedActivationCardId = null,
   onHighspeedActivationApplied,
@@ -547,6 +551,8 @@ function ConversationComposerImpl({
   onSelectModel,
   onSelectThought,
   onSwitchMode,
+  onSelectAgentKernel,
+  onAgentKernelSessionCreated,
   onOpenRunningBackgroundWorks,
   backgroundWorkOpenTarget = "panel",
   runningSubagentCount = 0,
@@ -566,6 +572,8 @@ function ConversationComposerImpl({
   appSlashCommands,
   onDropTargetControllerChange,
 }: ConversationComposerProps) {
+  const [kernelSwitching, setKernelSwitching] = useState(false);
+  const disabled = disabledProp || kernelSwitching;
   const { intl, locale } = useZCodeIntl();
   const services = useOptionalServices();
   const conversationTelemetry = useScopedConversationTelemetrySupervisor({
@@ -645,6 +653,9 @@ function ConversationComposerImpl({
     requestedDelivery?: "startNow" | "queue" | "guide";
   } | null>(null);
   const [sendTooltipOpen, setSendTooltipOpen] = useState(false);
+  const kernelSwitchPendingRef = useRef(false);
+  const kernelSwitchScopeRef = useRef(configPickerScopeKey);
+  kernelSwitchScopeRef.current = configPickerScopeKey;
   // submit 经 ref 读取最新文本/pending，避免回调随每次输入变更引用。
   const textRef = useRef("");
   const contentRevisionRef = useRef(0);
@@ -680,11 +691,14 @@ function ConversationComposerImpl({
   const sendShortcut = resolveChatEnterShortcut({ enterSubmits });
   const updateText = useCallback(
     (next: string) => {
+      // 同文的延迟编辑器回调不是新草稿；按回调次数推进会让 accepted ACK 跳过清空。
+      if (next === textRef.current) return false;
       textRef.current = next;
       contentRevisionRef.current += 1;
       advanceComposerDraftRevision(workspacePath, workspaceIdentity);
       setText(next);
       onTextChange?.(next);
+      return true;
     },
     [onTextChange, workspaceIdentity, workspacePath],
   );
@@ -1264,6 +1278,7 @@ function ConversationComposerImpl({
           !hasPendingPluginUiContexts &&
           !submittedShareContext) ||
         pendingRef.current ||
+        kernelSwitchPendingRef.current ||
         !submissionReady ||
         (createSubmissionFromComposer !== undefined && submission === null) ||
         attachmentsApi.hasUnreadyAttachments
@@ -1577,8 +1592,8 @@ function ConversationComposerImpl({
   // Lexical onChange（首字符也稳定回传，见 LexicalChatInput.TextContentPlugin）。
   const handleEditorChange = useCallback(
     (value: string) => {
+      if (!updateText(value)) return;
       conversationTelemetry?.recordComposerTextChange(value);
-      updateText(value);
       // 正文先进入与 mode/model 相同的内存 Draft；防抖只负责补充最新 Lexical JSON。
       updateComposerContent({ text: value });
       scheduleDraftPersist();
@@ -2158,6 +2173,72 @@ function ConversationComposerImpl({
       }),
     [onSelectModel],
   );
+  const kernelBindingKnown = !sessionId || snapshot?.sessionId === sessionId;
+  const selectedAgentKernel = sessionId
+    ? (snapshot?.config.agentKernel ?? "zcode")
+    : (draftConfig?.agentKernel ?? "zcode");
+  const hasSessionOwnedAttachments = attachmentsApi.attachments.some(
+    (item) => item.referenceOwnership === "session",
+  );
+  const kernelBusy = Boolean(
+    canStop ||
+    snapshot?.queue.items.length ||
+    snapshot?.pendingInteractions.some(
+      (interaction) => interaction.payload.kind !== "workspaceHookReview",
+    ),
+  );
+  const handleSelectAgentKernel = useCallback(
+    async (kernel: import("@zcode/shared").AgentKernelId) => {
+      if (
+        !onSelectAgentKernel ||
+        disabled ||
+        pendingRef.current ||
+        kernelSwitchPendingRef.current ||
+        kernelBusy ||
+        hasSessionOwnedAttachments ||
+        kernel === selectedAgentKernel
+      )
+        return;
+      const originScope = kernelSwitchScopeRef.current;
+      kernelSwitchPendingRef.current = true;
+      setKernelSwitching(true);
+      persistDraftNow(draftScopeRef.current);
+      try {
+        const newSessionId = await onSelectAgentKernel(kernel);
+        if (!newSessionId || kernelSwitchScopeRef.current !== originScope) return;
+        if (!attachmentsApi.moveToScope(newSessionId))
+          throw new Error(intl.formatMessage({ id: "chat.agentKernel.sessionAttachment" }));
+        // 移交成功后才清来源草稿并导航；失败时原正文、附件和会话完整保留。
+        inputApiRef.current?.setText("");
+        updateText("");
+        persistDraftNow(draftScopeRef.current);
+        onAgentKernelSessionCreated?.(newSessionId);
+      } catch (error) {
+        toast(
+          intl.formatMessage(
+            { id: "chat.agentKernel.switchError" },
+            { error: error instanceof Error ? error.message : String(error) },
+          ),
+        );
+      } finally {
+        kernelSwitchPendingRef.current = false;
+        setKernelSwitching(false);
+      }
+    },
+    [
+      onSelectAgentKernel,
+      onAgentKernelSessionCreated,
+      disabled,
+      kernelBusy,
+      hasSessionOwnedAttachments,
+      selectedAgentKernel,
+      persistDraftNow,
+      attachmentsApi.moveToScope,
+      updateText,
+      intl,
+    ],
+  );
+
   const submitControlNode = useMemo(
     () => (
       <div className="flex min-w-0 items-center gap-1">
@@ -2192,6 +2273,31 @@ function ConversationComposerImpl({
             onSendCompressionCommand={onSendCompressionCommand}
           />
         </span>
+        <AgentKernelSelect
+          value={selectedAgentKernel}
+          kernels={snapshot?.config.availableAgentKernels}
+          existingSession={Boolean(sessionId)}
+          loading={!kernelBindingKnown}
+          disabled={
+            disabled ||
+            !kernelBindingKnown ||
+            pending ||
+            kernelSwitching ||
+            kernelBusy ||
+            hasSessionOwnedAttachments ||
+            !onSelectAgentKernel
+          }
+          disabledReason={
+            hasSessionOwnedAttachments
+              ? intl.formatMessage({ id: "chat.agentKernel.sessionAttachment" })
+              : kernelBusy
+                ? intl.formatMessage({ id: "chat.agentKernel.busy" })
+                : undefined
+          }
+          open={activeConfigPicker === "agentKernel"}
+          onOpenChange={(open) => handleConfigPickerOpenChange("agentKernel", open)}
+          onSelect={handleSelectAgentKernel}
+        />
         {showStopControl ? (
           <ControlHintTooltip title={stopTooltipTitle} shortcut="Esc">
             <Button
@@ -2216,7 +2322,7 @@ function ConversationComposerImpl({
             <Button
               type="submit"
               size="icon-md"
-              disabled={!canSend}
+              disabled={!canSend || kernelSwitching}
               onClick={handleSendButtonClick}
               data-testid={TID_V4_COMPOSER_SEND}
               aria-label={resolvedSendTooltipTitle}
@@ -2230,6 +2336,15 @@ function ConversationComposerImpl({
       </div>
     ),
     [
+      handleSelectAgentKernel,
+      snapshot?.config.availableAgentKernels,
+      selectedAgentKernel,
+      kernelBindingKnown,
+      kernelSwitching,
+      kernelBusy,
+      hasSessionOwnedAttachments,
+      onSelectAgentKernel,
+      intl,
       canSend,
       activeConfigPicker,
       composerPhase,
@@ -2403,7 +2518,7 @@ function ConversationComposerImpl({
           taskId={sessionId}
           skillCatalogSessionId={skillCatalogSessionId}
           placeholder={placeholder}
-          disabled={disabled || mode === "reject"}
+          disabled={disabled || kernelSwitching || mode === "reject"}
           submitting={pending}
           submitDisabled={pending || !routingAllowsSend || !attachmentsReady || !submissionReady}
           allowSubmitWhenEmpty={

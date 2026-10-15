@@ -138,6 +138,7 @@ import {
   buildDraftCreateConfigPayload,
   useDraftConfigControl,
 } from "@/v4/composer/useDraftConfigControl.js";
+import { persistV4ComposerDraft } from "@/v4/composer/composerDraftStore.js";
 import type { ModelSelectionSource } from "@/v4/composer/V4ComposerToolbar.js";
 import { formatModelChangeLabel } from "@/v4/composer/modelTriggerDisplay.js";
 import { resolveAppFollowupMode } from "@/v4/composer/followupModeSettings.js";
@@ -1677,6 +1678,8 @@ export function SessionPane({
   // Composer 保存下一次 Submission 的 renderer intent；prewarm session 仅承载草稿预热。
   const {
     composerDraft,
+    getComposerDraft,
+    handleDraftSelectAgentKernel,
     modelSelectionRead,
     draftConfig,
     draftConfigRef,
@@ -2823,10 +2826,88 @@ export function SessionPane({
     ],
   );
 
+  const handleSelectAgentKernel = useCallback(
+    async (kernel: import("@zcode/shared").AgentKernelId): Promise<string | null> => {
+      const origin = { ...composerBindingRef.current };
+      const currentSnapshot = snapshotRef.current;
+      const currentKernel = sessionId
+        ? (currentSnapshot?.config.agentKernel ?? "zcode")
+        : (draftConfigRef.current.agentKernel ?? "zcode");
+      if (kernel === currentKernel) return null;
+      if (sessionId === null) {
+        handleDraftSelectAgentKernel(kernel);
+        return null;
+      }
+      if (
+        !currentSnapshot ||
+        currentSnapshot.sessionId !== sessionId ||
+        currentSnapshot.control.canStop ||
+        currentSnapshot.queue.items.length ||
+        currentSnapshot.pendingInteractions.length
+      ) {
+        throw new Error(intl.formatMessage({ id: "chat.agentKernel.busy" }));
+      }
+      // 内核不能在已有历史上原地替换；新 record 接收显式选择，原 transcript/SDK ID 不动。
+      const currentDraft = getComposerDraft();
+      const createAck = await dispatchCommand(
+        "createSession",
+        {
+          workspaceId: workspaceKey,
+          persistence: "immediate",
+          ...buildDraftCreateConfigPayload(
+            { ...draftConfigRef.current, agentKernel: kernel },
+            appFollowupMode,
+          ),
+        },
+        null,
+      );
+      if (createAck.status !== "accepted" || createAck.result?.type !== "createSession") {
+        throw new Error(createAck.reasonCode ?? "createSession failed");
+      }
+      if (kernel !== "zcode" && createAck.result.agentKernel !== kernel) {
+        throw new Error(
+          "The target Agent did not confirm the selected kernel; update the target Agent",
+        );
+      }
+      if (
+        composerBindingRef.current.workspaceKey !== origin.workspaceKey ||
+        composerBindingRef.current.sessionId !== origin.sessionId
+      )
+        return null;
+      const createdSessionId = createAck.result.sessionId;
+      const saved = persistV4ComposerDraft(workspacePath, workspaceIdentity, createdSessionId, {
+        ...currentDraft,
+        agentKernel: kernel,
+      });
+      if (!saved) throw new Error("Could not preserve the composer draft");
+      return createdSessionId;
+    },
+    [
+      sessionId,
+      workspaceKey,
+      workspacePath,
+      workspaceIdentity,
+      draftConfigRef,
+      getComposerDraft,
+      handleDraftSelectAgentKernel,
+      dispatchCommand,
+      appFollowupMode,
+      intl,
+    ],
+  );
+
+  const handleAgentKernelSessionCreated = useCallback(
+    (createdSessionId: string) => {
+      onSessionCreated?.(createdSessionId);
+    },
+    [onSessionCreated],
+  );
+
   // ── 草稿态 v4 draft session 预热（m5）──
   // pane 未绑定会话时后台建 phase=draft 会话作预热载体：配置写 CAS 直达、首发复用。
   // 对外绑定语义不变（shell activeTaskId 仍 null），预热会话只是 pane 内部 effective 订阅目标。
   const { binding: prewarmBinding } = useDraftSessionPrewarm({
+    agentKernel: draftConfig.agentKernel ?? "zcode",
     enabled: sessionId === null && draftAgentStartupAllowed,
     workspaceKey,
     paneId,
@@ -2953,14 +3034,20 @@ export function SessionPane({
 
   // 预热会话订阅失败（CLI 重启内存会话消失等）→ 丢弃回落无预热路径，不进错误 UI。
   useEffect(() => {
-    if (sessionId === null && prewarmBinding && state.status === "error") {
-      logger.warn("[v4-draft-prewarm] 预热会话订阅失败，丢弃回落", {
+    if (
+      sessionId === null &&
+      prewarmBinding &&
+      lease?.sessionId === prewarmBinding.sessionId &&
+      state.status === "error"
+    ) {
+      // 旧预热关闭后的错误可能与新 ACK 同轮渲染；只能丢弃当前 lease 对应的预热 owner。
+      logger.lifecycle.warn("[v4-draft-prewarm] 预热会话订阅失败，丢弃回落", {
         prewarmSessionId: prewarmBinding.sessionId,
         lastError: state.lastError ?? null,
       });
       prewarmBinding.discard();
     }
-  }, [prewarmBinding, sessionId, state.lastError, state.status]);
+  }, [lease?.sessionId, prewarmBinding, sessionId, state.lastError, state.status]);
 
   useEffect(() => {
     if (
@@ -3417,7 +3504,11 @@ export function SessionPane({
           }
         }
         const draftConfigPayload = buildDraftCreateConfigPayload(
-          { ...draftConfigRef.current, modelSelection: submission.modelSelection },
+          {
+            ...draftConfigRef.current,
+            agentKernel: submission.agentKernel ?? "zcode",
+            modelSelection: submission.modelSelection,
+          },
           appFollowupMode,
         );
         const createAck = await dispatchSubmissionCommand(
@@ -3433,6 +3524,14 @@ export function SessionPane({
           throw new Error("createSession 缺少 sessionId");
         }
         const newSessionId = createResult.sessionId;
+        if (
+          submission.agentKernel &&
+          submission.agentKernel !== "zcode" &&
+          createResult.agentKernel !== submission.agentKernel
+        )
+          throw new Error(
+            "The target Agent did not confirm the selected kernel; update the target Agent",
+          );
         handleDraftSessionCreated(newSessionId, groupedDraftTaskAtSend, createSourceAtSend);
         await dispatchSlashCommand(
           draftSlashCommand,
@@ -3515,7 +3614,11 @@ export function SessionPane({
         // fallback 有 prewarm 投影时必须以 Agent 当前配置为 base；只有从未拿到投影
         // 才使用冻结的初始化元组。否则 provider fallback 后会把 localStorage 旧模型重新写回。
         const draftConfigPayload = buildDraftCreateConfigPayload(
-          { ...draftConfigRef.current, modelSelection: submission.modelSelection },
+          {
+            ...draftConfigRef.current,
+            agentKernel: submission.agentKernel ?? "zcode",
+            modelSelection: submission.modelSelection,
+          },
           appFollowupMode,
         );
         // Highspeed 卡由服务端绑定 task_id，因此首发也必须先创建空 session，拿到真实
@@ -3537,6 +3640,14 @@ export function SessionPane({
           throw new Error("createSession 缺少 sessionId");
         }
         const newSessionId = createResult.sessionId;
+        if (
+          submission.agentKernel &&
+          submission.agentKernel !== "zcode" &&
+          createResult.agentKernel !== submission.agentKernel
+        )
+          throw new Error(
+            "The target Agent did not confirm the selected kernel; update the target Agent",
+          );
         const highspeed = await prepareHighspeedSendContext(
           newSessionId,
           prepareHighspeedTurn,
@@ -5228,6 +5339,8 @@ export function SessionPane({
       onSelectModel={handleSelectModel}
       onSelectThought={handleSelectThought}
       onSwitchMode={handleSwitchMode}
+      onSelectAgentKernel={selectionSideChat ? undefined : handleSelectAgentKernel}
+      onAgentKernelSessionCreated={handleAgentKernelSessionCreated}
       onOpenRunningBackgroundWorks={
         sessionId && runningBackgroundWorkCount > 0 ? handleOpenRunningBackgroundWorks : undefined
       }
@@ -5428,6 +5541,8 @@ export function SessionPane({
       <div
         data-testid={testId(TID_V4_SESSION_PANE, paneId)}
         data-session-id={sessionId ?? "draft"}
+        data-bound-session-id={snapshot?.sessionId}
+        data-bound-agent-kernel={snapshot?.config.agentKernel}
         data-initial-draft-provider={initialDraftConfigForDiagnostics?.provider ?? ""}
         data-initial-draft-model={initialDraftConfigForDiagnostics?.model ?? ""}
         data-projection-seq={snapshot?.seq ?? ""}

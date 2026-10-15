@@ -17,11 +17,14 @@ import type {
 import { resolveDefaultSkillRoots, type SkillRootResolutionOptions } from "./roots.js";
 import { scanSkillFilesUnderRoot } from "./scan.js";
 
-const MAX_DESCRIPTION_LENGTH = 1024;
+const MAX_DESCRIPTION_LENGTH = 65_536;
+// 描述的模型预算由目录构建器裁剪；发现阶段不能把 Claude 兼容长描述整项丢弃。
 const SAFE_FRONTMATTER_KEYS = new Set([
   "name",
   "description",
   "when_to_use",
+  "disable-model-invocation",
+  "user-invocable",
   "license",
   "metadata",
 ]);
@@ -40,6 +43,7 @@ export interface NodeSkillAdapterOptions extends SkillRootResolutionOptions {
   disabledPaths?: Iterable<string>;
   /** 会话能力快照 gate；发现、加载和目录使用同一判据。 */
   isSkillEnabled?: (skill: SkillMetadata) => boolean;
+  getInvocationCounts?: () => Promise<Record<string, number>>;
 }
 
 export class NodeSkillAdapter implements SkillPort {
@@ -66,6 +70,7 @@ export class NodeSkillAdapter implements SkillPort {
 
     const workingDirectory = resolve(request.workingDirectory);
     const roots = request.roots ?? (await resolveDefaultSkillRoots(workingDirectory, this.options));
+    const invocationCounts = (await this.options.getInvocationCounts?.()) ?? {};
     const diagnostics: SkillDiagnostic[] = [];
     const selected = new Map<string, SkillMetadata>();
     let totalDiscovered = 0;
@@ -89,7 +94,12 @@ export class NodeSkillAdapter implements SkillPort {
     }
 
     return {
-      skills: Array.from(selected.values()).toSorted((a, b) => a.name.localeCompare(b.name)),
+      skills: Array.from(selected.values())
+        .map((skill) => ({
+          ...skill,
+          invocationCount: invocationCounts[skill.qualifiedName ?? skill.name] ?? 0,
+        }))
+        .toSorted((a, b) => a.name.localeCompare(b.name)),
       diagnostics,
       totalDiscovered,
     };
@@ -225,6 +235,9 @@ export class NodeSkillAdapter implements SkillPort {
       name,
       description,
       whenToUse: parseScalar(parsed.values.when_to_use),
+      policy: {
+        allowImplicitInvocation: parseScalar(parsed.values["disable-model-invocation"]) !== "true",
+      },
       ...pluginAlias,
       path,
       directory: dirname(path),
@@ -233,9 +246,6 @@ export class NodeSkillAdapter implements SkillPort {
       source: root.source,
       safeToAutoLoad: parsed.keys.every((key) => SAFE_FRONTMATTER_KEYS.has(key)),
       frontmatterKeys: parsed.keys,
-      policy: {
-        allowImplicitInvocation: true,
-      },
     };
   }
 
@@ -373,10 +383,7 @@ function readBlockScalar(
     line.trim().length === 0 ? "" : line.slice(indent ?? 0),
   );
   return {
-    value:
-      style === "folded"
-        ? foldBlockScalarLines(contentLines)
-        : contentLines.join("\n").trim(),
+    value: style === "folded" ? foldBlockScalarLines(contentLines) : contentLines.join("\n").trim(),
     nextIndex: index,
   };
 }

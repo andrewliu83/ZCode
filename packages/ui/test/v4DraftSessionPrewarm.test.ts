@@ -127,17 +127,21 @@ function installMinimalDom() {
 
 function PrewarmHarness(props: {
   enabled?: boolean;
+  agentKernel?: "zcode" | "claude";
   workspaceKey: string;
   paneId?: string;
   invalidationVersion?: number;
   transportIdentity: unknown;
   dispatchCommand: ReturnType<typeof createDispatchRecorder>["dispatch"];
   resolveInitialConfig?: () => Partial<SessionConfigState>;
-  resolveInitialRuntimeModel?: Parameters<typeof useDraftSessionPrewarm>[0]["resolveInitialRuntimeModel"];
+  resolveInitialRuntimeModel?: Parameters<
+    typeof useDraftSessionPrewarm
+  >[0]["resolveInitialRuntimeModel"];
   onRender: (binding: ReturnType<typeof useDraftSessionPrewarm>["binding"]) => void;
 }) {
   const result = useDraftSessionPrewarm({
     enabled: props.enabled ?? true,
+    agentKernel: props.agentKernel,
     workspaceKey: props.workspaceKey,
     paneId: props.paneId ?? "workspace-main",
     invalidationVersion: props.invalidationVersion,
@@ -160,6 +164,98 @@ afterEach(async () => {
 });
 
 describe("startDraftSessionPrewarm", () => {
+  it("预热创建尚在飞时更改内核，先回收旧 ACK 再创建 Claude，迟到结果不会覆盖选择", async () => {
+    const host = createRoot(installMinimalDom());
+    mountedRoots.push(host);
+    const transportIdentity = {};
+    let finishOld!: (ack: CommandAck) => void;
+    const old = new Promise<CommandAck>((resolve) => {
+      finishOld = resolve;
+    });
+    const dispatch = vi.fn(
+      async (type: string, payload: Record<string, unknown>): Promise<CommandAck> => {
+        if (type !== "createSession") return NOOP_ACK;
+        return payload.agentKernel === "claude"
+          ? {
+              ...acceptedCreateAck("sdk-after-old"),
+              result: { type: "createSession", sessionId: "sdk-after-old", agentKernel: "claude" },
+            }
+          : old;
+      },
+    );
+    let binding: ReturnType<typeof useDraftSessionPrewarm>["binding"] = null;
+    const render = async (agentKernel: "zcode" | "claude") =>
+      act(async () => {
+        host.render(
+          createElement(PrewarmHarness, {
+            workspaceKey: "identity:kernel-race",
+            agentKernel,
+            transportIdentity,
+            dispatchCommand: dispatch,
+            onRender: (value) => {
+              binding = value;
+            },
+          }),
+        );
+        await flushMicrotasks();
+      });
+    await render("zcode");
+    await render("claude");
+    expect(dispatch.mock.calls.filter(([type]) => type === "createSession")).toHaveLength(1);
+    expect(binding).toBeNull();
+    await act(async () => {
+      finishOld(acceptedCreateAck("late-zcode"));
+      await flushMicrotasks();
+      await flushMicrotasks();
+    });
+    expect(dispatch).toHaveBeenCalledWith("deleteSession", {}, "late-zcode");
+    expect(dispatch.mock.calls.filter(([type]) => type === "createSession")).toHaveLength(2);
+    expect(binding).toMatchObject({ sessionId: "sdk-after-old", agentKernel: "claude" });
+  });
+
+  it("显式选择 Claude 在 createSession 顶层发送并确认实际内核，不能藏在可变 config 中", async () => {
+    const onReady = vi.fn();
+    const dispatch = vi.fn(
+      async (type: string): Promise<CommandAck> =>
+        type === "createSession"
+          ? {
+              ...acceptedCreateAck("native-1"),
+              result: { type: "createSession", sessionId: "native-1", agentKernel: "claude" },
+            }
+          : NOOP_ACK,
+    );
+    const controller = startDraftSessionPrewarm({
+      workspaceKey: "identity:native",
+      agentKernel: "claude",
+      dispatchCommand: dispatch as never,
+      resolveInitialConfig: () => ({ agentKernel: "zcode", mode: "build" }),
+      onReady,
+    });
+    await flushMicrotasks();
+    expect(dispatch).toHaveBeenCalledWith(
+      "createSession",
+      { workspaceId: "identity:native", agentKernel: "claude", config: { mode: "build" } },
+      null,
+    );
+    expect(onReady).toHaveBeenCalledWith("native-1");
+    controller.dispose();
+  });
+
+  it("旧 Agent 未确认 Claude 时拒绝绑定并回收创建结果", async () => {
+    const onReady = vi.fn();
+    const { calls, dispatch } = createDispatchRecorder();
+    const controller = startDraftSessionPrewarm({
+      workspaceKey: "/old",
+      agentKernel: "claude",
+      dispatchCommand: dispatch as never,
+      onReady,
+    });
+    await flushMicrotasks();
+    expect(onReady).not.toHaveBeenCalled();
+    expect(calls).toContainEqual({ type: "deleteSession", sessionId: "draft-1" });
+    controller.dispose();
+  });
+
   it("createSession 就绪 → onReady 上抛 sessionId", async () => {
     const { dispatch } = createDispatchRecorder();
     const onReady = vi.fn();
@@ -224,6 +320,7 @@ describe("startDraftSessionPrewarm", () => {
     expect(createPayloads).toEqual([
       {
         workspaceId: "/local/transition",
+        agentKernel: "zcode",
         config: { provider: "custom-provider", model: "custom-model" },
       },
     ]);
@@ -324,6 +421,7 @@ describe("startDraftSessionPrewarm", () => {
     const create = payloads.find((p) => p.type === "createSession");
     expect(create?.payload).toEqual({
       workspaceId: "/w",
+      agentKernel: "zcode",
       config: { provider: "glm", model: "glm-4.6" },
     });
   });
@@ -344,7 +442,7 @@ describe("startDraftSessionPrewarm", () => {
     });
     await flushMicrotasks();
     const create = payloads.find((p) => p.type === "createSession");
-    expect(create?.payload).toEqual({ workspaceId: "/w" });
+    expect(create?.payload).toEqual({ workspaceId: "/w", agentKernel: "zcode" });
   });
 
   it("createSession 被拒/异常 → 降级无预热，不上抛不清理", async () => {

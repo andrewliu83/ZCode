@@ -2444,6 +2444,11 @@ const zhCN: Record<string, string> = {
   "settings.askUserQuestionAutoResolution": "提问自动继续",
   "settings.askUserQuestionAutoResolutionDescription":
     "开启后，Agent 提问 5 分钟未回答会自动继续；关闭后，当前和后续提问会一直等待你的回答。",
+  "chat.agentKernel.label": "Agent 内核",
+  "chat.agentKernel.newConversation": "切换内核会开启新对话并保留草稿",
+  "chat.agentKernel.busy": "当前对话执行或排队期间不能切换内核",
+  "chat.agentKernel.sessionAttachment": "请先移除从当前对话恢复的附件，再切换内核",
+  "chat.agentKernel.switchError": "切换 Agent 内核失败：{error}",
   "settings.thinkrail": "Spec 图与 ThinkRail 工作流",
   "settings.thinkrailDescription":
     "把耐久规格留在代码旁作为项目的事实来源，并让每件工作走一条固定的工作流——头脑风暴、写规格、起步新项目、发 PR。开启后会加入 spec 工具、工作流技能，以及每轮都注入的 spec 规则。",

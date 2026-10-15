@@ -222,7 +222,8 @@ export const OFFICIAL_PLUGIN_DEFINITIONS: readonly OfficialPluginDefinition[] = 
         `../../${name}-plugin`,
         `../../../${name}-plugin`,
       ],
-      version: "0.1.8",
+      // 官方视觉审阅器继承父连接；升 seed 版本使已安装缓存也移除账号绑定。
+      version: "0.1.9",
     }),
   ),
   {

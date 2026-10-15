@@ -1,9 +1,12 @@
 import { createConfig } from "@zcode/adapters/config";
+import { formatClaudeSystemPromptExtension } from "@zcode/adapters/agent-kernel";
 import { createNodeContextSourceAdapter } from "@zcode/adapters/context";
 import { createContextBuilder, inspectSystemPrompt, registerBuiltInTools } from "@zcode/core";
-import { SPEC_RULE, WORKFLOW_RULE, workspaceHasSpec } from "@zcode/thinkrail";
+import { SPEC_RULE, WORKFLOW_RULE } from "@zcode/thinkrail";
 import {
   zcodeProtocolErrorCodes,
+  resolveKernelSystemPrompt,
+  BUILT_IN_AGENT_KERNELS,
   zcodeSystemPromptReadParamsSchema,
   zcodeSystemPromptReadResultSchema,
   zcodeWorkspaceUpdateSystemPromptPolicyParamsSchema,
@@ -22,6 +25,7 @@ export function updateSystemPromptPolicy(
 ) {
   const params = parseParams(zcodeWorkspaceUpdateSystemPromptPolicyParamsSchema, rawParams);
   context.appRuntimePreferences.mainSystemPrompt = params.mainSystemPrompt.trim() || undefined;
+  context.appRuntimePreferences.kernelSystemPrompts = params.kernelSystemPrompts;
   return { ...params, mainSystemPrompt: context.appRuntimePreferences.mainSystemPrompt ?? "" };
 }
 
@@ -35,7 +39,20 @@ export async function readSystemPrompt(
       ([, record]) =>
         record.workspace.workspaceKey === params.workspace.workspaceKey && !record.parentSessionId,
     )
-    .map(([sessionId]) => ({ sessionId }));
+    .map(([sessionId, record]) => ({
+      sessionId,
+      agentKernel: record.app.runtime?.getAgentKernel?.() ?? "zcode",
+    }));
+  const availableAgentKernels = [
+    ...new Map(
+      [
+        ...BUILT_IN_AGENT_KERNELS,
+        ...[...context.sessions.values()].flatMap(
+          (record) => record.app.runtime?.getAvailableAgentKernels?.() ?? [],
+        ),
+      ].map((descriptor) => [descriptor.id, descriptor]),
+    ).values(),
+  ];
   if (params.sessionId) {
     const record = context.sessions.get(params.sessionId);
     if (!record || record.workspace.workspaceKey !== params.workspace.workspaceKey) {
@@ -47,10 +64,15 @@ export async function readSystemPrompt(
     return zcodeSystemPromptReadResultSchema.parse({
       ...(await record.app.getSystemPromptInspection()),
       authority: "session",
+      availableAgentKernels,
       availableSessions,
     });
   }
 
+  const kernel = params.agentKernel ?? "zcode";
+  const known = availableAgentKernels.some((descriptor) => descriptor.id === kernel);
+  if (!known) throw new ProtocolRequestError(-32602, `Unsupported agent kernel: ${kernel}`);
+  const basePrompt = resolveKernelSystemPrompt(context.appRuntimePreferences, kernel);
   const cwd = params.workspace.workspacePath;
   const config = createConfig({ workingDirectory: cwd, env: context.deps.env });
   const thinkrailEnabled = context.appRuntimePreferences.thinkrailEnabled;
@@ -90,20 +112,49 @@ export async function readSystemPrompt(
     ...snapshot,
     workingDirectory: cwd,
     envInfo: snapshot.envInfo,
-    mainSystemPrompt: context.appRuntimePreferences.mainSystemPrompt,
+    mainSystemPrompt: basePrompt,
     presentationSurface: params.presentationSurface,
     skills,
     guidanceToolNames,
     thinkrail: {
       enabled: thinkrailEnabled,
-      hasSpec: thinkrailEnabled && workspaceHasSpec(cwd),
       specRule: SPEC_RULE,
       workflowRule: WORKFLOW_RULE,
     },
   }).build();
+  const inspection = inspectSystemPrompt(result);
+  // 原因：SDK 的 preset/动态上下文由 SDK 管理；工作区预览不能冒充完整 ZCode 正文。
+  if (kernel !== "zcode") {
+    const sections = inspection.sections
+      .filter((section) => section.source === "thinkrail")
+      .map((section) => {
+        const content =
+          kernel === "claude"
+            ? formatClaudeSystemPromptExtension(section.content)
+            : section.content;
+        return {
+          ...section,
+          content,
+          chars: content.length,
+          tokens: Math.ceil(content.length / 4),
+          preview: content.slice(0, 100),
+        };
+      });
+    return zcodeSystemPromptReadResultSchema.parse({
+      nativeKernel: kernel,
+      basePrompt: basePrompt ?? "",
+      defaultPrompt: "",
+      sections,
+      busy: false,
+      authority: "workspace",
+      availableAgentKernels,
+      availableSessions,
+    });
+  }
   return zcodeSystemPromptReadResultSchema.parse({
-    ...inspectSystemPrompt(result),
+    ...inspection,
     authority: "workspace",
+    availableAgentKernels,
     availableSessions,
   });
 }

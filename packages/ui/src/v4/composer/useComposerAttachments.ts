@@ -1,5 +1,5 @@
 /* oxlint-disable eslint(max-lines) -- 附件采集、分 scope 上传调度和生命周期必须在同一 hook 中原子收口。 */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { toast } from "@/components/ui/toast.js";
 import { nanoid } from "nanoid";
 import type { AttachmentRef } from "@zcode/shared/zcode-protocol-v4";
@@ -100,6 +100,8 @@ export interface ComposerAttachmentsApi {
   prepareForSend: () => Promise<AttachmentRef[] | null>;
   /** sendText accepted 后才移交远端暂存内容，发送失败时仍由草稿持有。 */
   adoptSentAttachments: (attachmentIds: readonly string[]) => Promise<void>;
+  /** 在独立会话之间移交未提交附件；新的 session 重新上传，不借用旧 refs。 */
+  moveToScope: (scopeId: string) => boolean;
   setAttachmentError: (message: string | null) => void;
 }
 
@@ -304,6 +306,7 @@ export function useComposerAttachments(
       updateItem(targetScopeKey, attachmentId, (item) => ({
         ...item,
         uploadStatus: "uploading",
+        uploadSessionId: target.sessionId ?? undefined,
         uploadProgress: Math.min(item.uploadProgress, 99),
         uploadError: undefined,
         uploadErrorKind: undefined,
@@ -535,10 +538,19 @@ export function useComposerAttachments(
    * 报错只会让用户以为出了问题；waitingSession 本身已渲染成「正在等待会话」。
    */
   const invalidateAttachmentsForRuntimeChange = useCallback(
-    ({ silent }: { silent: boolean }) => {
+    ({
+      silent,
+      onlyScope,
+      sessionChange = false,
+    }: {
+      silent: boolean;
+      onlyScope?: string;
+      sessionChange?: boolean;
+    }) => {
       for (const [targetScopeKey, items] of Object.entries(
         useComposerAttachmentUploadStore.getState().scopes,
       )) {
+        if (onlyScope && targetScopeKey !== onlyScope) continue;
         const target = targetsRef.current.get(targetScopeKey);
         if (!target) continue;
         for (const item of items) {
@@ -553,7 +565,10 @@ export function useComposerAttachments(
           controllersRef.current.get(key)?.abort();
           controllersRef.current.delete(key);
           if (item.staged) void target?.transferService.cleanup(item.operationId).catch(() => {});
-          if (item.runtimeRebuildRetryCount >= COMPOSER_ATTACHMENT_REBUILD_RETRY_LIMIT) {
+          if (
+            !sessionChange &&
+            item.runtimeRebuildRetryCount >= COMPOSER_ATTACHMENT_REBUILD_RETRY_LIMIT
+          ) {
             // 重传配额用尽是真失败，无论静默与否都必须让用户看见。
             updateItem(targetScopeKey, item.id, (current) => ({
               ...current,
@@ -586,16 +601,38 @@ export function useComposerAttachments(
                   uploadErrorKind: "runtimeRestarted" as const,
                 }),
             attachmentRef: undefined,
+            uploadSessionId: undefined,
+            ...(sessionChange ? { operationId: nanoid() } : {}),
             staged: false,
             adopted: false,
             showComplete: false,
-            runtimeRebuildRetryCount: current.runtimeRebuildRetryCount + 1,
+            runtimeRebuildRetryCount: current.runtimeRebuildRetryCount + (sessionChange ? 0 : 1),
           }));
         }
       }
     },
     [intl, updateItem],
   );
+
+  useLayoutEffect(() => {
+    const current = readComposerAttachmentScope(scopeKey);
+    if (
+      current.some(
+        (item) =>
+          item.referenceOwnership === "composer" &&
+          !item.localZeroCopy &&
+          item.uploadSessionId &&
+          item.uploadSessionId !== attachmentSessionId,
+      )
+    ) {
+      // 选择变化后旧预热会被回收；先撤销旧上传/refs，再由新绑定唤醒上传。
+      invalidateAttachmentsForRuntimeChange({
+        silent: true,
+        onlyScope: scopeKey,
+        sessionChange: true,
+      });
+    }
+  }, [attachmentSessionId, scopeKey, invalidateAttachmentsForRuntimeChange]);
 
   useEffect(() => {
     // 二选一订阅：两条通道都订会让同一次换代作废两次，白烧一次重传配额。
@@ -1070,8 +1107,67 @@ export function useComposerAttachments(
     [scopeKey, updateItem],
   );
 
+  const moveToScope = useCallback(
+    (targetScopeId: string): boolean => {
+      const targetScopeKey = buildScopeKey(workspacePath, workspaceIdentity, targetScopeId);
+      if (targetScopeKey === scopeKey) return true;
+      const current = readComposerAttachmentScope(scopeKey);
+      // queue 恢复的 refs 已归旧 session；没有原始 File/path 时不能移交给另一内核。
+      if (
+        current.some((item) => item.referenceOwnership === "session") ||
+        readComposerAttachmentScope(targetScopeKey).length > 0
+      )
+        return false;
+      const target = targetsRef.current.get(scopeKey);
+      for (const item of current) {
+        const key = `${scopeKey}\u0000${item.id}`;
+        controllersRef.current.get(key)?.abort();
+        controllersRef.current.delete(key);
+        const completeTimer = completeTimersRef.current.get(key);
+        const retryTimer = retryTimersRef.current.get(key);
+        if (completeTimer !== undefined) window.clearTimeout(completeTimer);
+        if (retryTimer !== undefined) window.clearTimeout(retryTimer);
+        completeTimersRef.current.delete(key);
+        retryTimersRef.current.delete(key);
+        if (item.staged) void target?.transferService.cleanup(item.operationId).catch(() => {});
+      }
+      uploadQueueRef.current = uploadQueueRef.current.filter(
+        (entry) => entry.scopeKey !== scopeKey,
+      );
+      const transferred = current.map((item) =>
+        item.localZeroCopy
+          ? item
+          : {
+              ...item,
+              operationId: nanoid(),
+              attachmentRef: undefined,
+              uploadSessionId: undefined,
+              uploadStatus: "waitingSession" as const,
+              uploadProgress: 0,
+              uploadError: undefined,
+              uploadErrorKind: undefined,
+              autoRetryCount: 0,
+              runtimeRebuildRetryCount: 0,
+              staged: false,
+              adopted: false,
+              showComplete: false,
+              localZeroCopy: false,
+            },
+      );
+      useComposerAttachmentUploadStore.setState((state) => {
+        const { [scopeKey]: _source, ...scopes } = state.scopes;
+        return {
+          scopes: transferred.length ? { ...scopes, [targetScopeKey]: transferred } : scopes,
+        };
+      });
+      return true;
+    },
+    [scopeKey, workspacePath, workspaceIdentity],
+  );
+
   return useMemo(
     () => ({
+      moveToScope,
       attachments,
       attachmentError,
       composerDragKind,
@@ -1096,6 +1192,7 @@ export function useComposerAttachments(
       setAttachmentError,
     }),
     [
+      moveToScope,
       addAttachmentFiles,
       attachmentError,
       adoptSentAttachments,

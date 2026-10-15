@@ -144,6 +144,7 @@ import { cloneModelSelection } from "./model-selection.js";
 // oxlint-disable typescript-eslint/no-unsafe-declaration-merging
 export class AgentRuntime {
   private sessionId: SessionId;
+  private nativeAgentKernel?: AgentRuntimeDeps["nativeAgentKernel"];
   private turnNumber: number;
   private config: AgentRuntimeConfig;
   private appVersion: string;
@@ -257,6 +258,15 @@ export class AgentRuntime {
   private sessionTitleGenerationAttempted = false;
   private agentTelemetry: RuntimeTelemetryFacade;
 
+  /** 会话创建/恢复后的不可变内核事实，供协议投影及 admission 校验使用。 */
+  getAgentKernel(): import("@zcode/contracts").AgentKernelKind {
+    return this.config.agentKernel ?? "zcode";
+  }
+
+  getAvailableAgentKernels(): readonly import("@zcode/shared").AgentKernelDescriptor[] {
+    return this.config.availableAgentKernels?.map((descriptor) => ({ ...descriptor })) ?? [];
+  }
+
   constructor(sessionId: SessionId, config: AgentRuntimeConfig, deps: AgentRuntimeDeps) {
     const runtime = this as unknown as AgentRuntimeInternal;
     this.sessionId = sessionId;
@@ -302,6 +312,7 @@ export class AgentRuntime {
     this.eventReducer = new EventReducer();
     this.eventStore = deps.eventStore;
     this.sessionStore = deps.sessionStore;
+    this.nativeAgentKernel = deps.nativeAgentKernel;
     this.rootTraceContext = deps.traceContext ?? createRootTraceContext({ sessionId });
     this.appVersion = deps.appVersion ?? "0.0.0";
     this.logger = deps.logger?.child({

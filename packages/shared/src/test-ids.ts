@@ -558,6 +558,10 @@ export const TID_V4_COMPOSER_BACKGROUND_WORK_TRIGGER = "v4-composer-background-w
 export const TID_V4_COMPOSER_CUA_ENTRY = "v4-composer-cua-entry";
 /** v4 composer 发送按钮 */
 export const TID_V4_COMPOSER_SEND = "v4-composer-send";
+/** 输入框右下角 Agent 内核选择器 */
+export const TID_V4_COMPOSER_AGENT_KERNEL = "v4-composer-agent-kernel";
+/** Agent 内核选项（动态后缀为 zcode / claude） */
+export const TID_V4_COMPOSER_AGENT_KERNEL_OPTION = "v4-composer-agent-kernel-option";
 /** v4 暂停队列发送确认：清空队列并发送 */
 export const TID_V4_COMPOSER_CLEAR_QUEUE_SEND = "v4-composer-clear-queue-send";
 /** v4 暂停队列发送确认：保留队列并发送 */

@@ -83,6 +83,7 @@ export interface DraftConfigControl {
   /** 当前草稿生命周期冻结的初始化 config；只供 prewarm/createSession 建立时使用。 */
   resolveInitialDraftConfig: () => Partial<SessionConfigState> | undefined;
   composerDraft: V4ComposerDraft;
+  getComposerDraft: () => V4ComposerDraft;
   updateComposerContent: (
     content: Pick<V4ComposerDraft, "text" | "editorStateJson" | "mention">,
   ) => void;
@@ -97,6 +98,7 @@ export interface DraftConfigControl {
   handleDraftSelectModel: (modelProvider: string, model: string) => void;
   handleDraftSelectThought: (thought: string) => void;
   handleDraftSwitchMode: (mode: string) => void;
+  handleDraftSelectAgentKernel: (kernel: import("@zcode/shared").AgentKernelId) => void;
 }
 
 export function useDraftConfigControl(params: {
@@ -181,6 +183,9 @@ export function useDraftConfigControl(params: {
     : draft.modelSelection;
   const draftConfig = useMemo<Partial<SessionConfigState>>(
     () => ({
+      agentKernel: sessionId
+        ? (sessionConfig?.agentKernel ?? "zcode")
+        : (draft.agentKernel ?? "zcode"),
       mode: draft.mode,
       planEnabled: draft.planEnabled ?? false,
       modelSelection: effectiveSelection,
@@ -188,7 +193,14 @@ export function useDraftConfigControl(params: {
       model: effectiveSelection?.modelId ?? "",
       thought: effectiveSelection?.options?.reasoningLevel ?? "",
     }),
-    [draft.mode, draft.planEnabled, effectiveSelection],
+    [
+      draft.agentKernel,
+      draft.mode,
+      draft.planEnabled,
+      effectiveSelection,
+      sessionId,
+      sessionConfig?.agentKernel,
+    ],
   );
   const draftConfigRef = useRef(draftConfig);
   draftConfigRef.current = draftConfig;
@@ -217,6 +229,9 @@ export function useDraftConfigControl(params: {
           ? draftConfigRef.current.modelSelection
           : next.modelSelection;
       draftConfigRef.current = {
+        agentKernel: sessionId
+          ? (sessionConfig?.agentKernel ?? "zcode")
+          : (next.agentKernel ?? "zcode"),
         mode: next.mode,
         planEnabled: next.planEnabled ?? false,
         modelSelection: selection,
@@ -228,7 +243,7 @@ export function useDraftConfigControl(params: {
       persistV4ComposerDraft(workspacePath, workspaceIdentity, scopeId, next);
       lastPersistedDraftRef.current = next;
     },
-    [scopeKey, workspacePath, workspaceIdentity, scopeId],
+    [scopeKey, workspacePath, workspaceIdentity, scopeId, sessionId, sessionConfig?.agentKernel],
   );
   const updateDraftConfig = useCallback(
     (update: (current: Partial<SessionConfigState>) => Partial<SessionConfigState>) => {
@@ -480,8 +495,20 @@ export function useDraftConfigControl(params: {
     [updateComposerDraft],
   );
 
+  const handleDraftSelectAgentKernel = useCallback(
+    (kernel: import("@zcode/shared").AgentKernelId) => {
+      if (sessionId !== null) return;
+      updateComposerDraft((current) => ({ ...current, agentKernel: kernel }));
+    },
+    [sessionId, updateComposerDraft],
+  );
+
+  const getComposerDraft = useCallback(() => stateRef.current.draft, []);
+
   return {
+    getComposerDraft,
     modelSelectionRead,
+    handleDraftSelectAgentKernel,
     draftConfig,
     draftConfigRef,
     resolveInitialDraftConfig,
@@ -500,10 +527,11 @@ export function useDraftConfigControl(params: {
 export function buildDraftCreateConfigPayload(
   draftConfig: Partial<SessionConfigState>,
   appFollowupMode?: SessionConfigState["followupMode"] | null,
-): { config?: Partial<SessionConfigState> } {
-  const config: Partial<SessionConfigState> = { ...draftConfig };
+): { agentKernel: import("@zcode/shared").AgentKernelId; config?: Partial<SessionConfigState> } {
+  // 内核属于创建参数，不是创建后的可变 config；两条创建路径都在这里统一提取。
+  const { agentKernel = "zcode", ...config } = draftConfig;
   if (appFollowupMode) {
     config.followupMode = appFollowupMode;
   }
-  return Object.keys(config).length > 0 ? { config } : {};
+  return { agentKernel, ...(Object.keys(config).length > 0 ? { config } : {}) };
 }

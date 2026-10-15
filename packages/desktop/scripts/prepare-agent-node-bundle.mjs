@@ -4,20 +4,23 @@
 // 由 app 内置的 Electron Node runtime（ELECTRON_RUN_AS_NODE）执行，替代以前随包内置的独立 Node 二进制。
 //
 // 为什么这么做：
-// - agent 没有任何原生 NAPI 插件（ripgrep 是 WASM，其余纯 JS），可直接跑在 Electron 的 Node 上；
+// - ZCode 执行循环的 JS 可直接跑在 Electron Node 上，Claude SDK 的平台运行时单独随包准备；
 // - Electron 41 内置 Node 24.x，与 zcode-cli 的目标运行时一致；
-// - 单平台体积从 ~180MB 降到 ~16MB，且同一份 JS 跨平台通用；
+// - Agent JS 跨平台通用，Claude SDK 的平台依赖放在同目录 claude-sdk/；
 // - app-server 命令路径不会加载 @zcode/tui，所以这里天然不打包 TUI。
 //
 // 远端（SSH/WSL/Docker）没有 Electron，仍走 prepare:remote-assets 的原生二进制，互不影响。
 
 import { cpSync, existsSync, mkdirSync } from "node:fs";
 import { basename, dirname, resolve } from "node:path";
-import process from "node:process";
 import { fileURLToPath } from "node:url";
 import { runCommand } from "../../../scripts/spawn-command.mjs";
 import { stageAgentBundle } from "./stage-agent-bundle.mjs";
-import { isSharpRequiredByComputerUse, stageSharpIntoBundledAgents } from "./sharp-package-assets.mjs";
+import { stageClaudeSdkRuntime } from "../../../scripts/claude-sdk-runtime-assets.mjs";
+import {
+  isSharpRequiredByComputerUse,
+  stageSharpIntoBundledAgents,
+} from "./sharp-package-assets.mjs";
 import { stageKoffiIntoBundledAgents } from "./koffi-package-assets.mjs";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
@@ -412,7 +415,9 @@ function stageBundledSkillPack() {
 
 function stageSharpForNodeReplPlugin() {
   if (!isSharpRequiredByComputerUse({ desktopPackageRoot: desktopRoot })) {
-    console.log("[prepare:agent-bundle] Computer Use package does not declare sharp, skip sharp staging");
+    console.log(
+      "[prepare:agent-bundle] Computer Use package does not declare sharp, skip sharp staging",
+    );
     return;
   }
   // `sharp` 仍然外部化——它包含无法内联的 native .node，运行时从**所在包**的 node_modules
@@ -467,6 +472,7 @@ function stageKoffiForCuaPlugin() {
 buildCliBundle();
 buildOfficialPluginRuntimes();
 stageBundle();
+await stageClaudeSdkRuntime({ repoRoot, platformKey, destination: glmDir });
 stageOfficialPlugins();
 stageBundledSkillPack();
 stageKoffiForCuaPlugin();

@@ -1,3 +1,10 @@
+export { resolveKernelSystemPrompt } from "./kernel-system-prompts.js";
+export {
+  agentKernelIdSchema,
+  agentKernelDescriptorSchema,
+  BUILT_IN_AGENT_KERNELS,
+} from "./agent-kernels.js";
+export type { AgentKernelId, AgentKernelDescriptor } from "./agent-kernels.js";
 export { cloudContentPayloadSchema, contentBundleSchema } from "./cloudContent.js";
 export * from "./networkCapture.js";
 export type {

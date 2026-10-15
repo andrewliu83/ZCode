@@ -19,6 +19,8 @@ export interface ComposerAttachmentUploadItem extends ChatComposerAttachment {
   referenceOwnership: "composer" | "session";
   uploadStatus: ComposerAttachmentUploadStatus;
   uploadProgress: number;
+  /** 草稿上传绑定的真实 session；换内核后的新预热不能复用旧引用。 */
+  uploadSessionId?: string;
   uploadError?: string;
   uploadErrorKind?: "transient" | "permanent" | "runtimeRestarted";
   attachmentRef?: AttachmentRef;

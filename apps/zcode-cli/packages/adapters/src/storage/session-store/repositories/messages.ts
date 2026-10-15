@@ -37,6 +37,25 @@ const PART_DATA_UPDATE = preserveLegacyMembers("part", ["fromModel", "toModel", 
 // 会把 NULL 历史行（迁移遗漏/旧版本二进制写入）在任何一次再保存时重排到队尾（excluded=max+1），
 // assistant 完成后的二次 save 就足以触发，造成时间线漂移；NULL 由 0015 backfill 统一修复。
 // 跨 scope 改绑（id 冲突但 session/message 不同，仅导入 upsert 场景）才取 excluded 的新 scope 队尾。
+export async function skillInvocationCounts(db: DatabaseSync): Promise<Record<string, number>> {
+  // 成功工具事实是唯一计数来源；按 canonical 身份与 callID 去重，失败/历史复制不提高优先级。
+  const rows = db
+    .prepare(`
+    select coalesce(json_extract(part.data, '$.state.metadata.skill.qualifiedName'),
+      json_extract(part.data, '$.state.metadata.skill.name'),
+      json_extract(part.data, '$.state.input.skill')) as skill,
+      count(distinct json_extract(part.data, '$.callID')) as count
+    from part join message on message.id = part.message_id
+    where json_extract(part.data, '$.type') = 'tool'
+      and json_extract(part.data, '$.tool') = 'Skill'
+      and json_extract(part.data, '$.state.status') = 'completed'
+      and json_type(part.data, '$.state.input.skill') = 'text'
+    group by skill
+  `)
+    .all() as { skill: string; count: number }[];
+  return Object.fromEntries(rows.map((row) => [row.skill, Number(row.count)]));
+}
+
 export async function saveMessage(
   db: DatabaseSync,
   input: MessageInfo,

@@ -38,6 +38,7 @@ export interface DraftPrewarmController {
 /** 预热生命周期纯控制器：创建 → onReady 上抛 → dispose 决策清理。 */
 export function startDraftSessionPrewarm(params: {
   workspaceKey: string;
+  agentKernel?: import("@zcode/shared").AgentKernelId;
   dispatchCommand: DispatchCommand;
   onReady: (sessionId: string) => void;
   /** single-flight owner 用于等待不可取消的 createSession 收口；无论成功失败都只调用一次。 */
@@ -45,16 +46,11 @@ export function startDraftSessionPrewarm(params: {
   /** 预热会话初始 config（全局「上次选择」，同步解析）；让投影首帧即全局、不闪。 */
   resolveInitialConfig?: () => Partial<SessionConfigState> | undefined;
 }): DraftPrewarmController {
-  const {
-    workspaceKey,
-    dispatchCommand,
-    onReady,
-    onSettled,
-    resolveInitialConfig,
-  } = params;
+  const { workspaceKey, dispatchCommand, onReady, onSettled, resolveInitialConfig } = params;
   let disposed = false;
   let promotionState: "draft" | "pending" | "promoted" | "discarded" = "draft";
   let createdSessionId: string | null = null;
+  let requestedAgentKernel: import("@zcode/shared").AgentKernelId = params.agentKernel ?? "zcode";
 
   const deleteCreatedSession = (sessionId: string) => {
     void dispatchCommand("deleteSession", {}, sessionId)
@@ -75,9 +71,12 @@ export function startDraftSessionPrewarm(params: {
   const createPayload = () => {
     const createPayload: Record<string, unknown> = { workspaceId: workspaceKey };
     const initialConfig = resolveInitialConfig?.();
-    if (initialConfig && Object.keys(initialConfig).length > 0) {
-      // 预热会话首帧即用全局模型（CLI 归并 createSession.config），不闪 workspace 缺省。
-      createPayload.config = initialConfig;
+    const { agentKernel = "zcode", ...config } = initialConfig ?? {};
+    requestedAgentKernel = params.agentKernel ?? agentKernel;
+    createPayload.agentKernel = requestedAgentKernel;
+    if (Object.keys(config).length > 0) {
+      // 内核先确定 Runtime，模型和模式随后由 createSession.config 应用。
+      createPayload.config = config;
     }
     return createPayload;
   };
@@ -95,7 +94,7 @@ export function startDraftSessionPrewarm(params: {
         return;
       }
       if (ack.status !== "accepted" || ack.result?.type !== "createSession") {
-        logger.warn("[v4-draft-prewarm] createSession 被拒，回落无预热路径", {
+        logger.lifecycle.warn("[v4-draft-prewarm] createSession 被拒，回落无预热路径", {
           status: ack.status,
           reasonCode: ack.reasonCode ?? null,
           workspaceKey,
@@ -103,6 +102,18 @@ export function startDraftSessionPrewarm(params: {
         return;
       }
       createdSessionId = ack.result.sessionId;
+      if (
+        (ack.result.agentKernel && ack.result.agentKernel !== requestedAgentKernel) ||
+        (requestedAgentKernel !== "zcode" && ack.result.agentKernel !== requestedAgentKernel)
+      ) {
+        // 旧远端会剥离新增字段；任何原生内核都必须确认实际绑定后才接纳输入。
+        deleteCreatedSession(createdSessionId);
+        createdSessionId = null;
+        logger.lifecycle.warn("[v4-draft-prewarm] Agent 未确认所选内核，请更新目标 Agent", {
+          requestedAgentKernel,
+        });
+        return;
+      }
       if (disposed) {
         // 极快切走时创建无法取消：ACK 到达后就地删除，避免遗留内存会话。
         deleteCreatedSession(createdSessionId);
@@ -115,7 +126,7 @@ export function startDraftSessionPrewarm(params: {
       onReady(createdSessionId);
     })
     .catch((error) => {
-      logger.warn("[v4-draft-prewarm] createSession 失败，回落无预热路径", {
+      logger.lifecycle.warn("[v4-draft-prewarm] createSession 失败，回落无预热路径", {
         error: error instanceof Error ? error.message : String(error),
         workspaceKey,
       });
@@ -157,6 +168,7 @@ export interface DraftSessionPrewarm {
 }
 
 export interface DraftPrewarmBinding {
+  agentKernel: import("@zcode/shared").AgentKernelId;
   workspaceKey: string;
   sessionId: string;
   /** 首条 admission 命令发出前同步占住生命周期；false 表示 binding 已不是当前 owner。 */
@@ -168,11 +180,13 @@ export interface DraftPrewarmBinding {
 }
 
 interface DraftPrewarmSubscriber {
+  agentKernel: import("@zcode/shared").AgentKernelId;
   invalidationVersion: number;
   onBinding: (binding: DraftPrewarmBinding | null) => void;
 }
 
 interface DraftPrewarmCurrent {
+  agentKernel: import("@zcode/shared").AgentKernelId;
   invalidationVersion: number;
   controller: DraftPrewarmController;
   binding: DraftPrewarmBinding | null;
@@ -203,6 +217,7 @@ class DraftSessionPrewarmCoordinator {
   private readonly subscribers = new Map<symbol, DraftPrewarmSubscriber>();
   private current: DraftPrewarmCurrent | null = null;
   private blockedInvalidationVersion: number | null = null;
+  private blockedAgentKernel: import("@zcode/shared").AgentKernelId | null = null;
   private cleanupTimer: ReturnType<typeof setTimeout> | null = null;
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private dispatchCommand: DispatchCommand;
@@ -227,6 +242,7 @@ class DraftSessionPrewarmCoordinator {
   }
 
   acquire(params: {
+    agentKernel: import("@zcode/shared").AgentKernelId;
     invalidationVersion: number;
     onBinding: (binding: DraftPrewarmBinding | null) => void;
   }): () => void {
@@ -269,19 +285,35 @@ class DraftSessionPrewarmCoordinator {
     return latest;
   }
 
+  private requestedAgentKernel(): import("@zcode/shared").AgentKernelId {
+    let kernel: import("@zcode/shared").AgentKernelId = "zcode";
+    const version = this.requestedInvalidationVersion();
+    for (const subscriber of this.subscribers.values()) {
+      if (subscriber.invalidationVersion === version) kernel = subscriber.agentKernel;
+    }
+    return kernel;
+  }
+
   private reconcile(): void {
     const requestedVersion = this.requestedInvalidationVersion();
+    const requestedKernel = this.requestedAgentKernel();
     if (requestedVersion === null) {
       return;
     }
     if (
       this.blockedInvalidationVersion !== null &&
-      this.blockedInvalidationVersion !== requestedVersion
+      (this.blockedInvalidationVersion !== requestedVersion ||
+        this.blockedAgentKernel !== requestedKernel)
     ) {
       this.blockedInvalidationVersion = null;
+      this.blockedAgentKernel = null;
     }
     if (this.current) {
-      if (!this.current.retiring && this.current.invalidationVersion === requestedVersion) {
+      if (
+        !this.current.retiring &&
+        this.current.invalidationVersion === requestedVersion &&
+        this.current.agentKernel === requestedKernel
+      ) {
         return;
       }
       this.retireCurrent();
@@ -290,7 +322,10 @@ class DraftSessionPrewarmCoordinator {
         return;
       }
     }
-    if (this.blockedInvalidationVersion === requestedVersion) {
+    if (
+      this.blockedInvalidationVersion === requestedVersion &&
+      this.blockedAgentKernel === requestedKernel
+    ) {
       return;
     }
     this.startCurrent(requestedVersion);
@@ -324,8 +359,10 @@ class DraftSessionPrewarmCoordinator {
 
   private startCurrent(invalidationVersion: number, retryAttempt = 0): void {
     let current!: DraftPrewarmCurrent;
+    const agentKernel = this.requestedAgentKernel();
     const controller = startDraftSessionPrewarm({
       workspaceKey: this.workspaceKey,
+      agentKernel,
       dispatchCommand: (type, payload, targetSessionId) =>
         this.dispatchCommand(type, payload, targetSessionId),
       resolveInitialConfig: () => this.resolveInitialConfig?.(),
@@ -335,6 +372,7 @@ class DraftSessionPrewarmCoordinator {
         }
         let binding!: DraftPrewarmBinding;
         binding = {
+          agentKernel,
           workspaceKey: this.workspaceKey,
           sessionId,
           beginPromotion: () => {
@@ -357,6 +395,7 @@ class DraftSessionPrewarmCoordinator {
             current.controller.markDiscarded();
             current.binding = null;
             this.blockedInvalidationVersion = current.invalidationVersion;
+            this.blockedAgentKernel = current.agentKernel;
             this.emitBindings();
           },
         };
@@ -381,6 +420,7 @@ class DraftSessionPrewarmCoordinator {
       },
     });
     current = {
+      agentKernel,
       invalidationVersion,
       controller,
       binding: null,
@@ -415,7 +455,10 @@ class DraftSessionPrewarmCoordinator {
   private emitBindingTo(subscriber: DraftPrewarmSubscriber): void {
     const current = this.current;
     subscriber.onBinding(
-      current && !current.retiring && current.invalidationVersion === subscriber.invalidationVersion
+      current &&
+        !current.retiring &&
+        current.invalidationVersion === subscriber.invalidationVersion &&
+        current.agentKernel === subscriber.agentKernel
         ? current.binding
         : null,
     );
@@ -466,6 +509,7 @@ function getDraftSessionPrewarmCoordinator(params: {
 }
 
 export function useDraftSessionPrewarm(params: {
+  agentKernel?: import("@zcode/shared").AgentKernelId;
   /** pane 未绑定会话（sessionId===null）时启用。 */
   enabled: boolean;
   workspaceKey: string;
@@ -480,6 +524,7 @@ export function useDraftSessionPrewarm(params: {
   resolveInitialConfig?: () => Partial<SessionConfigState> | undefined;
 }): DraftSessionPrewarm {
   const {
+    agentKernel = "zcode",
     enabled,
     workspaceKey,
     paneId,
@@ -508,7 +553,7 @@ export function useDraftSessionPrewarm(params: {
   useLayoutEffect(() => {
     coordinator.update(dispatchCommand, resolveInitialConfig);
   }, [coordinator, dispatchCommand, resolveInitialConfig]);
-  const generation = useMemo(() => ({ owner }), [enabled, invalidationVersion, owner]);
+  const generation = useMemo(() => ({ owner }), [enabled, agentKernel, invalidationVersion, owner]);
   const [ready, setReady] = useState<{
     generation: typeof generation;
     binding: DraftPrewarmBinding;
@@ -517,6 +562,7 @@ export function useDraftSessionPrewarm(params: {
   useEffect(() => {
     if (!enabled) return;
     return coordinator.acquire({
+      agentKernel,
       invalidationVersion,
       onBinding: (binding) => {
         setReady((current) => {
@@ -527,7 +573,7 @@ export function useDraftSessionPrewarm(params: {
         });
       },
     });
-  }, [coordinator, enabled, generation, invalidationVersion]);
+  }, [coordinator, agentKernel, enabled, generation, invalidationVersion]);
 
   return { binding: ready?.generation === generation ? ready.binding : null };
 }

@@ -9,7 +9,7 @@
 // 附件不入草稿（objectUrl/File 不可序列化，localPath 附件重启后归属难校验——
 // 与「v4 composer 不做附件草稿持久化」的裁决一致）。
 import { logger } from "@/logger.js";
-import { modelSelectionSchema, type ModelSelection } from "@zcode/shared";
+import { modelSelectionSchema, agentKernelIdSchema, type ModelSelection } from "@zcode/shared";
 import { submissionModeSchema, type SubmissionMode } from "@zcode/shared/zcode-protocol-v4";
 import type { ComposerMentionPrefill } from "@/store/zcodeSessionStoreTypes.js";
 
@@ -18,6 +18,7 @@ export interface V4ComposerDraft {
   editorStateJson?: string;
   mention?: ComposerMentionPrefill;
   /** 有合法 mode 表示已经初始化；没有模型仍是明确空态，不能按旧文本草稿补默认。 */
+  agentKernel?: import("@zcode/shared").AgentKernelId;
   mode?: SubmissionMode;
   planEnabled?: boolean;
   /** 已处理的工具变更，防止重连快照再次覆盖用户选择。 */
@@ -123,6 +124,9 @@ function readDraft(value: unknown): V4ComposerDraft | null {
       ? { editorStateJson: value.editorStateJson }
       : {}),
     ...(hasMention ? { mention: mention as unknown as ComposerMentionPrefill } : {}),
+    ...(agentKernelIdSchema.safeParse(value.agentKernel).success
+      ? { agentKernel: value.agentKernel as string }
+      : {}),
     ...(mode.success ? { mode: mode.data === "plan" ? ("build" as const) : mode.data } : {}),
     ...(typeof value.planEnabled === "boolean"
       ? { planEnabled: value.planEnabled }
@@ -190,6 +194,7 @@ export function persistV4ComposerDraft(
     !draft.editorStateJson &&
     !draft.mention &&
     !draft.mode &&
+    !draft.agentKernel &&
     !draft.modelSelection &&
     !draft.initializeFromNewTask
   ) {

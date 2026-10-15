@@ -42,6 +42,10 @@
       "types": "./dist/provider/index.d.ts",
       "import": "./dist/provider/index.js"
     },
+    "./agent-kernel": {
+      "types": "./dist/agent-kernel/index.d.ts",
+      "import": "./dist/agent-kernel/index.js"
+    },
     "./model": {
       "types": "./dist/model/index.d.ts",
       "import": "./dist/model/index.js"
@@ -104,6 +108,7 @@
     "@ai-sdk/anthropic": "3.0.81",
     "@ai-sdk/openai": "^3.0.58",
     "@ai-sdk/openai-compatible": "^2.0.58",
+    "@anthropic-ai/claude-agent-sdk": "0.3.299",
     "@modelcontextprotocol/client": "2.0.0",
     "@zcode/contracts": "workspace:*",
     "@zcode/dynamic-workflow": "workspace:*",

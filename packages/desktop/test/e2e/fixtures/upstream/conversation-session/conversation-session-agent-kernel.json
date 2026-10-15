@@ -1,0 +1,120 @@
+{
+  "version": 1,
+  "caseName": "conversation-session-agent-kernel",
+  "spec": "./test/e2e/conversation-session/conversation-session-agent-kernel.test.ts",
+  "fixtures": [
+    {
+      "id": "agent-kernel-title",
+      "description": "内核 UI 的 case-local 标题响应。",
+      "metadata": {
+        "kind": "common",
+        "timingPolicy": "fast-text",
+        "source": "synthetic",
+        "syntheticReason": "标题 sidecar 不访问供应商，UI 门禁只需真实会话绑定。"
+      },
+      "match": {
+        "method": "POST",
+        "pathIncludes": "/",
+        "bodyIncludes": [
+          "Generate a concise title",
+          "E2E_AK_"
+        ]
+      },
+      "response": {
+        "statusCode": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"id\":\"agent-kernel-title\",\"object\":\"chat.completion\",\"created\":1,\"model\":\"deepseek-v4-flash\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"{\\\"title\\\":\\\"Agent Kernel E2E\\\"}\"},\"finish_reason\":\"stop\"}],\"usage\":{\"prompt_tokens\":64,\"completion_tokens\":8,\"total_tokens\":72}}"
+      }
+    },
+    {
+      "id": "agent-kernel-seed",
+      "description": "先建立原 ZCode 历史，再通过真实选择器创建另一内核的空会话。",
+      "metadata": {
+        "kind": "main",
+        "timingPolicy": "fast-text",
+        "source": "synthetic",
+        "syntheticReason": "UI 只验证内核选择、绑定、正文与附件移交；SDK 执行由 protocol focused 测试补证。"
+      },
+      "maxMatches": 1,
+      "match": {
+        "method": "POST",
+        "pathIncludes": "/",
+        "lastUserMessageIncludes": [
+          "E2E_AK_SEED"
+        ],
+        "bodyExcludes": [
+          "Generate a concise title",
+          "CRITICAL: Respond with TEXT ONLY"
+        ]
+      },
+      "response": {
+        "statusCode": 200,
+        "headers": {
+          "content-type": "text/event-stream"
+        },
+        "body": "data: {\"id\":\"agent-kernel-seed\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"deepseek-v4-flash\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"AK_SEED_OK\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"agent-kernel-seed\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"deepseek-v4-flash\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\ndata: {\"id\":\"agent-kernel-seed\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"deepseek-v4-flash\",\"choices\":[],\"usage\":{\"prompt_tokens\":80,\"completion_tokens\":8,\"total_tokens\":88}}\n\ndata: [DONE]\n\n"
+      }
+    },
+    {
+      "id": "agent-kernel-native",
+      "description": "原生 SDK 发出的首轮请求，完整走随包 runtime 与事件桥。",
+      "metadata": {
+        "kind": "main",
+        "timingPolicy": "fast-text",
+        "source": "synthetic",
+        "syntheticReason": "验证真实 SDK 请求、UI 投影与终态，不依赖外部供应商或用户 CLI。"
+      },
+      "maxMatches": 1,
+      "match": {
+        "method": "POST",
+        "pathIncludes": "/",
+        "lastUserMessageIncludes": [
+          "E2E_AK_NATIVE"
+        ],
+        "bodyExcludes": [
+          "Generate a concise title",
+          "CRITICAL: Respond with TEXT ONLY"
+        ]
+      },
+      "response": {
+        "statusCode": 200,
+        "headers": {
+          "content-type": "text/event-stream"
+        },
+        "body": "data: {\"id\":\"agent-kernel-native\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"deepseek-v4-flash\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"AK_NATIVE_OK\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"agent-kernel-native\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"deepseek-v4-flash\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\ndata: {\"id\":\"agent-kernel-native\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"deepseek-v4-flash\",\"choices\":[],\"usage\":{\"prompt_tokens\":80,\"completion_tokens\":8,\"total_tokens\":88}}\n\ndata: [DONE]\n\n"
+      }
+    },
+    {
+      "id": "agent-kernel-busy",
+      "description": "固定延迟只在测试供应商制造可观察 running，验证选择器禁用。",
+      "metadata": {
+        "kind": "main",
+        "timingPolicy": "fast-text",
+        "source": "synthetic",
+        "syntheticReason": "产品路径不增加同步超时，测试响应延迟保留稳定的 running 观察窗口。"
+      },
+      "maxMatches": 1,
+      "match": {
+        "method": "POST",
+        "pathIncludes": "/",
+        "lastUserMessageIncludes": [
+          "E2E_AK_BUSY"
+        ],
+        "bodyExcludes": [
+          "Generate a concise title",
+          "CRITICAL: Respond with TEXT ONLY"
+        ]
+      },
+      "response": {
+        "statusCode": 200,
+        "delayMs": 5000,
+        "headers": {
+          "content-type": "text/event-stream"
+        },
+        "body": "data: {\"id\":\"agent-kernel-busy\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"deepseek-v4-flash\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"AK_BUSY_OK\"},\"finish_reason\":null}]}\n\ndata: {\"id\":\"agent-kernel-busy\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"deepseek-v4-flash\",\"choices\":[{\"index\":0,\"delta\":{},\"finish_reason\":\"stop\"}]}\n\ndata: {\"id\":\"agent-kernel-busy\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"deepseek-v4-flash\",\"choices\":[],\"usage\":{\"prompt_tokens\":80,\"completion_tokens\":8,\"total_tokens\":88}}\n\ndata: [DONE]\n\n"
+      }
+    }
+  ]
+}

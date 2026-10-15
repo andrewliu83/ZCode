@@ -1,11 +1,12 @@
-// 工作区是否「有 spec」—— 常驻规则渲染与否的判据（docs/thinkrail/design.md D3）。
+// 共享的有界 spec 存在性探针，供独立查询和诊断使用。
+// 提示词注入不再依赖此结果；ThinkRail 开启时先通过 spec 工具确认图状态。
 //
-// 只做一次**有界的目录探测**，不建图：常驻段每轮组装都要问一次，而全量扫描是 O(整个仓库)。
+// 不建图，也不扫描整个仓库；全量索引由 SpecIndex 的查询路径负责。
 // 探测的语义与 spec 索引的扫描规则对齐（store.ts 的 IGNORED_DIRS + 名字排序 + 只看 `.md`），
 // 所以「探测说有」与「工具能查到」不会互相矛盾。
 //
-// 判据刻意宽松：**一个** frontmatter 带 non-empty id + type 的 `.md` 就够了。空项目不该被规则
-// 打扰，而只要存在一个 spec，「先读 spec 再看代码」就是可执行的指令。
+// 判据刻意宽松：**一个** frontmatter 带 non-empty id + type 的 `.md` 就够了。
+// 结果只表示是否发现过一个 spec，不表示图完整，也不决定常驻规则是否可注入。
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";

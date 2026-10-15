@@ -452,6 +452,7 @@ export interface ToolExecutionResult {
   display?: ToolResultDisplayPayload;
   modelContent?: ModelMessageContent;
   readFileStateMetadata?: PersistedReadFileStateMetadata;
+  skillTelemetryMetadata?: SkillTelemetryMetadata;
   serialization?: ToolResultSerialization;
   /** Executor 汇总后的内部性能事实；不进入模型可见 Tool Output。 */
   performance?: ToolExecutionTelemetry;

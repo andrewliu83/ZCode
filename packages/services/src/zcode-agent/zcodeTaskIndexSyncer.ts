@@ -671,12 +671,13 @@ export function createZCodeTaskIndexSyncer(
     _deliveryKind: TopicDeliveryKind,
   ): void {
     state.summaries.set(next.sessionId, next);
-    // draft 裁决：纯内存态、不落盘，也绝不进 task index sqlite。
-    if (next.phase === "draft") {
+    // 空的正式会话可以已经保存；只有未持久化的预热 draft 不进入 task index。
+    if (next.phase === "draft" && next.persisted !== true) {
       return;
     }
     const target = sessionTargetFrom(state.target, next.sessionId);
-    const becameVisibleTask = previous === undefined || previous.phase === "draft";
+    const becameVisibleTask =
+      previous === undefined || (previous.phase === "draft" && previous.persisted !== true);
     // 终态迁移 = 基线里真实观察到非终态 → 终态。无基线的会话（冷恢复 hydration、
     // 断档降级后新出现的历史会话）不回放终态；活跃会话必先以 running/prewarming
     // 进入基线（gateway 每个事件都 fan-out），不会漏掉真实收口。
@@ -707,7 +708,9 @@ export function createZCodeTaskIndexSyncer(
     state: WorkspaceIngestState,
     summaries: Iterable<SessionSummary>,
   ): Promise<void> {
-    const candidates = [...summaries].filter((summary) => summary.phase !== "draft");
+    const candidates = [...summaries].filter(
+      (summary) => summary.phase !== "draft" || summary.persisted === true,
+    );
     if (candidates.length === 0) return;
     // 纯 V4 UI 不经过 zcodeSessionService.initializeWorkspace；若把首帧
     // 当成“已有 sqlite 存量”的静默基线，远端新库就会永远是 0 行。这里只做原子

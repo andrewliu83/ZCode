@@ -5,6 +5,7 @@ import { buildIdentitySection } from "./sections/identity.js";
 export type SystemPromptSection = Omit<ContextSection, "source"> & { source: string };
 
 export interface SystemPromptInspection {
+  nativeKernel?: import("@zcode/shared").AgentKernelId;
   basePrompt: string;
   defaultPrompt: string;
   sections: Array<SystemPromptSection & { readOnly: true }>;

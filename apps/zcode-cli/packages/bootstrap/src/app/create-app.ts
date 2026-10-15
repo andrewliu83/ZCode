@@ -1,5 +1,6 @@
 import { subagentProfilesFromSnapshot } from "../subagent-runtime-config.js";
 import { isAbsolute, join, resolve } from "node:path";
+import { createHash } from "node:crypto";
 import {
   createInMemorySessionEventStore,
   createNodeToolArtifactStore,
@@ -72,6 +73,11 @@ import { createPluginFacadeForApp } from "./plugin-facade.js";
 import { resolvePluginRuntimeFeatures } from "./plugin-runtime-features.js";
 import { createSessionFacade } from "./session-facade.js";
 import { resolveAppRuntimeConfig, runtimeConfigLogContext } from "./runtime-config.js";
+import { resolveAgentKernelBinding } from "./agent-kernel.js";
+import { AgentKernelRegistry } from "./agent-kernel-registry.js";
+import { openClaudeModelGateway } from "./claude-model-gateway.js";
+import { BUILT_IN_AGENT_KERNELS } from "@zcode/shared";
+import { resolveClaudeSdkExecutable } from "./claude-sdk-runtime.js";
 import { resolveBundledSkillRoots, THINKRAIL_SKILL_NAMES } from "./bundled-skills.js";
 import { collectDynamicWorkflowDisabledSkillPaths } from "./dynamic-workflow-gate.js";
 import { createWorkspaceHookRuntimeSecurity } from "./workspace-hook-trust.js";
@@ -287,6 +293,22 @@ export async function createZCodeApp(options: ZCodeAppOptions): Promise<ZCodeApp
         workingDirectory,
         workspaceIdentity: options.runtimeConfig?.memory?.workspaceIdentity,
       });
+    const binding = await resolveAgentKernelBinding(
+      sessionStore,
+      options.sessionId,
+      options.resume === true,
+      options.runtimeConfig?.agentKernel,
+      (id) =>
+        BUILT_IN_AGENT_KERNELS.some((kernel) => kernel.id === id) ||
+        options.agentKernelRegistrations?.some(
+          (registration) => registration.descriptor.id === id,
+        ) === true,
+    );
+    runtimeConfig = {
+      ...runtimeConfig,
+      agentKernel: binding.kernel,
+      nativeAgentSessionId: binding.nativeSessionId,
+    };
     const browserControlPort = options.browserControlPort;
     if (
       browserControlPort &&
@@ -788,7 +810,50 @@ export async function createZCodeApp(options: ZCodeAppOptions): Promise<ZCodeApp
       registry: options.providerRegistry,
       currentSelection: () => getRuntime().getSessionModelSelection(),
     });
+    const kernelModelRuntime = providerModelRuntime;
+    const kernelRegistry = new AgentKernelRegistry([
+      { descriptor: BUILT_IN_AGENT_KERNELS.find((kernel) => kernel.id === "zcode")! },
+      {
+        descriptor: BUILT_IN_AGENT_KERNELS.find((kernel) => kernel.id === "claude")!,
+        create: async () =>
+          options.nativeAgentKernel ??
+          new (await import("@zcode/adapters/agent-kernel")).ClaudeAgentKernel({
+            resolveConnection: kernelModelRuntime.claudeSdkConnection,
+            openConnection: (request) => {
+              const needsGateway =
+                kernelModelRuntime.requiresClaudeModelGateway(request.modelSelection) ||
+                Object.values(request.agents ?? {}).some(
+                  (profile) =>
+                    profile.modelSelection &&
+                    profile.modelSelection.providerId !== request.modelSelection?.providerId,
+                );
+              return needsGateway
+                ? openClaudeModelGateway(request, kernelModelRuntime.modelFactory)
+                : Promise.resolve(undefined);
+            },
+            env: options.env,
+            sdkRuntimePath: await resolveClaudeSdkExecutable(options.env, cliStorageRoot),
+            skillPluginCacheRoot: join(cliStorageRoot, "native-kernel-skills"),
+            stateDirectory: join(
+              cliStorageRoot,
+              "native-kernels",
+              "claude",
+              createHash("sha256")
+                .update(
+                  runtimeConfig.memory?.workspaceIdentity?.trim() ||
+                    runtimeConfig.workspaceIdentity?.trim() ||
+                    workingDirectory,
+                )
+                .digest("hex"),
+            ),
+          }),
+      },
+      ...(options.agentKernelRegistrations ?? []),
+    ]);
+    const nativeAgentKernel = await kernelRegistry.create(binding.kernel);
+    runtimeConfig.availableAgentKernels = kernelRegistry.descriptors();
     runtime = new AgentRuntime(sessionId, runtimeConfig, {
+      nativeAgentKernel,
       ...(options.readSubagentRuntimeConfig
         ? {
             loadAgentDefinitions: async (input) => {
@@ -851,6 +916,9 @@ export async function createZCodeApp(options: ZCodeAppOptions): Promise<ZCodeApp
         configResult.config.features.skill && configResult.config.skills.enabled
           ? (options.skillPort ??
             createNodeSkillAdapter({
+              getInvocationCounts: sessionStore?.getSkillInvocationCounts
+                ? () => sessionStore.getSkillInvocationCounts!()
+                : undefined,
               extraRoots: configResult.config.skills.roots,
               extraResolvedRoots: [...pluginOutcome.skillRoots, ...bundledSkillRoots],
               // 原因：构造期 disabledPaths 永久冻结，已有会话开启后仍无法加载路由技能。

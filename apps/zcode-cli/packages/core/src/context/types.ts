@@ -118,6 +118,8 @@ export interface ContextBuilderConfig {
   agentProfiles?: readonly AgentProfile[];
   embeddedSearchEnabled?: boolean;
   skillMetadataBudget?: number;
+  skillListingBudgetFraction?: number;
+  skillListingMaxDescChars?: number;
   customSystemPrompt?: string;
   /** 主代理设置只替换稳定正文；工作流 actor 与子代理不使用。 */
   mainSystemPrompt?: string;
@@ -136,7 +138,7 @@ export interface ContextBuilderConfig {
    * ThinkRail 常驻规则的渲染条件（docs/thinkrail/design.md D3）。缺席 = 不渲染：
    * 测试与「不参与该特性」的调用方无需显式传 false。
    *
-   * 三条条件在 ContextBuilder 之外算好（工具表与工作区事实都在那边），这里只做合取；
+   * 仅由开关与工具能力决定，不预先探测 spec 文件是否存在；
    * 规则的原文由 caller 传入而不是在 context 层硬编码，这样正文与领域包同源、可被单测直接断言。
    */
   thinkrail?: ThinkrailSectionInput;
@@ -145,8 +147,6 @@ export interface ContextBuilderConfig {
 export interface ThinkrailSectionInput {
   /** 用户开关（`runtimeFeatures.thinkrail`）。 */
   readonly enabled: boolean;
-  /** 工作区是否真的存在至少一个 spec（`workspaceHasSpec` 的结论，调用点记忆化）。 */
-  readonly hasSpec: boolean;
   readonly specRule: string;
   readonly workflowRule: string;
 }

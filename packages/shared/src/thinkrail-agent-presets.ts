@@ -19,7 +19,8 @@
 import type { AgentProfile } from "./subagent-profile.js";
 
 export const THINKRAIL_AGENT_TYPES = {
-  explorer: "explorer",
+  // explorer 只保留调用兼容；UI、SDK 和 Runtime 使用同一个内置探索身份。
+  explorer: "Explore",
   codeReviewer: "code-reviewer",
   testRunner: "test-runner",
   fixer: "fixer",

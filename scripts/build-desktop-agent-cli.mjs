@@ -3,6 +3,7 @@ import { access } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { stageAgentBundle } from "../packages/desktop/scripts/stage-agent-bundle.mjs";
+import { stageClaudeSdkRuntime } from "./claude-sdk-runtime-assets.mjs";
 import { runCommand } from "./spawn-command.mjs";
 
 // adapters tsc 在内存受限机器上会 OOM（exit 134），给整条构建链路提高堆上限。
@@ -100,10 +101,13 @@ async function verifyRequiredDevPluginRuntimeArtifacts() {
  *
  * dev 只跑宿主平台，所以 platformKey 直接取 process；打包链的跨平台 target 由它自己解析。
  */
-function stageDevAgentBundle() {
-  stageAgentBundle({
+async function stageDevAgentBundle() {
+  const platformKey = `${process.platform}-${process.arch}`;
+  const { stagedBundlePath } = stageAgentBundle({ repoRoot, platformKey });
+  await stageClaudeSdkRuntime({
     repoRoot,
-    platformKey: `${process.platform}-${process.arch}`,
+    platformKey,
+    destination: resolve(stagedBundlePath, ".."),
   });
 }
 
@@ -147,7 +151,7 @@ async function runBootstrapWithRemoteBuild() {
 
 if (useBootstrapWithRemoteBuild) {
   await runBootstrapWithRemoteBuild();
-  stageDevAgentBundle();
+  await stageDevAgentBundle();
   stageDevCuaPluginRuntime({ env: cuaPluginRuntimeStagingEnv });
   process.exit(0);
 }
@@ -169,7 +173,7 @@ if (!useTurboBuild) {
     env: pnpmRunEnv,
     stdio: "inherit",
   });
-  stageDevAgentBundle();
+  await stageDevAgentBundle();
   stageDevCuaPluginRuntime({ env: cuaPluginRuntimeStagingEnv });
   process.exit(0);
 }
@@ -191,5 +195,5 @@ runCommand(
     stdio: "inherit",
   },
 );
-stageDevAgentBundle();
+await stageDevAgentBundle();
 stageDevCuaPluginRuntime({ env: cuaPluginRuntimeStagingEnv });

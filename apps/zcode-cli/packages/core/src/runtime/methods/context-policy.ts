@@ -3,6 +3,18 @@ import type { TraceContext, SkillMetadata } from "@zcode/contracts";
 import type { AgentRuntimeInternal } from "../internal.js";
 import { refreshBranchAwareBuiltInTools } from "./embedded-search-branch.js";
 
+async function refreshInvocationCounts(runtime: AgentRuntimeInternal): Promise<void> {
+  if (!runtime.skillLoadOutcome || !runtime.sessionStore?.getSkillInvocationCounts) return;
+  const counts = await runtime.sessionStore.getSkillInvocationCounts();
+  runtime.skillLoadOutcome = {
+    ...runtime.skillLoadOutcome,
+    skills: runtime.skillLoadOutcome.skills.map((skill) => ({
+      ...skill,
+      invocationCount: counts[skill.qualifiedName ?? skill.name] ?? 0,
+    })),
+  };
+}
+
 export interface ContextPolicySnapshot {
   thinkrailEnabled?: boolean;
   mainSystemPrompt?: string;
@@ -26,12 +38,15 @@ export async function refreshContextPolicy(
   const mainSystemPrompt =
     mainPromptAllowed && runtime.readMainSystemPrompt
       ? (admitted === undefined
-          ? runtime.readMainSystemPrompt()
+          ? runtime.readMainSystemPrompt(runtime.config.agentKernel ?? "zcode")
           : admitted.mainSystemPrompt
         )?.trim() || undefined
       : runtime.config.mainSystemPrompt;
   const thinkrailChanged = enabled !== (runtime.config.runtimeFeatures?.thinkrail === true);
-  if (!thinkrailChanged && mainSystemPrompt === runtime.config.mainSystemPrompt) return false;
+  if (!thinkrailChanged && mainSystemPrompt === runtime.config.mainSystemPrompt) {
+    await refreshInvocationCounts(runtime);
+    return false;
+  }
 
   const previousFeatures = runtime.config.runtimeFeatures;
   const previousSkills = runtime.skillLoadOutcome;
@@ -46,6 +61,7 @@ export async function refreshContextPolicy(
         const discovered = await runtime.discoverSkillsForContext(traceContext);
         if (!previousSkills || !discovered) {
           runtime.skillLoadOutcome = discovered;
+          await refreshInvocationCounts(runtime);
           return;
         }
         const belongsToThinkrail = (skill: SkillMetadata) =>
@@ -63,6 +79,7 @@ export async function refreshContextPolicy(
             previousSkills.totalDiscovered - previousThinkrail.length + nextThinkrail.length,
         };
       }
+      await refreshInvocationCounts(runtime);
     } catch (error) {
       runtime.config.runtimeFeatures = previousFeatures;
       runtime.config.mainSystemPrompt = previousMainPrompt;

@@ -50,6 +50,29 @@ function projectionFor(sessionId: string, events: SessionEvent[]): ProductProjec
 }
 
 describe("SessionsIndexProjection 黄金测试（L1）", () => {
+  it("保存空会话改变列表元事实时发出增量，phase 保持 draft 且不重复发布", () => {
+    const snapshot = projectionFor("saved-empty", []).getSnapshot();
+    const index = new SessionsIndexProjection("ws-1", "epoch-1");
+    const extra = { createdAt: 1, lastActivityAt: 1 };
+    index.upsertFromConversation(snapshot, { ...extra, persisted: false });
+    const deltas = index.upsertFromConversation(snapshot, { ...extra, persisted: true });
+    expect(deltas).toEqual([
+      {
+        op: "session.upserted",
+        session: expect.objectContaining({
+          sessionId: "saved-empty",
+          phase: "draft",
+          persisted: true,
+          sessionEnded: false,
+        }),
+      },
+    ]);
+    expect(index.upsertFromConversation(snapshot, { ...extra, persisted: true })).toEqual([]);
+    expect(sessionsIndexSnapshotSchema.parse(index.getSnapshot()).sessions[0]?.persisted).toBe(
+      true,
+    );
+  });
+
   it("派生：title/phase/goal/hasBackgroundWork/preview 从会话快照取值", () => {
     const events = buildEvents("s1", (push) => {
       push(SessionEventType.SessionCreated, {

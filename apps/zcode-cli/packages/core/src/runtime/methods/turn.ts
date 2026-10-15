@@ -1,3 +1,4 @@
+import { executeNativeAgentTurn } from "./native-agent-turn.js";
 import { beginLocalTurnPreparation, type LocalTtftDetail } from "@zcode/contracts";
 import { runtimeInputMetadata } from "../../agent/runtime-input-presentation.js";
 import { withConversationQuotes } from "../helpers/conversation-quotes.js";
@@ -109,6 +110,9 @@ export async function executeTurnCommand(
   options?: ExecuteTurnOptions,
   startReservation?: ActiveTurnStartReservation,
 ): Promise<TurnResult> {
+  if (this.nativeAgentKernel || (this.config.agentKernel && this.config.agentKernel !== "zcode")) {
+    return executeNativeAgentTurn(this, input, attachments, options, startReservation);
+  }
   // 普通 Turn 过去在异步初始化完成后才读取 Session Selection/输出样式，
   // 初始化期间发生的切模会越过 admission 边界，错误影响已经开始的 Turn。
   // 这里在任何 await 之前冻结本轮事实；后续配置变化只作用于下一轮。
@@ -116,7 +120,7 @@ export async function executeTurnCommand(
   const admittedOutputStyle = this.config.outputStyle;
   const admittedContextPolicy = {
     thinkrailEnabled: this.readThinkrailEnabled?.(),
-    mainSystemPrompt: this.readMainSystemPrompt?.(),
+    mainSystemPrompt: this.readMainSystemPrompt?.(this.config.agentKernel ?? "zcode"),
   };
   const compactInstructions = parseCompactCommand(input);
   const rewindCommand = parseRewindCommand(input);

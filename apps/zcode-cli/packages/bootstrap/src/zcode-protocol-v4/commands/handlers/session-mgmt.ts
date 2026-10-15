@@ -22,8 +22,8 @@ import {
 /**
  * createSession：回落面最后一项的原生化。
  * 语义决策（原生层持有）：
- * - draft 语义：新会话一律 deferred（不进 sqlite），首条发送时由 prompt-turn 提升
- *   immediate——record 创建钩子固定传 deferred，提升逻辑不在钩子里。
+ * - 预热默认 deferred（不进 sqlite），首条发送时由 prompt-turn 提升 immediate。
+ *   显式另建的正式会话可以要求 immediate，未发送也保存内核并进入列表。
  * - firstInput 可选：有则经原生 prompt turn 提交（与 sendText 同一条写路径——
  *   draft 提升/提交即返/ready 边界三个语义免费获得），不再经旧 sendPrompt op。
  * - workspaceId：本地工作区 = workspacePath（Workspace Identity 约束的本地 fallback）；
@@ -49,12 +49,22 @@ async function createSession(
   }
   const { sessionId } = await host.createSessionRecord({
     workspaceId: payload.workspaceId,
+    agentKernel: payload.agentKernel ?? "zcode",
+    ...(payload.persistence ? { persistence: payload.persistence } : {}),
     ...(payload.permissionScope ? { permissionScope: payload.permissionScope } : {}),
     mcpServers: payload.mcpServers,
     offPeakToolEnabled: payload.offPeakToolEnabled,
     dynamicWorkflowEnabled: payload.dynamicWorkflowEnabled,
     dynamicWorkflowMode: payload.dynamicWorkflowMode,
   });
+  const actualAgentKernel = host.getRecord(sessionId)?.app.runtime?.getAgentKernel?.() ?? "zcode";
+  if (payload.agentKernel && payload.agentKernel !== actualAgentKernel) {
+    await host.closeSession?.(sessionId);
+    throw new V4InputAdmissionRejectedError(
+      "session.agentKernelMismatch",
+      "Created runtime does not support the selected agent kernel",
+    );
+  }
   // createSession.config 消费——草稿态 UI 的先行选择（模型/思考深度/
   // 模式）在首发之前应用并补发事件，首条 turn 即用所选配置。必须在 firstInput 之前。
   // 普通配置保留既有 warn 降级；Guarded 是明确的授权选择，失败不得用缺省模式执行。
@@ -135,7 +145,12 @@ async function createSession(
       throw error;
     }
   }
-  return { type: "createSession", sessionId, ...(firstInput ? { input: firstInput } : {}) };
+  return {
+    type: "createSession",
+    sessionId,
+    agentKernel: actualAgentKernel,
+    ...(firstInput ? { input: firstInput } : {}),
+  };
 }
 
 /**

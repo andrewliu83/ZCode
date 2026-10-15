@@ -3,7 +3,7 @@
 // ============================================================
 // 领域逻辑在 @zcode/thinkrail（逐函数移植自 dsh-plugin-thinkrail，MIT）。这里只做四件事：
 //   * 按工作区根复用 SpecIndex —— 它每次读都重校验，缓存才有意义；
-//   * 常驻段按当前文件系统事实做有界 spec 探测，不保留跨会话的存在性结论；
+//   * 独立存在性查询复用有界探针，不保留跨会话结论；提示词不依赖此查询；
 //   * 把成功 / 失败折成模型可见的一段文字（与源插件同形：失败是 `Error: ...` 文本，不是异常）；
 //   * 七个工具共用的 v2 契约字段（permission / resultBudget / timeout / cancellation / trace）。
 //
@@ -42,7 +42,7 @@ export function specRoot(workingDirectory: string | undefined): string {
 
 /**
  * Bugfix：进程级布尔缓存没有外部文件变化的失效依据，新会话也会继承旧的无 spec 结论。
- * 复用领域层有界探针，每次组装读取当前事实；文件系统仍是唯一所有者（design.md D3）。
+ * 独立存在性查询复用领域层有界探针，每次读取当前事实，不参与常驻规则门控。
  */
 export function thinkrailHasSpec(root: string): boolean {
   return workspaceHasSpec(root);

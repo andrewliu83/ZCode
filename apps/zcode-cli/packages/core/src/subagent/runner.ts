@@ -783,6 +783,11 @@ function resolveAgentProfileByType(
     };
   }
 
+  // 旧 ThinkRail 名仅在没有用户/项目精确或规范化命中时兼容到唯一探索实体。
+  if (requestedNormalized === "explorer") {
+    const canonical = profiles.find(profile => profile.name === "Explore");
+    if (canonical) return { kind: "matched", profile: canonical };
+  }
   return { availableAgentTypes, kind: "not_found" };
 }
 

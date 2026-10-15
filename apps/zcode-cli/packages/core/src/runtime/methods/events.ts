@@ -618,6 +618,17 @@ async function persistSession(
         mode: this.config.mode ?? "build",
       },
     });
+    // 内核绑定随会话创建落盘；默认设置变化不能迁移已有会话的执行所有者。
+    await this.sessionStore.saveSessionEntry?.({
+      id: `agent-kernel:${this.sessionId}`,
+      sessionID: this.sessionId,
+      type: "agent_kernel",
+      time: { created: Date.now(), updated: Date.now() },
+      data: {
+        kernel: this.config.agentKernel ?? "zcode",
+        nativeSessionId: this.config.nativeAgentSessionId,
+      },
+    });
     // 初始模型过去只写进首条 user message，没有写稳定的 session selection。
     // 冷恢复从末尾 assistant 反推时只能得到 provider/model，必选 reasoning 会丢失，
     // Subagent 因此在 hydration 前就无法重新创建 Model。会话创建时同步固定完整选型，

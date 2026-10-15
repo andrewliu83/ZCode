@@ -221,6 +221,7 @@ export type ZCodeAgentCuaPermissionObservation = CuaPermissionObservation &
   ZCodeAgentWorkspaceTarget;
 
 export interface ZCodeAgentCreateSessionParams extends ZCodeAgentWorkspaceTarget {
+  agentKernel?: import("@zcode/shared").AgentKernelId;
   sessionId?: string;
   sessionTraceId?: TraceId;
   parentSessionId?: string;
@@ -674,9 +675,15 @@ export interface IZCodeAgentService {
     params: ZCodeAgentSkillReferenceCatalogParams,
   ): Promise<ZCodeSkillsReferenceCatalogResult>;
   getSystemPromptSnapshot(
-    params: ZCodeAgentWorkspaceTarget & { sessionId?: string },
+    params: ZCodeAgentWorkspaceTarget & {
+      sessionId?: string;
+      agentKernel?: import("@zcode/shared").AgentKernelId;
+    },
   ): Promise<import("@zcode/shared").ZCodeSystemPromptReadResult>;
-  syncMainSystemPrompt(params: { mainSystemPrompt?: string }): Promise<void>;
+  syncMainSystemPrompt(params: {
+    mainSystemPrompt?: string;
+    kernelSystemPrompts?: Record<string, string>;
+  }): Promise<void>;
   /** 插件 UI：读取插件 MCP 的 `ui://` 资源；走 session 所在 workspace agent 进程。 */
   openMcpUiInstance(
     params: import("../plugin-ui-bridge/contract.js").PluginUiPrepareSandboxParams & {

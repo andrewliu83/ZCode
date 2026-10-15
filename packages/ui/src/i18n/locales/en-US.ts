@@ -2600,6 +2600,14 @@ const enUS: Record<string, string> = {
   "settings.askUserQuestionAutoResolution": "Automatically continue questions",
   "settings.askUserQuestionAutoResolutionDescription":
     "When enabled, Agent questions automatically continue after 5 minutes without an answer. When disabled, current and future questions wait for your response.",
+  "chat.agentKernel.label": "Agent engine",
+  "chat.agentKernel.newConversation":
+    "Changing the engine opens a new conversation and keeps your draft",
+  "chat.agentKernel.busy":
+    "The engine cannot change while this conversation is running or has queued inputs",
+  "chat.agentKernel.sessionAttachment":
+    "Remove attachments restored from this conversation before changing the engine",
+  "chat.agentKernel.switchError": "Could not change the agent engine: {error}",
   "settings.thinkrail": "Spec graph & ThinkRail workflows",
   "settings.thinkrailDescription":
     "Keep durable specs beside the code as the project's ground truth, and route each piece of work through a workflow — brainstorm, write specs, set up a project, ship a PR. Adds the spec tools, the workflow skills, and the spec rules every turn.",

@@ -49,9 +49,14 @@ completion-blocking active work：
 | selectedTurn      | latest、old                                                                                     |
 | toolShape         | none、singleReadonlyTool、parallelTools、activeTool、completedTool、failedTool、interactionTool |
 | toolResultBatch   | none、pending、committed                                                                        |
+| agentKernel       | zcode、claude；草稿显式选择，历史按 SessionStore 绑定恢复                                      |
 | modelConfig       | native、customProvider、sameModelDifferentProvider                                              |
 | modelMarkerSource | adjacentTurnSwitch、explicitSourceLessBoundary、none                                            |
 | collaborationMode | build、edit、plan、yolo                                                                         |
+
+## Agent 内核选择
+
+右下角内核选择属于 Composer Draft，创建命令显式传递 `agentKernel`，ACK 与 snapshot 读取实际 Runtime。运行、排队或等待交互时选择器禁用；空闲历史会话换内核新建并保留未提交草稿，立即持久化新绑定，不改旧会话。预热内核变化时先回收旧 owner，新首发按冻结选择校验；旧远端未确认 Claude 不得接纳输入。参见 [chat-agent-kernel](ui/chat-agent-kernel.md) 和 catalog AK01–AK07。
 
 用户动作：
 

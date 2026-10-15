@@ -2,9 +2,14 @@ import { expect, it, vi } from "vitest";
 import { zcodeProtocolMethods, zcodeSystemPromptReadParamsSchema } from "@zcode/shared";
 import { offPeakSelectionView } from "./fixtures/offPeakSelection.js";
 
-it.each(["desktop", "terminal"] as const)(
-  "%s 的 Host 表面值在查询边界转换为 CLI 协议值",
-  async (presentationSurface) => {
+it.each([
+  ["desktop", "zcode"],
+  ["terminal", "zcode"],
+  ["desktop", "claude"],
+  ["terminal", "claude"],
+] as const)(
+  "%s 的 %s 内核预览使用显式目标并转换表面协议",
+  async (presentationSurface, agentKernel) => {
     const requests: unknown[] = [];
     const result = {
       authority: "workspace",
@@ -46,12 +51,13 @@ it.each(["desktop", "terminal"] as const)(
     });
     try {
       await expect(
-        service.getSystemPromptSnapshot({ workspacePath: "/workspace/app" }),
+        service.getSystemPromptSnapshot({ workspacePath: "/workspace/app", agentKernel }),
       ).resolves.toEqual(result);
       expect(requests).toEqual([
         {
           workspace: { workspacePath: "/workspace/app", workspaceKey: "/workspace/app" },
           presentationSurface: presentationSurface === "desktop" ? "zcode_desktop" : "terminal",
+          ...(agentKernel === "claude" ? { agentKernel: "claude" } : {}),
         },
       ]);
     } finally {

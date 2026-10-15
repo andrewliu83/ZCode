@@ -1,8 +1,13 @@
 import { z } from "zod";
+import { agentKernelIdSchema, agentKernelDescriptorSchema } from "../agent-kernels.js";
 import { modelSelectionSchema } from "../model-selection.js";
 
 // ── config──
 export const sessionConfigStateSchema = z.object({
+  /** 创建时固定的内核；旧快照缺省按 zcode 显示，不属于可变模型配置。 */
+  agentKernel: agentKernelIdSchema.optional(),
+  /** 当前部署实际注册的内核，源自 Bootstrap factory registry。 */
+  availableAgentKernels: z.array(agentKernelDescriptorSchema).optional(),
   /** Session 接受并持久化的稀疏选择意图；provider/model/thought 仅为 UI effective 投影。 */
   modelSelection: modelSelectionSchema.optional(),
   provider: z.string(),

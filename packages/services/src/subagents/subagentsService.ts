@@ -99,7 +99,7 @@ function createBuiltInAgents(
 ): AgentSummary[] {
   const generalPurposeOverride = modelSelectionOverrides["general-purpose"];
   const exploreOverride = modelSelectionOverrides.Explore;
-  return [
+  const agents: AgentSummary[] = [
     {
       id: createAgentStateId({
         name: "general-purpose",
@@ -147,6 +147,7 @@ function createBuiltInAgents(
       ? createThinkrailAgentProfiles().map(
           (profile): AgentSummary => ({
             ...profile,
+            ...(profile.name === "Explore" ? { modelSelection: exploreOverride, modelSelectionOverride: exploreOverride } : {}),
             id: createAgentStateId({ name: profile.name, scope: "built-in", source: "built-in" }),
             path: `built-in:${profile.name}`,
             tools: profile.tools ? [...profile.tools] : undefined,
@@ -161,6 +162,8 @@ function createBuiltInAgents(
         )
       : []),
   ];
+  // 共享预设增强 Explore，而不是把同一内置身份再次插入设置/@目录。
+  return [...new Map(agents.map(agent => [agent.id, agent])).values()];
 }
 
 function emptyAgentsState(): AgentsStateFile {

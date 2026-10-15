@@ -7,6 +7,7 @@ import { SYSTEM_REMINDER_SOURCES } from "../../system-reminder/source.js";
 import { refreshContextPolicy } from "./context-policy.js";
 import { modelMessageContentToText } from "@zcode/contracts";
 import { rebuildContextPrefix } from "./context-refresh.js";
+import { nativeThinkrailRules } from "./native-agent-prompt.js";
 
 export async function getSystemPromptInspection(
   this: AgentRuntimeInternal,
@@ -24,6 +25,30 @@ export async function getSystemPromptInspection(
     }
   }
   if (this.thinkrailPolicyRefresh) await this.thinkrailPolicyRefresh;
+  if (this.nativeAgentKernel || (this.config.agentKernel && this.config.agentKernel !== "zcode")) {
+    const content = nativeThinkrailRules(this, this.config.runtimeFeatures?.thinkrail === true);
+    return {
+      nativeKernel: this.config.agentKernel ?? "zcode",
+      basePrompt: this.config.mainSystemPrompt ?? "",
+      defaultPrompt: "",
+      busy,
+      sections: content
+        ? [
+            {
+              name: "ThinkRail",
+              source: "thinkrail",
+              content,
+              injectionTarget: "system",
+              cacheHint: "dynamic",
+              chars: content.length,
+              tokens: estimateTokens(content),
+              preview: content.slice(0, 100),
+              readOnly: true,
+            },
+          ]
+        : [],
+    };
+  }
   const result =
     this.latestContextBuildResult ??
     this.createContextBuilderFromSnapshot(

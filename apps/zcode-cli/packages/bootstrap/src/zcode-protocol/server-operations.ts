@@ -1,5 +1,6 @@
 /* eslint-disable max-lines -- ZCode Protocol 的 session/workspace 方法共享同一个 server context 与 snapshot helpers，迁移期先集中维护。 */
 import { observeSessionDebug } from "./session-debug.js";
+import { resolveKernelSystemPrompt } from "@zcode/shared";
 import {
   TASK_LIST_SESSION_TYPES,
   isTaskListSessionType,
@@ -3365,6 +3366,7 @@ async function createRecord(
     eventStore,
     resume,
     runtimeConfig: {
+      agentKernel: "agentKernel" in params ? params.agentKernel : undefined,
       mode: "mode" in params ? params.mode : undefined,
       modelSelection: "model" in params ? toRuntimeModelSelection(initialModel) : undefined,
       parentSessionId,
@@ -3424,7 +3426,8 @@ async function createRecord(
       ? { offPeakPort: createProtocolOffPeakPort(context, () => ownSessionRecord) }
       : {}),
     readThinkrailEnabled: () => context.appRuntimePreferences.thinkrailEnabled,
-    readMainSystemPrompt: () => context.appRuntimePreferences.mainSystemPrompt,
+    readMainSystemPrompt: (kernel) =>
+      resolveKernelSystemPrompt(context.appRuntimePreferences, kernel),
     resolveInitialBashShellSelection: startupPreferences.resolveInitialBashShellSelection,
     ...(startupPreferences.subagentRuntimeConfigEnabled &&
     !(workspace.workspaceIdentity && isRemoteWorkspaceIdentity(workspace.workspaceIdentity))

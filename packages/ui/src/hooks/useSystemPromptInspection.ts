@@ -27,6 +27,7 @@ export function useSystemPromptInspection(params: {
   sessionId?: string;
   mainSystemPrompt?: string;
   thinkrailEnabled?: boolean;
+  agentKernel?: import("@zcode/shared").AgentKernelId;
 }) {
   const {
     workspacePath,
@@ -35,6 +36,7 @@ export function useSystemPromptInspection(params: {
     sessionId,
     mainSystemPrompt,
     thinkrailEnabled,
+    agentKernel,
   } = params;
   const service = useZCodeAgentService(
     workspacePath ?? undefined,
@@ -45,6 +47,8 @@ export function useSystemPromptInspection(params: {
     workspaceIdentity?.trim() || workspacePath,
     remoteSessionId,
     sessionId,
+    // 显式预览内核只影响无会话目标；会话查询仍读取原绑定。
+    sessionId ? undefined : agentKernel,
   ]);
   const revision = useSystemPromptInspectionStore((state) => state.revision);
   const generation = useRef(0);
@@ -74,7 +78,7 @@ export function useSystemPromptInspection(params: {
         workspacePath,
         ...(workspaceIdentity ? { workspaceIdentity } : {}),
         ...(remoteSessionId ? { remoteSessionId } : {}),
-        ...(sessionId ? { sessionId } : {}),
+        ...(sessionId ? { sessionId } : agentKernel ? { agentKernel } : {}),
       });
       // 原因：相同路径可以属于不同远程身份；迟到结果不能覆盖新目标的提示词。
       if (generation.current === request)
@@ -89,7 +93,7 @@ export function useSystemPromptInspection(params: {
     return () => {
       generation.current++;
     };
-  }, [refresh, mainSystemPrompt, revision, thinkrailEnabled]);
+  }, [refresh, mainSystemPrompt, revision, thinkrailEnabled, agentKernel]);
   return {
     ...(state.key === targetKey && state.service === service
       ? state

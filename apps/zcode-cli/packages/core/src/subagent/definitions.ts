@@ -21,7 +21,8 @@ export function applyThinkrailAgentProfiles(options: {
   enabled: boolean;
 }): (profile: AgentProfile) => boolean {
   if (options.enabled) return () => true;
-  const reserved = new Set(createThinkrailAgentProfiles().map((profile) => profile.name));
+  // Explore 同时是基础探索角色；关闭 ThinkRail 只能移除专用预设，不能删基础能力。
+  const reserved = new Set(createThinkrailAgentProfiles().map((profile) => profile.name).filter(name => name !== "Explore"));
   return (profile) => !(profile.source === "built-in" && reserved.has(profile.name));
 }
 

@@ -64,7 +64,10 @@ export function normalizeAgentProfiles(
     }),
   );
   for (const profile of profiles) {
-    active.set(profile.name, profile);
+    // ThinkRail 只增强内置人格，已保存的 Explore 模型覆盖仍由同一个状态所有者决定。
+    active.set(profile.name, profile.source === "built-in" && profile.name === EXPLORE_AGENT_TYPE && overrides[EXPLORE_AGENT_TYPE]
+      ? { ...profile, modelSelection: overrides[EXPLORE_AGENT_TYPE] }
+      : profile);
   }
   return Array.from(active.values());
 }

@@ -13,7 +13,7 @@ const base: ContextBuilderConfig = {
   },
   presentationSurface: "zcode_desktop",
   guidanceToolNames: ["Read", "Skill", "spec_grep", "spec_get", "spec_graph"],
-  thinkrail: { enabled: true, hasSpec: false, specRule: SPEC_RULE, workflowRule: WORKFLOW_RULE },
+  thinkrail: { enabled: true, specRule: SPEC_RULE, workflowRule: WORKFLOW_RULE },
 };
 
 describe("主代理基础提示词设置", () => {
@@ -23,7 +23,9 @@ describe("主代理基础提示词设置", () => {
       "USER BASE PROMPT",
     );
     expect(result.sections.some((s) => s.source === "identity")).toBe(false);
-    expect(result.sections.find((s) => s.source === "thinkrail")?.content).toBe(WORKFLOW_RULE);
+    expect(result.sections.find((s) => s.source === "thinkrail")?.content).toBe(
+      `${SPEC_RULE}\n\n${WORKFLOW_RULE}`,
+    );
     expect(result.sections.some((s) => s.source === "desktop_context")).toBe(true);
     expect(result.sections.some((s) => s.source === "dynamic_behavior")).toBe(true);
     expect(
@@ -34,7 +36,9 @@ describe("主代理基础提示词设置", () => {
   it("清空设置恢复默认正文，保留相同注入段", () => {
     const result = createContextBuilder({ ...base, mainSystemPrompt: " \n " }).build();
     expect(result.sections.some((s) => s.source === "identity")).toBe(true);
-    expect(result.sections.find((s) => s.source === "thinkrail")?.content).toBe(WORKFLOW_RULE);
+    expect(result.sections.find((s) => s.source === "thinkrail")?.content).toBe(
+      `${SPEC_RULE}\n\n${WORKFLOW_RULE}`,
+    );
   });
 
   it("不会覆盖工作流 actor 的 persona", () => {

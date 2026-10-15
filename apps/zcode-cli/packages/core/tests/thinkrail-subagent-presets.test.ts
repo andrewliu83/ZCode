@@ -27,8 +27,10 @@ describe("ThinkRail subagent 预设", () => {
 
   it("只读预设不拿写工具；能写的预设才拿 Edit/Write", () => {
     const byName = new Map(createThinkrailAgentProfiles().map((p) => [p.name, p]));
-    for (const name of ["explorer", "code-reviewer", "test-runner"]) {
-      const tools = byName.get(name)?.tools ?? [];
+    for (const name of ["Explore", "code-reviewer", "test-runner"]) {
+      const profile = byName.get(name);
+      expect(profile, name).toBeDefined();
+      const tools = profile!.tools ?? [];
       expect(tools, name).not.toContain("Edit");
       expect(tools, name).not.toContain("Write");
     }
@@ -59,10 +61,13 @@ describe("ThinkRail subagent 预设", () => {
     expect(names).toContain("Explore");
   });
 
-  it("开关关闭：五个预设都不在名单里（缺省即关）", () => {
+  it("开关关闭：四个专用预设移除，基础 Explore 保留且不重复", () => {
     const reader = createAgentDefinitionsReader([]);
     const names = reader().activeAgents.map((profile) => profile.name);
-    for (const name of presetNames) expect(names, name).not.toContain(name);
+    for (const name of presetNames.filter((value) => value !== "Explore"))
+      expect(names, name).not.toContain(name);
+    expect(names.filter((name) => name === "Explore")).toHaveLength(1);
+    expect(names).not.toContain("explorer");
     expect(names).toContain("general-purpose");
   });
 
@@ -95,9 +100,12 @@ describe("ThinkRail subagent 预设", () => {
     const active = reader().activeAgents;
     expect(active.map((profile) => profile.name)).toContain("fixer");
     expect(active.find((profile) => profile.name === "fixer")?.systemPrompt).toBe("mine");
-    // 内置那五个仍然不在。
+    // 专用预设移除，基础 Explore 仍保留。
     const builtIn = active.filter(
-      (profile) => profile.source === "built-in" && presetNames.includes(profile.name),
+      (profile) =>
+        profile.source === "built-in" &&
+        profile.name !== "Explore" &&
+        presetNames.includes(profile.name),
     );
     expect(builtIn).toHaveLength(0);
   });

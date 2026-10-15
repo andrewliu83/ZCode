@@ -9,13 +9,17 @@ export async function pushMainSystemPromptToRemoteHosts(
   }>,
   mainSystemPrompt: string | undefined,
   onError: (error: unknown) => void,
+  kernelSystemPrompts?: Record<string, string>,
 ): Promise<void> {
   await Promise.all(
     connections
       .filter((connection) => connection.target.kind !== "server")
       .map(async (connection) => {
         try {
-          await connection.zcodeAgentService.syncMainSystemPrompt({ mainSystemPrompt });
+          await connection.zcodeAgentService.syncMainSystemPrompt({
+            mainSystemPrompt,
+            ...(kernelSystemPrompts ? { kernelSystemPrompts } : {}),
+          });
         } catch (error) {
           onError(error);
         }

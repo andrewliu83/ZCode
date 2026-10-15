@@ -372,6 +372,7 @@ function RootInner({
   useMainSystemPromptSync({
     settingsLoaded: Boolean(appSettings),
     mainSystemPrompt: appSettings?.mainSystemPrompt,
+    kernelSystemPrompts: appSettings?.kernelSystemPrompts,
     zcodeAgentService: services.zcodeAgentService,
   });
   const [welcomeScreenOpenReason, setWelcomeScreenOpenReason] =

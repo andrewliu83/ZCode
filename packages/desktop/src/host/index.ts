@@ -1784,6 +1784,7 @@ async function createWindowRemoteConnectionHandle(params: {
       [{ target: params.target, zcodeAgentService: services.get(IZCodeAgentService) }],
       (await localSettingService.get()).mainSystemPrompt,
       (error) => logger.warn("remote main system prompt push failed", error),
+      (await localSettingService.get()).kernelSystemPrompts,
     );
     // ThinkRail 总开关（docs/thinkrail/design.md D2）：同一条推送，同一个理由。
     const thinkrailEnabled = await localSettingService
@@ -2987,7 +2988,7 @@ parentPort.on("message", async (e: Electron.MessageEvent) => {
                 );
               },
               // ThinkRail 总开关（docs/thinkrail/design.md D2）：同一形状，同一理由。
-              forwardMainSystemPrompt: (value) => {
+              forwardMainSystemPrompt: (value, kernels) => {
                 return pushMainSystemPromptToRemoteHosts(
                   windowRemoteConnectionRegistry
                     .listReadyConnections()
@@ -2997,6 +2998,7 @@ parentPort.on("message", async (e: Electron.MessageEvent) => {
                     })),
                   value,
                   (error) => logger.warn("remote main system prompt forward failed", error),
+                  kernels,
                 );
               },
               forwardThinkrailEnabled: (enabled) => {

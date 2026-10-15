@@ -142,6 +142,7 @@ export interface ZCodeProtocolAgentServerContext {
      */
     thinkrailEnabled: boolean;
     mainSystemPrompt?: string;
+    kernelSystemPrompts?: Record<string, string>;
     /**
      * host 同步的动态工作流灰度门。
      * 缺省 false（fail-closed）：不认识该方法的旧 Host 或还没来得及同步的启动窗口里，

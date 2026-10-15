@@ -36,6 +36,8 @@ export const sessionSummarySchema = z.object({
   // optional 是为了兼容旧 sessions-index frame / 旧持久化摘要。
   titleSource: sessionMetaStateSchema.shape.titleSource.optional(),
   phase: sessionPhaseSchema,
+  // 空的正式会话仍是 draft；持久化是 Runtime 事实，列表不能把它与内存预热混同。
+  persisted: z.boolean().optional(),
   sessionEnded: z.boolean(),
   // 列表小圆点用（此处保留布尔，避免为侧栏订阅整个 backgroundWorks）。
   hasBackgroundWork: z.boolean(),

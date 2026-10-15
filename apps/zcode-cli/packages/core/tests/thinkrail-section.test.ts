@@ -11,7 +11,6 @@ const ALL_TOOLS = ["Read", "Bash", "Skill", "spec_grep", "spec_get", "spec_graph
 function build(overrides: Partial<Parameters<typeof buildThinkrailSection>[0]> = {}) {
   return buildThinkrailSection({
     enabled: true,
-    hasSpec: true,
     specRule: SPEC_RULE,
     workflowRule: WORKFLOW_RULE,
     toolNames: ALL_TOOLS,
@@ -20,7 +19,7 @@ function build(overrides: Partial<Parameters<typeof buildThinkrailSection>[0]> =
 }
 
 describe("ThinkRail 常驻段", () => {
-  it("三条条件都满足时渲染，两条规则都在，且是 dynamic system 段", () => {
+  it("开关和工具能力满足时渲染，两条规则都在，且是 dynamic system 段", () => {
     const section = build();
     expect(section).not.toBeNull();
     expect(section?.source).toBe("thinkrail");
@@ -36,14 +35,13 @@ describe("ThinkRail 常驻段", () => {
     expect(build({ enabled: false })).toBeNull();
   });
 
-  it("无 spec 的项目保留工作流路由，省略 spec 规则", () => {
-    const section = build({ hasSpec: false });
-    expect(section?.content).toContain("read the choosing-a-workflow skill FIRST");
-    expect(section?.content).not.toContain("Specs are this project's ground truth.");
+  it("无 spec 的项目也收到 spec 与工作流规则，与 DSH 常驻注入一致", () => {
+    const section = build();
+    expect(section?.content).toBe(`${SPEC_RULE}\n\n${WORKFLOW_RULE}`);
   });
 
   it("只有 Skill 能力时仍可路由；没有 Skill 时不能注入要求先加载技能的规则", () => {
-    expect(build({ toolNames: ["Read", "Skill"], hasSpec: false })?.content).toBe(WORKFLOW_RULE);
+    expect(build({ toolNames: ["Read", "Skill"] })?.content).toBe(WORKFLOW_RULE);
     expect(build({ toolNames: ALL_TOOLS.filter((name) => name !== "Skill") })).toBeNull();
   });
 

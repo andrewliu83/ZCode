@@ -187,6 +187,23 @@ admission 的权威未来意图，不是 renderer-local 队列。UI 只可在收
 `rejected/failed` 必须保留可重发内容或显式提示；restart discarded 依 delivery 裁决：旧 runtime 的
 `queue/guide` 静默结算，未进入 transcript 的 `startNow` 才保留显式重发决策。
 
+正文 revision 只在实际文本改变时推进；编辑器重复回传相同正文不能被当成下一条草稿，
+也不能在提交占用期间把已提交正文重新写入草稿 owner。`accepted` 后清空已提交正文，
+真实新编辑（包括先修改再改回原文）保留；`failed/rejected` 恢复原正文。该合同对
+ZCode / Claude 内核、desktop-continuous / web-remote-replayable 的共享 Composer 一致。
+
+```mermaid
+sequenceDiagram
+  participant Editor as 编辑器
+  participant Draft as Composer 草稿 owner
+  participant Host as Host / CLI admission
+  Editor->>Draft: 发送，冻结正文与 revision
+  Draft->>Host: 提交一次
+  Editor->>Draft: 重复的相同正文回调（忽略）或真实新编辑（推进 revision）
+  Host-->>Draft: accepted / rejected / failed
+  Draft->>Editor: accepted 只清已提交正文；失败恢复；真实新草稿保留
+```
+
 | ID  | 前置状态                                                                                                                                                                                 | 用户/系统事件                      | 规则命中                                             | 期望结果                                                                                                                                                                                                                                                                                            | Review   |
 | --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------- | ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------- |
 | A01 | `draft`，用户输入普通文本“这是个什么项目”                                                                                                                                                | send                               | firstSend                                            | 创建 session，进入详情页，用户消息可见，session 进入 `prewarming/running`                                                                                                                                                                                                                           | accepted |
@@ -843,6 +860,22 @@ I12 代表；running/queue、remote/replayable、重启、新草稿继承、主�
 running 安全边界，不与 queue/stop/compact 做排列；I59 把 Coding/Start/Team Plan 归为 builtin 等价类，
 不按具体套餐展开；I60 用 SSH shared-host 代表远端身份隔离，手机 replayable 复用同一 Agent 事实与
 projection，不另做 provider、thought、模式、主题或 locale 的笛卡尔积。
+
+## AK. 聊天输入框 Agent 内核
+
+对应 [chat-agent-kernel](ui/chat-agent-kernel.md) 的 KER-C01–C07。选择是草稿事实；创建后以 Runtime / SessionStore 为权威，已有历史不跨内核迁移。
+
+| ID | 前置状态 | 用户/系统事件 | 规则命中 | 期望结果 | Review |
+| --- | --- | --- | --- | --- | --- |
+| AK01 | 新草稿，未显式选择 | 右下角选 Claude | explicitKernelCreate | 默认 ZCode；设置页无切换；创建参数、ACK、Runtime、snapshot 为 Claude；首发进入 SDK | accepted |
+| AK02 | ZCode 预热正在创建或已就绪 | 切 Claude，旧 ACK 迟到 | prewarmKernelMatchesSubmission | 回收旧未发送会话后换代；旧回包不覆盖；首发执行一次 | accepted |
+| AK03 | 空闲历史，会话有未提交正文、模型、附件 | 选另一内核 | immutableKernelBinding | 独立会话立即持久化；保留草稿并重绑上传，不自动发；原历史/SDK ID 不变；Session-owned queue refs 禁用迁移 | accepted |
+| AK04 | running / queue 非空 / pendingInteraction | 选择内核 | noKernelChangeDuringAdmission | 控件禁用，不能修改绑定或创建替代会话 | accepted |
+| AK05 | zcode / claude 冷恢复；旧快照或草稿无字段 | 打开或重连 | persistedKernelAuthority | 显示真实绑定；历史无字段为 ZCode；旧全局设置不覆盖 | accepted |
+| AK06 | 相同 workspacePath，不同远端 identity；桌面/手机 | 选择并发送或恢复 | workspaceIdentityAndDelivery | 草稿与预热独立，同 Host attachment；continuous / replayable 读取同一绑定 | accepted |
+| AK07 | Claude 资源/连接不支持；旧 Agent 剥离字段 | 创建或发送 | noImplicitKernelFallback | 可见错误；未接纳草稿保留，已接纳输入保留在历史；不改用 ZCode | accepted |
+
+剪枝：不迁移跨内核历史，不新增手机 Agent；主题和语言复用共用控件，不做全平台全模型组合。DK/SDK 真实供应商遵从率不由选择器用例证明。
 
 ## J. 多 Session 并发
 

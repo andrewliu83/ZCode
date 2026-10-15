@@ -19,6 +19,7 @@ import { isEffectiveDevelopmentNodeEnv } from "../runtime-tools/nodeEnv.js";
 import { maybeThrowInjectedFsFault } from "../fs/fsFaultInjection.js";
 import { atomicWriteText } from "../fs/atomicFileUtils.js";
 import { withSettingsWriteQueueTimeout } from "./settingsWriteQueue.js";
+import { formatSettingsLog } from "./settingsLog.js";
 import {
   migrateLegacyAccountConnectionSettings,
   needsLegacyAccountConnectionMigration,
@@ -41,14 +42,6 @@ const debugLog = (...args: unknown[]) => {
   }
   console.debug(formatLogPrefix("settingService", process.pid), ...args);
 };
-
-function formatSettingsLog(settings: AppSettings): string {
-  // 原因：新增正文设置后，整份设置日志会泄露提示词；只保留字段已配置的事实。
-  return JSON.stringify({
-    ...settings,
-    mainSystemPrompt: settings.mainSystemPrompt === undefined ? undefined : "[redacted]",
-  });
-}
 
 function resolveUserHomeDir() {
   // 独立桌面 Dev 实例已设置自己的 home，设置服务却仍写真实 HOME，
@@ -322,6 +315,15 @@ export function createSettingServiceWithMigrations(): {
         const merged = appSettingsSchema.parse({
           ...current,
           ...validatedPatch,
+          // 每次补丁只携带当前内核；队列内基于最新状态合并，避免跨窗口编辑另一个内核时丢正文。
+          ...(validatedPatch.kernelSystemPrompts
+            ? {
+                kernelSystemPrompts: {
+                  ...current.kernelSystemPrompts,
+                  ...validatedPatch.kernelSystemPrompts,
+                },
+              }
+            : {}),
         });
 
         // 打开工作区后会几乎同时写 recentProjects 和 lastWorkspaceSession。

@@ -726,6 +726,10 @@ export class SqliteSessionStore
     return sessionInputRepository.getSessionInputById(this.db, id);
   }
 
+  async getSkillInvocationCounts(): Promise<Record<string, number>> {
+    return messageRepository.skillInvocationCounts(this.db);
+  }
+
   async readTodos(input: { sessionID: SessionId }): Promise<TodoItem[]> {
     return todoRepository.readTodos(this.db, input);
   }

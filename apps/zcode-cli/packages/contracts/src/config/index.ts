@@ -55,6 +55,8 @@ export const ConfigKey = {
   SkillsEnabled: "skills.enabled",
   SkillsIncludeInstructions: "skills.includeInstructions",
   SkillsMetadataBudget: "skills.metadataBudget",
+  SkillsListingBudgetFraction: "skills.skillListingBudgetFraction",
+  SkillsListingMaxDescChars: "skills.skillListingMaxDescChars",
   SkillsRoots: "skills.roots",
 
   // Skill / Command 可用性覆盖（按 SKILL.md / 命令 .md 的绝对路径过滤）
@@ -115,40 +117,44 @@ export type ConfigValue<K extends ConfigKey> = K extends "modelStream.idleTimeou
               : K extends "memory.use"
                 ? boolean
                 : K extends "skills.metadataBudget"
-                  ? number
-                  : K extends "skills.roots"
-                    ? string[]
-                    : K extends "skill" | "command"
-                      ? Record<string, SkillCommandOverride>
-                      : K extends "mcp.servers"
-                        ? Record<string, McpServerConfig>
-                        : K extends "plugins.enabled"
-                          ? boolean
-                          : K extends "plugins.dirs"
-                            ? string[]
-                            : K extends "plugins.enabledPlugins"
-                              ? Record<string, boolean>
-                              : K extends "plugins.extraKnownMarketplaces"
-                                ? PluginConfig["extraKnownMarketplaces"]
-                                : K extends "plugins.options"
-                                  ? Record<string, PluginOptionValues>
-                                  : K extends "plugins.suppressedBuiltins"
-                                    ? string[]
-                                    : K extends "logging.level"
-                                      ? "debug" | "info" | "warn" | "error"
-                                      : K extends "logging.format"
-                                        ? "text" | "json"
-                                        : K extends "toolConcurrency.maxConcurrency"
-                                          ? number
-                                          : K extends "modelAnomalyGuard"
-                                            ? ModelAnomalyGuardConfig
-                                            : K extends "hooks"
-                                              ? HooksRuntimeConfig
-                                              : K extends "ui.locale"
-                                                ? UiLocale
-                                                : K extends "ui.theme"
-                                                  ? UiThemePreference
-                                                  : unknown;
+                  ? number | undefined
+                  : K extends
+                        | "skills.skillListingBudgetFraction"
+                        | "skills.skillListingMaxDescChars"
+                    ? number
+                    : K extends "skills.roots"
+                      ? string[]
+                      : K extends "skill" | "command"
+                        ? Record<string, SkillCommandOverride>
+                        : K extends "mcp.servers"
+                          ? Record<string, McpServerConfig>
+                          : K extends "plugins.enabled"
+                            ? boolean
+                            : K extends "plugins.dirs"
+                              ? string[]
+                              : K extends "plugins.enabledPlugins"
+                                ? Record<string, boolean>
+                                : K extends "plugins.extraKnownMarketplaces"
+                                  ? PluginConfig["extraKnownMarketplaces"]
+                                  : K extends "plugins.options"
+                                    ? Record<string, PluginOptionValues>
+                                    : K extends "plugins.suppressedBuiltins"
+                                      ? string[]
+                                      : K extends "logging.level"
+                                        ? "debug" | "info" | "warn" | "error"
+                                        : K extends "logging.format"
+                                          ? "text" | "json"
+                                          : K extends "toolConcurrency.maxConcurrency"
+                                            ? number
+                                            : K extends "modelAnomalyGuard"
+                                              ? ModelAnomalyGuardConfig
+                                              : K extends "hooks"
+                                                ? HooksRuntimeConfig
+                                                : K extends "ui.locale"
+                                                  ? UiLocale
+                                                  : K extends "ui.theme"
+                                                    ? UiThemePreference
+                                                    : unknown;
 
 // ============================================================
 // Config Scope
@@ -236,9 +242,11 @@ export interface RuntimeConfig {
   skills: {
     enabled: boolean;
     includeInstructions: boolean;
-    metadataBudget: number;
+    metadataBudget?: number;
+    skillListingBudgetFraction: number;
+    skillListingMaxDescChars: number;
     roots: string[];
-    [skillPath: string]: boolean | number | string[] | { enable?: boolean };
+    [skillPath: string]: boolean | number | string[] | { enable?: boolean } | undefined;
   };
   // key 为 SKILL.md 绝对路径，value.enable=false 表示禁用该 skill
   skillOverrides: Record<string, SkillCommandOverride>;
@@ -330,7 +338,8 @@ export const DefaultRuntimeConfig: RuntimeConfig = {
   skills: {
     enabled: true,
     includeInstructions: true,
-    metadataBudget: 20_000,
+    skillListingBudgetFraction: 0.01,
+    skillListingMaxDescChars: 1536,
     roots: [],
   },
   skillOverrides: {},

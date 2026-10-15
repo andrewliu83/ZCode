@@ -5,6 +5,7 @@ import { conversationQuotesSchema } from "../conversationSelection.js";
 // conversation rewind 无独立命令（裁决：= editUserQuery 的 UI 入口）；
 // workspace-only 文件撤销走 applyFileRewind，不截断聊天历史。
 import { z } from "zod";
+import { agentKernelIdSchema } from "../agent-kernels.js";
 import { conversationRowTargetSchema, timestampSchema } from "./core.js";
 import { attachmentRefSchema } from "./attachment-ref.js";
 import { v4ConversationFileRewindPreviewResultSchema } from "./transport.js";
@@ -26,6 +27,7 @@ import {
 import {
   zcodeBrowserAmbientContextSchema,
   zcodeProtocolMcpServerSchema,
+  zcodeSessionPersistenceSchema,
 } from "../zcode-protocol/index.js";
 import { highspeedMessageMetaSchema } from "../highspeed.js";
 import { sharedContextRefSchema } from "./shared-context-ref.js";
@@ -53,6 +55,10 @@ export const commandPayloadSchemas = {
   // firstInput 缺省 → phase=draft 空会话；携带 → 直接 turnHeader+userInput rows。
   createSession: z.object({
     workspaceId: z.string(),
+    // 聊天实际走 v4 创建；必须显式传递内核，不能只更新 legacy session/create 默认值。
+    agentKernel: agentKernelIdSchema.optional(),
+    // 显式创建正式会话立即落盘；普通预热仍延迟到首发持久化。
+    persistence: zcodeSessionPersistenceSchema.optional(),
     permissionScope: z.literal("session").optional(),
     firstInput: z
       .object({
@@ -92,6 +98,8 @@ export const commandPayloadSchemas = {
   sendText: z
     .object({
       text: z.string(),
+      /** 本次 Composer 的冻结选择，用于校验已有/预热会话绑定，不改变绑定。 */
+      agentKernel: agentKernelIdSchema.optional(),
       attachments: z.array(attachmentRefSchema).optional(),
       // Desktop Cmd/Ctrl+Enter 只覆盖本次 busy input，不改 session followupMode。
       // startNow 由 CLI 原子抢占当前 turn，不经过 queue admission。
@@ -388,6 +396,8 @@ export const commandResultSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.enum(["createSession", "createSelectionSideSession", "forkAssistant"]),
     sessionId: z.string(),
+    /** 新创建会话的实际绑定，供显式选择的客户端确认；旧客户端可忽略。 */
+    agentKernel: agentKernelIdSchema.optional(),
     input: z
       .object({
         delivery: z.enum(["startNow", "queue", "guide"]),

@@ -16,6 +16,10 @@
 | 不变量     | 永远不能被破坏的产品原则      | running edit 必须先过 stop barrier；fork 只能复制稳定 assistant 历史，不复制 queue/background work |
 | trace case | 一条可 review、可转测试的路径 | Given running, when `/compact`, then reject                                                        |
 
+## Agent 内核绑定
+
+聊天输入框在 v4 `createSession.agentKernel` 显式提交 ZCode / Claude 选择；ACK 返回创建结果的实际内核，snapshot.config.agentKernel 为 Runtime 的只读投影。`sendText.agentKernel` 是冻结选择的一致性断言，不能修改 Runtime；不一致拒绝 admission。已有会话换内核创建独立且立即持久化的会话，草稿移交后导航；运行、队列或交互未收口时禁用。预热继续 deferred，并按 workspace identity/transport generation/内核换代，迟到回包仅清理自己的旧创建。恢复依据 SessionStore 的内核与原生 SDK 会话 ID，两种 delivery 读取同一事实。
+
 ## Trace Tree 节点类型
 
 Trace Tree 是协议展开后的视图。它不是协议本身，但它必须忠实表达协议语义。

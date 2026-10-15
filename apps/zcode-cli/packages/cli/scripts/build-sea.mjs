@@ -27,6 +27,7 @@ import { collectSeaRuntimeToolAssets } from "./sea-runtime-tool-assets.mjs";
 import { prepareSeaRuntimeToolAssets } from "./sea-runtime-tool-prepare.mjs";
 import { collectSeaPlaywrightAssets } from "./sea-playwright-assets.mjs";
 import { collectSeaProviderConfigAssets } from "./sea-provider-config-assets.mjs";
+import { resolveClaudeSdkRuntimeAsset } from "../../../../../scripts/claude-sdk-runtime-assets.mjs";
 
 export {
   adHocCodesignArgs,
@@ -172,6 +173,12 @@ const prepareSeaBlob = async (target) => {
       target,
     });
   const providerConfigAssets = await collectSeaProviderConfigAssets({ root: repositoryRoot });
+  const nativeTarget = targetParts(target);
+  const claudeSdkRuntime = await resolveClaudeSdkRuntimeAsset({
+    repoRoot: repositoryRoot,
+    platform: nativeTarget.releasePlatform === "win" ? "win32" : nativeTarget.releasePlatform,
+    arch: nativeTarget.arch,
+  });
 
   await writeFile(
     seaConfig,
@@ -184,6 +191,7 @@ const prepareSeaBlob = async (target) => {
           ...runtimeToolAssets,
           ...playwrightAssets,
           ...providerConfigAssets,
+          "zcode/claude-sdk/runtime": claudeSdkRuntime.path,
         },
         disableExperimentalSEAWarning: true,
         main: "dist/zcode.cjs",

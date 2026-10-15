@@ -21,6 +21,8 @@ export interface SubagentContextBuilderConfig {
   envInfo: EnvInfo;
   model?: Model;
   skillMetadataBudget?: number;
+  skillListingBudgetFraction?: number;
+  skillListingMaxDescChars?: number;
   skills?: ContextBuilderConfig["skills"];
   userInstructions?: ContextBuilderConfig["userInstructions"];
 }
@@ -158,6 +160,9 @@ function buildSubagentContextSections(config: SubagentContextBuilderConfig): Con
     const skillsSection = buildSkillsSection({
       outcome: config.skills,
       metadataBudget: config.skillMetadataBudget,
+      contextWindow: config.model?.properties.contextWindow,
+      listingBudgetFraction: config.skillListingBudgetFraction,
+      maxDescriptionChars: config.skillListingMaxDescChars,
     });
     if (skillsSection) {
       sections.push(skillsSection);
@@ -196,6 +201,8 @@ function toBaseContextBuilderConfig(config: SubagentContextBuilderConfig): Conte
     model: config.model,
     currentDate: config.currentDate,
     skillMetadataBudget: config.skillMetadataBudget,
+    skillListingBudgetFraction: config.skillListingBudgetFraction,
+    skillListingMaxDescChars: config.skillListingMaxDescChars,
     skills: config.skills,
   };
 }

@@ -1233,6 +1233,8 @@ export function createConversationV4Gateway(
     // 语义决策（draft persistence / firstInput 走原生 prompt turn）在原生 handler。
     createSessionRecord: async ({
       workspaceId,
+      agentKernel,
+      persistence,
       mcpServers,
       offPeakToolEnabled,
       dynamicWorkflowEnabled,
@@ -1252,9 +1254,9 @@ export function createConversationV4Gateway(
       // 本地 workspacePath 处理。
       const created = await createSessionRecordForV4(context, {
         workspace: resolveWorkspaceRefFromId(workspaceId),
-        // 群任务已经由首条真实需求触发，先落盘隔离授权，再开放任务与配置。
-        // 普通 Desktop draft 仍保持 deferred。
-        persistence: "deferred",
+        agentKernel: agentKernel ?? "zcode",
+        // 普通预热延迟到首发；显式换内核创建的正式会话立即保存，以便关闭后恢复草稿。
+        persistence: persistence ?? "deferred",
         // MCP 是 runtime 创建期配置；v4 createSession 必须与 legacy
         // session/create 等价透传，否则创建的 session 永远不会启动这些工具。
         mcpServers,
@@ -1268,16 +1270,19 @@ export function createConversationV4Gateway(
           ? { dynamicWorkflowMode }
           : {}),
       });
-      if (permissionScope) {
+      if (permissionScope || persistence === "immediate") {
         const record = context.sessions.get(created.sessionId);
-        if (!record) throw new Error("Group task runtime is unavailable");
+        if (!record) throw new Error("Created task runtime is unavailable");
+        // v4 空会话过去只写 record.persistence 标记，没有创建 SQLite Session；换内核的新
+        // 会话若在首发前关闭就丢失绑定。复用 Runtime 唯一持久化入口，不在 Host 另写 binding。
         await record.app.runtime.ensureSessionPersistedForExternalActivity("", {
           traceContext: record.traceContext,
         });
-        await context.deps.sessionStore!.updateSession({
-          id: created.sessionId as SessionId,
-          permission: { version: 1, scope: "session", mode: "build" },
-        });
+        if (permissionScope)
+          await context.deps.sessionStore!.updateSession({
+            id: created.sessionId as SessionId,
+            permission: { version: 1, scope: "session", mode: "build" },
+          });
         await record.app.runtime.setExecutionState({ mode: "build" }, record.traceContext);
         record.persistence = "immediate";
       }
@@ -1564,6 +1569,7 @@ export function createConversationV4Gateway(
         titleSource: normalizeStoredTitleSource(session.titleSource),
         phase: "completedSuccess" as const,
         sessionEnded: true,
+        persisted: true,
         hasBackgroundWork: false,
         lastActivityAt: session.time?.updated ?? 0,
         createdAt: session.time?.created ?? 0,
@@ -1659,6 +1665,8 @@ export function createConversationV4Gateway(
       const selection =
         record.app.runtime.getSessionModelSelection() ?? record.restoredModelSelection;
       return {
+        agentKernel: record.app.runtime.getAgentKernel?.() ?? "zcode",
+        availableAgentKernels: record.app.runtime.getAvailableAgentKernels?.(),
         modelSelection: cloneModelSelection(selection),
         provider: selection?.providerId ?? "",
         model: selection?.modelId ?? "",
@@ -1704,6 +1712,7 @@ export function createConversationV4Gateway(
       return {
         createdAt: record.createdAt,
         lastActivityAt: record.updatedAt,
+        persisted: record.app.runtime.isSessionPersisted?.() === true,
         ...(record.parentSessionId ? { parentSessionId: String(record.parentSessionId) } : {}),
       };
     },

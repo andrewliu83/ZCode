@@ -1,3 +1,8 @@
+import {
+  BUILT_IN_AGENT_KERNELS,
+  resolveKernelSystemPrompt,
+  type AgentKernelId,
+} from "@zcode/shared";
 import { useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button.js";
@@ -27,17 +32,20 @@ export function SystemPromptSettingsSection(props: {
   const text = (key: string) => intl.formatMessage({ id: `settings.systemPrompt.${key}` });
   const { settings, update } = useSettings();
   const currentSessionId = useCurrentPromptSession(props.workspacePath, props.workspaceIdentity);
-  const [target, setTarget] = useState<string | null>(null);
+  const [kernel, setKernel] = useState<AgentKernelId>("zcode");
+  const [target, setTarget] = useState<string | null>("");
   const sessionId = target === null ? currentSessionId : target || undefined;
   const [draft, setDraft] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const { snapshot, loading, error, refresh } = useSystemPromptInspection({
     ...props,
     sessionId,
-    mainSystemPrompt: settings?.mainSystemPrompt,
+    mainSystemPrompt: settings ? resolveKernelSystemPrompt(settings, kernel) : undefined,
     thinkrailEnabled: settings?.thinkrailEnabled,
+    agentKernel: kernel,
   });
-  const saved = settings?.mainSystemPrompt?.trim() || snapshot?.defaultPrompt || "";
+  const override = settings ? resolveKernelSystemPrompt(settings, kernel) : undefined;
+  const saved = override || snapshot?.defaultPrompt || "";
   const value = draft ?? saved;
   const dirty = value.trim() !== saved;
   const errorMessage =
@@ -49,7 +57,12 @@ export function SystemPromptSettingsSection(props: {
   const save = async (restore: boolean) => {
     setSaving(true);
     try {
-      await update({ mainSystemPrompt: restore ? "" : value.trim() });
+      const content = restore ? "" : value.trim();
+      await update(
+        kernel === "zcode"
+          ? { mainSystemPrompt: content }
+          : { kernelSystemPrompts: { [kernel]: content } },
+      );
       setDraft(null);
       await refresh();
       toast(text("saved"));
@@ -65,6 +78,32 @@ export function SystemPromptSettingsSection(props: {
 
   return (
     <div className="space-y-6" data-testid="settings-system-prompt">
+      <Select
+        value={kernel}
+        onValueChange={(next) => {
+          setKernel(next);
+          setTarget("");
+          setDraft(null);
+        }}
+      >
+        <SelectTrigger aria-label={text("kernel")} data-testid="settings-system-prompt-kernel">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {(snapshot?.availableAgentKernels ?? BUILT_IN_AGENT_KERNELS).map((descriptor) => (
+            <SelectItem
+              key={descriptor.id}
+              value={descriptor.id}
+              data-testid={`settings-system-prompt-kernel-${descriptor.id}`}
+            >
+              {descriptor.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {kernel !== "zcode" && !snapshot?.defaultPrompt && (
+        <p className="text-ui-caption text-muted-foreground">{text("managedBase")}</p>
+      )}
       <section className="space-y-3">
         <div>
           <h3 className="text-sm font-medium">{text("baseTitle")}</h3>
@@ -91,7 +130,7 @@ export function SystemPromptSettingsSection(props: {
             variant="outline"
             data-testid="settings-system-prompt-restore"
             onClick={() => void save(true)}
-            disabled={saving || !settings || (!settings.mainSystemPrompt?.trim() && draft === null)}
+            disabled={saving || !settings || (!override && draft === null)}
           >
             {text("restore")}
           </Button>
@@ -135,11 +174,13 @@ export function SystemPromptSettingsSection(props: {
                       {text("session")} {sessionId.slice(-8)}
                     </SelectItem>
                   )}
-                {snapshot?.availableSessions?.map((session) => (
-                  <SelectItem key={session.sessionId} value={session.sessionId}>
-                    {text("session")} {session.sessionId.slice(-8)}
-                  </SelectItem>
-                ))}
+                {snapshot?.availableSessions
+                  ?.filter((session) => (session.agentKernel ?? "zcode") === kernel)
+                  .map((session) => (
+                    <SelectItem key={session.sessionId} value={session.sessionId}>
+                      {text("session")} {session.sessionId.slice(-8)}
+                    </SelectItem>
+                  ))}
               </SelectContent>
             </Select>
           </div>
@@ -162,6 +203,7 @@ export function SystemPromptSettingsSection(props: {
           <details
             className="rounded-xl border border-border bg-card"
             data-prompt-source="base_prompt"
+            data-native-kernel={snapshot.nativeKernel ?? "zcode"}
           >
             <summary className="cursor-pointer px-4 py-3 text-xs font-medium">
               {text("effectiveBase")} · {text("readOnly")}
@@ -199,7 +241,16 @@ export function SystemPromptSettingsSection(props: {
             </div>
           </details>
         ))}
+        {snapshot?.nativeKernel && snapshot.nativeKernel !== "zcode" && (
+          <p
+            data-testid="settings-system-prompt-native-notice"
+            className="text-xs text-muted-foreground"
+          >
+            {text("nativeInspectionLimited")}
+          </p>
+        )}
         {snapshot?.authority === "session" &&
+          (!snapshot.nativeKernel || snapshot.nativeKernel === "zcode") &&
           (snapshot.lastRequest ? (
             <details
               className="rounded-xl border border-border bg-card"

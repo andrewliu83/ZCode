@@ -151,7 +151,7 @@ flowchart LR
 
 - 工作流路由：功能开启且当前 scope 可调用 `Skill`。项目没有 spec 时仍须先加载
   `choosing-a-workflow`；路由技能决定是否直接解释代码、进入项目初始化或进入其他工作流。
-- spec ground truth：功能开启、具备 `Skill` 与 spec 读侧三件且工作区确实存在 spec；原文也要求先加载 `spec-graph` 技能。
+- spec ground truth：功能开启且具备 `Skill` 与 spec 读侧三件，不以工作区是否已有 spec 为门槛；与 DSH 一样先读取 `spec-graph` 并通过工具确认图状态。
 - 子代理没有 `Skill` 或 spec 工具时，不注入它无法执行的指令；关闭时两条都不注入。
 
 渲染位置保持在 `ContextBuilder` 的 system 层，与 `# Session-specific guidance` 相邻。
@@ -160,15 +160,16 @@ flowchart LR
 **spec 锚点判断**：
 
 ```
-spec 规则 = 开关开 ∧ Skill 工具可用 ∧ spec_grep / spec_get / spec_graph ∧ 工作区有 spec
+spec 规则 = 开关开 ∧ Skill 工具可用 ∧ spec_grep / spec_get / spec_graph
 workflow 规则 = 开关开 ∧ Skill 工具可用
 ```
 
-spec 的锚点解决只读子代理无法调用 spec 工具的问题。没有 spec 时只省略 spec 规则，
-不能省略首次建立 spec 所需的工作流路由。功能启用时，每次动态上下文组装都做有界目录探测（最多 200 个
-Markdown 文件、6 层目录），不建全图，也不在进程内永久缓存布尔结果。外部编辑器、Git 与
-普通 Write/Edit 工具引入或移除 spec 后，下一次组装必须读取当前事实；新会话不继承旧结论。
-关闭功能时不探测。
+spec 的锚点解决只读子代理无法调用 spec 工具的问题。与 DSH 原插件保持一致，无 spec 的空项目或
+已有代码库也收到两条规则；是否已有图由 spec 工具查询结果决定，不由提示词装配前的文件探测决定。
+ZCode 请求、原生内核追加段以及设置页只读预览共用同一渲染条件，不为提示词组装扫描 Markdown 文件。
+工具读取仍以文件系统为事实来源，外部编辑、Git 和普通 Write/Edit 引入或移除 spec 不改变常驻规则。
+初始化或首次建立规范请求由 `choosing-a-workflow → setting-up-a-project` 路由；已有代码且无 spec
+继续进入 `importing-a-codebase`。本次对齐不把所有只读熟悉请求强制改为建图，也不自动写文档。
 
 **规则原文**（工具名用内核裸名，去掉源插件的 MCP 前缀）：
 
@@ -235,10 +236,10 @@ ZCode 已有完整 subagent 体系：`Agent` 工具带 `subagent_type`（`contra
 名字解析支持 NFKC + 小写 + 去分隔符的模糊匹配（`core/src/subagent/runner.ts` 的
 `resolveAgentProfileForRequest`），未命中会**列出全部可用名**。
 
-**决策**：5 个预设（`explorer` / `code-reviewer` / `test-runner` / `fixer` / `ui-designer`）
-落成内核内置 subagent 定义（形态对齐 `core/src/subagent/explore.ts`），开关关闭时不出现在可用名单。
-预设名称、提示词和工具白名单由共享公开入口唯一提供，CLI 与 Services 使用同一份定义。
-子智能体设置页与 `@` 目录在启用时展示五个只读预设，禁用时移除；同名用户/项目配置继续优先。
+**决策**：探索预设合并到基础 `Explore`，另外注册 `code-reviewer` / `test-runner` / `fixer` / `ui-designer`。
+开关开启时增强基础探索指引并增加四个专用预设；关闭时保留基础 `Explore`，移除四个专用预设。
+共享公开入口唯一提供名称、提示词和工具白名单，CLI、Services、设置页及 `@` 目录不再列出第二个内置 `explorer`。
+旧 `explorer` 仅作为调用别名；用户/项目自行定义该名字时仍优先。Claude SDK 自带的 `Explore` 不重复注册。
 **不移植 `thinkrail_delegate`**：重复造会丢掉后台运行、并发、白名单执行时拒绝、子代理面板。
 
 首次装配与每轮刷新共用 `createAgentDefinitionsReader`：先放内置预设，再应用现有用户、项目
@@ -423,12 +424,12 @@ git ─────────────────────────�
 | B5  | `worktree_diff scope=branch`         | 与 base 的 merge-base 比，期间落在 base 的无关提交不混入                                                    |
 | C1  | workflow 路由                        | 新请求触发「先读 choosing-a-workflow」                                                                      |
 | C2  | 技能资源                             | `shipping-a-pr` 的五个阶段文档可被技能正文按名引用读到                                                      |
-| D1  | 具名委派                             | `Agent` + `subagent_type: "explorer"` 等拿到预设人格与白名单                                                |
+| D1  | 具名委派                             | `Agent` + `subagent_type: "Explore"` 等拿到预设人格与白名单，兼容旧 `explorer` 调用别名                     |
 | D2  | 白名单是执行时拒绝                   | 预设未列出的工具**调用被拒**，不只是提示里消失                                                              |
 | D3  | 锚点判断                             | 只读子代理（工具表无 `spec_*`）不出现 spec 规则；主 agent 出现（P2 ✅ 由 `thinkrail-section.test.ts` 钉住） |
 | E1  | 开关关                               | 13 工具不可见、section 不渲染、10 技能不在目录、5 预设不在名单、面板入口消失                                |
 | E2  | 开关关但已有数据                     | spec 文件与工作树**保留**，重新打开后照常工作                                                               |
-| E3  | 空项目开着开关                       | 工作区没有 spec 根时规则不渲染（不指向空目录；P2 ✅ 由 `thinkrailHasSpec` + probe 测试钉住）                |
+| E3  | 无 spec 的空项目或已有代码库开着开关 | ZCode / Claude 请求和设置预览均包含 spec + workflow 规则；已有会话下一轮采用开关，受限工具 scope 仍不注入不可执行规则 |
 | F1  | 面板只读                             | 面板没有写入路径；所有写操作经 agent 工具                                                                   |
 
 ## 7. 实施顺序

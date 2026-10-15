@@ -165,6 +165,18 @@ class ConfigStore {
       if (config.skills.metadataBudget !== undefined) {
         this.set(ConfigKey.SkillsMetadataBudget, config.skills.metadataBudget, scope);
       }
+      if (config.skills.skillListingBudgetFraction !== undefined)
+        this.set(
+          ConfigKey.SkillsListingBudgetFraction,
+          config.skills.skillListingBudgetFraction,
+          scope,
+        );
+      if (config.skills.skillListingMaxDescChars !== undefined)
+        this.set(
+          ConfigKey.SkillsListingMaxDescChars,
+          config.skills.skillListingMaxDescChars,
+          scope,
+        );
       if (config.skills.roots !== undefined)
         this.set(ConfigKey.SkillsRoots, config.skills.roots, scope);
     }
@@ -312,6 +324,12 @@ export class ConfigPortImpl implements ConfigPort {
         includeInstructions: this.store.get(ConfigKey.SkillsIncludeInstructions) ?? true,
         metadataBudget:
           this.store.get(ConfigKey.SkillsMetadataBudget) ?? DefaultConfig.skills.metadataBudget,
+        skillListingBudgetFraction:
+          this.store.get(ConfigKey.SkillsListingBudgetFraction) ??
+          DefaultConfig.skills.skillListingBudgetFraction,
+        skillListingMaxDescChars:
+          this.store.get(ConfigKey.SkillsListingMaxDescChars) ??
+          DefaultConfig.skills.skillListingMaxDescChars,
         roots: this.store.get(ConfigKey.SkillsRoots) ?? DefaultConfig.skills.roots,
       },
       skillOverrides: this.store.get(ConfigKey.SkillOverrides) ?? DefaultConfig.skillOverrides,
@@ -427,6 +445,10 @@ function getDefaultValue(key: ConfigKey): unknown {
       return defaults.skills.includeInstructions;
     case ConfigKey.SkillsMetadataBudget:
       return defaults.skills.metadataBudget;
+    case ConfigKey.SkillsListingBudgetFraction:
+      return defaults.skills.skillListingBudgetFraction;
+    case ConfigKey.SkillsListingMaxDescChars:
+      return defaults.skills.skillListingMaxDescChars;
     case ConfigKey.SkillsRoots:
       return defaults.skills.roots;
     case ConfigKey.LogLevel:

@@ -42,6 +42,8 @@ export interface SkillMetadata {
   name: string;
   description: string;
   whenToUse?: string;
+  /** 成功加载次数；只用于技能目录预算的稳定优先级。 */
+  invocationCount?: number;
   pluginName?: string;
   /** 所属 plugin 的完整 id；非 plugin skill 不设置。 */
   pluginId?: string;
@@ -58,6 +60,7 @@ export interface SkillMetadata {
 
 /** Skill tool result 中允许跨边界传播的最小 metadata；不包含正文或 description。 */
 export interface SkillTelemetryMetadata {
+  name?: string;
   qualifiedName?: string;
   pluginId?: string;
   source?: SkillSource;

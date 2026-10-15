@@ -31,6 +31,23 @@ describe("Composer Draft 持久选择", () => {
     vi.restoreAllMocks();
   });
 
+  it("单独选择 Claude 也持久保存，旧会话草稿不能覆盖另一 identity 的选择", () => {
+    persistV4ComposerDraft(workspace, "host-a", V4_DRAFT_SCOPE_ROOT, {
+      text: "",
+      agentKernel: "claude",
+    });
+    persistV4ComposerDraft(workspace, "host-b", V4_DRAFT_SCOPE_ROOT, {
+      text: "",
+      agentKernel: "zcode",
+    });
+    expect(readV4ComposerDraft(workspace, "host-a", V4_DRAFT_SCOPE_ROOT)?.agentKernel).toBe(
+      "claude",
+    );
+    expect(readV4ComposerDraft(workspace, "host-b", V4_DRAFT_SCOPE_ROOT)?.agentKernel).toBe(
+      "zcode",
+    );
+  });
+
   it("空文本仍保留 mode、选择；显式清理才删除 scope", () => {
     persistV4ComposerDraft(workspace, undefined, "session-a", {
       text: "",

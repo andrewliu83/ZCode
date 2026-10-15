@@ -15,6 +15,7 @@ it("工作区提示词预览不创建 Session，不调用模型；ThinkRail 根�
       thinkrailEnabled: true,
       dynamicWorkflowEnabled: false,
       mainSystemPrompt: "PREVIEW BASE",
+      kernelSystemPrompts: { claude: "CLAUDE BASE" },
     },
   } as unknown as ZCodeProtocolAgentServerContext;
   const params = {
@@ -28,10 +29,39 @@ it("工作区提示词预览不创建 Session，不调用模型；ThinkRail 根�
     expect(snapshot.sections.find((section) => section.source === "thinkrail")?.content).toContain(
       "choosing-a-workflow",
     );
+    const specRule = snapshot.sections.find((section) => section.source === "thinkrail");
+    expect(specRule?.content).toContain("Specs are this project's ground truth.");
+    expect(specRule?.readOnly).toBe(true);
     expect(
       snapshot.sections.find((section) => section.source === "desktop_context")?.readOnly,
     ).toBe(true);
     expect(createZCodeApp).not.toHaveBeenCalled();
+    const native = await readSystemPrompt(context, { ...params, agentKernel: "claude" });
+    expect(native.nativeKernel).toBe("claude");
+    expect(native.basePrompt).toBe("CLAUDE BASE");
+    expect(native.defaultPrompt).toBe("");
+    expect(native.sections.every((section) => section.source === "thinkrail")).toBe(true);
+    expect(native.sections.map((section) => section.content).join("\n")).toContain(
+      "choosing-a-workflow",
+    );
+    expect(native.sections.map((section) => section.content).join("\n")).toContain(
+      "Specs are this project's ground truth.",
+    );
+    expect(native.sections.map((section) => section.content).join("\n")).toContain(
+      "mcp__zcode_thinkrail__spec_graph",
+    );
+    expect(native.sections.every((section) => section.readOnly)).toBe(true);
+    expect(native.lastRequest).toBeUndefined();
+    expect(createZCodeApp).not.toHaveBeenCalled();
+    updateSystemPromptPolicy(context, {
+      workspace: params.workspace,
+      mainSystemPrompt: "PREVIEW BASE",
+      kernelSystemPrompts: { claude: "" },
+    });
+    expect((await readSystemPrompt(context, { ...params, agentKernel: "claude" })).basePrompt).toBe(
+      "",
+    );
+    expect((await readSystemPrompt(context, params)).basePrompt).toBe("PREVIEW BASE");
     updateSystemPromptPolicy(context, { workspace: params.workspace, mainSystemPrompt: "" });
     context.appRuntimePreferences.thinkrailEnabled = false;
     const off = await readSystemPrompt(context, params);
@@ -63,7 +93,12 @@ it("查询会话时必须匹配 workspace identity，未知会话不退回工作
     workspaceKey: "identity:A",
     workspaceIdentity: "identity:A",
   };
-  const result = await readSystemPrompt(context, { workspace, sessionId: "session" });
+  const result = await readSystemPrompt(context, {
+    workspace,
+    sessionId: "session",
+    agentKernel: "claude",
+  });
+  expect(result.nativeKernel).toBeUndefined();
   expect(result.authority).toBe("session");
   expect(result.lastRequest?.systemMessages).toEqual(["ACTUAL SYSTEM"]);
   inspect.mockClear();

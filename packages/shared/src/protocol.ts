@@ -346,6 +346,10 @@ export interface AppSettings {
   thinkrailEnabled?: boolean;
   /** 主代理基础正文；空白恢复默认，自动注入与子代理身份由 Runtime 保持独立。 */
   mainSystemPrompt?: string;
+  /** 原生内核的覆盖正文；ZCode 继续由兼容字段 mainSystemPrompt 唯一保存。 */
+  kernelSystemPrompts?: Record<string, string>;
+  /** 新会话默认内核；已有会话遵循自己的持久化绑定。 */
+  agentKernel?: import("./agent-kernels.js").AgentKernelId;
   /** 已启用的内置 Agent CLI；UI 对外仍展示为“Install”，底层语义保持为启用内置能力。 */
   enabledBuiltinAgentCliProviders?: ZCodeProvider[];
   /** 设置页中每个 Provider Family 当前唯一的结构化连接选择。 */

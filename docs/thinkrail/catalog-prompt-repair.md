@@ -24,7 +24,7 @@
 
 - 预设的名称、人格、工具白名单只有一个公开定义源；UI 与 CLI 投影成自己的类型。
 - 内置技能不可移除，但可在目录里看见与引用；用户技能继续独立启停。
-- 两条规则都指向技能，必须有 Skill 能力；spec 规则额外要求存在 spec 和读侧工具，工作流路由与 spec 存在性独立。
+- 两条规则都指向技能，必须有 Skill 能力；spec 规则额外要求读侧工具，不再要求已存在 spec，按 DSH 机制先查图状态。
 - 目录是派生快照。设置文件唯一写入方仍是 SettingsService，CLI 只接受 Host 推送。
 
 ## Feature Relationships
@@ -110,7 +110,7 @@ Thinkrail 与目录/提示词的已确认语义已补录到 feature graph。
 | ------------ | ------------------------------------- | ------------------------------------------------------------------------------------ |
 | TR-CAT-01    | 开关开启，读取子智能体设置/@目录      | 五个同源只读预设出现；关闭移除；同名用户优先；服务单测 + E2E 场景                    |
 | TR-CAT-02    | 开启，读取设置与 Composer 技能目录    | choosing-a-workflow 等内置技能可见；关闭移除；内置项不可独立修改；服务/协议/投影单测 |
-| TR-PROMPT-01 | 开启、无 spec，发送“熟悉当前项目”     | adapter 请求 system 包含 workflow 路由，不包含 spec ground-truth；完整运行时集成     |
+| TR-PROMPT-01 | 开启、无 spec，发送“熟悉当前项目”     | adapter 请求 system 同时包含 workflow 路由与 spec ground-truth；完整运行时集成     |
 | TR-PROMPT-02 | 开启且有 spec / 缺 Skill 或 spec 能力 | 独立按各自锚点注入；受限子代理无不可执行指令；context 单测                           |
 | TR-POLICY-01 | 已有会话 false→true→false，逐轮发送   | 下一轮工具、技能和 system prompt 一致更新；历史保留；运行时集成                      |
 | TR-POLICY-02 | running 时改变开关并排队下一输入      | 本轮不变，下一轮读取新值；无第二 admission；运行时集成                               |
@@ -130,7 +130,9 @@ Thinkrail 与目录/提示词的已确认语义已补录到 feature graph。
 
 本仓库原路径是 `buildThinkrailSection` → dynamic system section → ContextBuilder → ModelRequest，
 但原 `hasSpec=false` 提前返回使工作流指令缺席。修复后保留原规则文本，仅拆开两条规则的条件。
-运行时集成捕获模型执行器收到的请求，断言无 spec 时路由存在、spec ground-truth 不存在；
+运行时集成捕获模型执行器收到的请求，断言无 spec 时两条规则都存在；
+原生内核追加段和工作区预览使用相同条件，关闭或工具受限时仍按能力门控。
+2026-10-15 对齐 DSH：移除 spec 规则独立的 hasSpec 门槛及提示词组装前探测；保留原技能路由表。
 实际调用 `Skill(choosing-a-workflow)` 后的下一请求带有 `# Choosing a Workflow` 正文。
 模型执行器使用不联网的测试实现，证明提示词与 Skill 工具的实际接线，不声称已验证所有模型的自主选择。
 
@@ -144,3 +146,17 @@ Thinkrail 与目录/提示词的已确认语义已补录到 feature graph。
 
 E2E 使用源码测试构建与 fixture workspace，验证目录行为；没有重新验收 macOS 安装包。
 本轮改动尚未重新打入先前生成的 macOS 应用包。
+
+## 2026-10-15：常驻 spec 规则对齐 DSH
+
+- 移除 `hasSpec` 注入门槛及 ContextBuilder、原生内核、工作区预览的事前文件探测。
+  三条链路共用 `buildThinkrailSection`；Claude 继续映射原生技能名和 MCP 工具名。
+- 保留开关与工具能力门控、下一轮生效和运行中快照边界；保留原技能路由表。
+- 60 项 CLI 单测/集成通过，覆盖无 spec 的真实代码目录、主提示词覆盖、开关同步、
+  Claude 续接、冷恢复、受限 scope 及 desktop-continuous / web-remote-replayable。
+- `settings-system-prompt.test.ts` 2/2 桌面 E2E 通过，新增断言确认两种内核的只读注入框
+  均有 spec ground-truth 规则，Claude 显示正确的 `mcp__zcode_thinkrail__spec_graph`。
+- 根目录 typecheck、lint（63 warnings / 0 errors）、architecture 检查通过；
+  CLI core/bootstrap typecheck 及修改文件格式检查通过。
+- E2E 证据：`packages/desktop/.e2e-artifacts/desktop-e2e-20261015032244844-p16782-6caf3e17d2cc358a/`。
+  本轮未重新生成安装包、未提交代码；测试仅证明规则接线，不代表模型必然选择建图。

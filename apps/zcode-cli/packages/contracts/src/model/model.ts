@@ -28,9 +28,13 @@ export interface ModelOptions {
   maxOutputTokens?: number;
 }
 
-export interface ModelRequest {
+export interface ModelRequest extends Pick<
+  import("./index.js").ModelRequestSettings,
+  "temperature" | "topP" | "topK" | "stopSequences"
+> {
   messages: ModelInputMessage[];
   tools?: ModelToolContract[];
+  toolChoice?: import("./index.js").ModelToolChoice;
   responseJsonSchema?: JsonSchema;
   options?: ModelOptions;
   abortSignal?: AbortSignal;

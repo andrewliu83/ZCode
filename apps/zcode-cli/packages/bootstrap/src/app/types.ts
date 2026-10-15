@@ -147,7 +147,7 @@ export interface ZCodeAppOptions {
   sourceTitle?: ModelProviderSourceTitle;
   /** stdio Host 的当前进程策略；已有会话在下一轮边界采用新值。 */
   readThinkrailEnabled?: () => boolean;
-  readMainSystemPrompt?: () => string | undefined;
+  readMainSystemPrompt?: (kernel?: import("@zcode/shared").AgentKernelId) => string | undefined;
   /** 本地 Host 源文档读取；无此能力时保持启动期配置。 */
   readSubagentRuntimeConfig?: (input: {
     signal: AbortSignal;
@@ -194,6 +194,9 @@ export interface ZCodeAppOptions {
   mcpPort?: McpPort;
   /** 由宿主提供 per-app lease；产出的端口归 app 所有。 */
   mcpPortFactory?: (input: { workingDirectory?: string }) => McpPort;
+  nativeAgentKernel?: import("@zcode/contracts").NativeAgentKernelPort;
+  /** 部署方扩展原生内核；描述与 factory 同时登记，不能只显示一个不可执行的选项。 */
+  agentKernelRegistrations?: readonly import("./agent-kernel-registry.js").AgentKernelRegistration[];
   permissionBroker?: PermissionBrokerPort;
   eventSink?: SessionEventSink;
   env?: NodeJS.ProcessEnv;

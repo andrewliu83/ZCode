@@ -1135,7 +1135,10 @@ export function createLocalServices(options: {
   forwardDynamicWorkflowUserMode?: (mode: DynamicWorkflowMode | undefined) => void;
   /** ThinkRail 开关变化后交给装配层转发（Desktop Host 推给本窗口的远程 Host）。 */
   forwardThinkrailEnabled?: (enabled: boolean | undefined) => void;
-  forwardMainSystemPrompt?: (value: string | undefined) => void | Promise<void>;
+  forwardMainSystemPrompt?: (
+    value: string | undefined,
+    kernels?: Record<string, string>,
+  ) => void | Promise<void>;
   /** Desktop Host 请求 Main 登记已校验的插件 UI HTML，换取沙箱句柄。 */
   registerPluginSandbox?: (input: PluginSandboxRegisterInput) => Promise<PluginSandboxHandle>;
   feedback?: Partial<
@@ -2028,7 +2031,15 @@ export function createLocalServices(options: {
     forwardThinkrailEnabled: options?.forwardThinkrailEnabled,
     ...(isDesktopAttachedRemote
       ? {}
-      : { resolveMainSystemPrompt: async () => (await settingService.get()).mainSystemPrompt }),
+      : {
+          resolveSystemPromptPolicy: async () => {
+            const settings = await settingService.get();
+            return {
+              mainSystemPrompt: settings.mainSystemPrompt,
+              kernelSystemPrompts: settings.kernelSystemPrompts,
+            };
+          },
+        }),
     forwardMainSystemPrompt: options?.forwardMainSystemPrompt,
     commandResolver: options?.zcodeAgentCommandResolver,
     presentationSurface: resolveZCodeAgentPresentationSurface({

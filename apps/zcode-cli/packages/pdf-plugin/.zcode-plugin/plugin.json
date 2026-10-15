@@ -1,6 +1,6 @@
 {
   "name": "pdf",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "description": "PDF document production skills, published as an official ZCode plugin.",
   "description_i18n": {
     "en": "PDF production skills: typeset and render reports, resumes, posters, and covers to PDF.",

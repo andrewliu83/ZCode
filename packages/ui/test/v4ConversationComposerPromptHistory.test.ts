@@ -301,8 +301,7 @@ function renderComposerElement(
   submissionReady = true,
 ) {
   const scopeId = sessionId ?? V4_DRAFT_SCOPE_ROOT;
-  let ownedDraft =
-    composerDraft ??
+  let ownedDraft = composerDraft ??
     readV4ComposerDraft("/workspace", undefined, scopeId) ?? {
       text: "",
       updatedAt: 0,
@@ -593,10 +592,125 @@ describe("ConversationComposer prompt history", () => {
     await act(async () => root.unmount());
   });
 
+  it.each(["zcode", "claude"] as const)(
+    "%s 发送期间相同正文回调不产生新草稿，accepted 后清空正文",
+    async (agentKernel) => {
+      let resolveSend!: () => void;
+      const onSendText = vi.fn(
+        () =>
+          new Promise<void>((resolve) => {
+            resolveSend = resolve;
+          }),
+      );
+      const container = installMinimalDom();
+      const root = createRoot(container);
+      act(() =>
+        root.render(
+          renderComposerElement(
+            onSendText,
+            null,
+            undefined,
+            null,
+            () => ({ agentKernel, mode: "build" }),
+            { text: "", mode: "build", agentKernel, updatedAt: 0 },
+          ),
+        ),
+      );
+      const submit = chatPromptEditorProps.at(-1)!.onSubmit as (text: string) => boolean;
+      const onChange = chatPromptEditorProps.at(-1)!.onChange as (text: string) => void;
+      inputClear.mockClear();
+      try {
+        await act(async () => {
+          submit("已发送正文");
+          await flushAsyncWork();
+        });
+        const submittedRevision = getComposerDraftRevision("/workspace");
+        await act(async () => onChange("已发送正文"));
+        expect(getComposerDraftRevision("/workspace")).toBe(submittedRevision);
+        expect(readV4ComposerDraft("/workspace", undefined, V4_DRAFT_SCOPE_ROOT)?.text).toBe("");
+        await act(async () => {
+          resolveSend();
+          await flushAsyncWork();
+        });
+        expect(inputClear).toHaveBeenCalledOnce();
+        expect(readV4ComposerDraft("/workspace", undefined, V4_DRAFT_SCOPE_ROOT)?.text).toBe("");
+        expect(onSendText).toHaveBeenCalledOnce();
+      } finally {
+        await act(async () => root.unmount());
+      }
+    },
+  );
+
+  it("相同正文回调后发送失败，仍恢复原草稿", async () => {
+    let rejectSend!: (error: Error) => void;
+    const onSendText = vi.fn(
+      () =>
+        new Promise<void>((_resolve, reject) => {
+          rejectSend = reject;
+        }),
+    );
+    const { root } = renderComposer(onSendText);
+    const submit = chatPromptEditorProps.at(-1)!.onSubmit as (text: string) => boolean;
+    const onChange = chatPromptEditorProps.at(-1)!.onChange as (text: string) => void;
+    inputClear.mockClear();
+    try {
+      await act(async () => {
+        submit("失败后可重试");
+        await flushAsyncWork();
+      });
+      await act(async () => onChange("失败后可重试"));
+      await act(async () => {
+        rejectSend(new Error("fixture admission failed"));
+        await flushAsyncWork();
+      });
+      expect(inputClear).not.toHaveBeenCalled();
+      expect(readV4ComposerDraft("/workspace", undefined, V4_DRAFT_SCOPE_ROOT)?.text).toBe(
+        "失败后可重试",
+      );
+    } finally {
+      await act(async () => root.unmount());
+    }
+  });
+
+  it("发送等待期间先编辑再改回原文，也属于新草稿，旧 ACK 不能清除", async () => {
+    let resolveSend!: () => void;
+    const onSendText = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveSend = resolve;
+        }),
+    );
+    const { root } = renderComposer(onSendText);
+    const submit = chatPromptEditorProps.at(-1)!.onSubmit as (text: string) => boolean;
+    const onChange = chatPromptEditorProps.at(-1)!.onChange as (text: string) => void;
+    inputClear.mockClear();
+    try {
+      await act(async () => {
+        submit("第一条");
+        await flushAsyncWork();
+      });
+      await act(async () => onChange("正在编辑下一条"));
+      await act(async () => onChange("第一条"));
+      await act(async () => {
+        resolveSend();
+        await flushAsyncWork();
+      });
+      expect(inputClear).not.toHaveBeenCalled();
+      expect(readV4ComposerDraft("/workspace", undefined, V4_DRAFT_SCOPE_ROOT)?.text).toBe(
+        "第一条",
+      );
+    } finally {
+      await act(async () => root.unmount());
+    }
+  });
+
   it("迟到的发送成功不能清除等待期间产生的新正文", async () => {
     let resolveSend!: () => void;
     const onSendText = vi.fn(
-      () => new Promise<void>((resolve) => { resolveSend = resolve; }),
+      () =>
+        new Promise<void>((resolve) => {
+          resolveSend = resolve;
+        }),
     );
     const { root } = renderComposer(onSendText);
     const submit = chatPromptEditorProps.at(-1)!.onSubmit as (text: string) => boolean;

@@ -49,8 +49,21 @@ async function sendText(
 ): Promise<CommandResult | undefined> {
   const rawPayload = envelope.payload as CommandPayloadMap["sendText"];
   const record = requireRecord(host, envelope.sessionId);
+  // 预热可能先于用户改选完成；不一致时必须拒绝，不能在错误内核执行已选的输入。
+  if (
+    rawPayload.agentKernel &&
+    rawPayload.agentKernel !== (record.app.runtime.getAgentKernel?.() ?? "zcode")
+  ) {
+    throw new V4InputAdmissionRejectedError(
+      "session.agentKernelMismatch",
+      "Selected agent kernel does not match this session; create a new conversation",
+    );
+  }
   // Bug 根因：旧校验只看正文，UI 已允许的 attachment-only query 会在 CLI 被误判为空。
-  if (!hasPromptInput(rawPayload.text, rawPayload.attachments) && !rawPayload.conversationQuotes?.length) {
+  if (
+    !hasPromptInput(rawPayload.text, rawPayload.attachments) &&
+    !rawPayload.conversationQuotes?.length
+  ) {
     throw new V4InputAdmissionRejectedError("proto.invalidPayload", "input must not be empty");
   }
   const activeAutomationId = resolveTurnAutomationId({

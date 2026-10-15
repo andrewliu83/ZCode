@@ -241,6 +241,7 @@ export interface V4GatewayHost {
   getSessionIndexMeta?(sessionId: string): {
     createdAt: number;
     lastActivityAt: number;
+    persisted?: boolean;
     parentSessionId?: string;
   } | null;
   /**
@@ -1158,12 +1159,14 @@ export class ConversationV4Gateway {
   private resolveIndexMeta(sessionId: string): {
     createdAt: number;
     lastActivityAt: number;
+    persisted?: boolean;
     parentSessionId?: string;
   } {
     const meta = this.host.getSessionIndexMeta?.(sessionId);
     return {
       createdAt: meta?.createdAt ?? 0,
       lastActivityAt: meta?.lastActivityAt ?? this.now(),
+      ...(meta?.persisted !== undefined ? { persisted: meta.persisted } : {}),
       ...(meta?.parentSessionId ? { parentSessionId: meta.parentSessionId } : {}),
     };
   }

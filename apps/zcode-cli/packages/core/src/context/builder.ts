@@ -168,11 +168,10 @@ export class ContextBuilder {
 
       // ThinkRail 常驻规则（docs/thinkrail/design.md D3）：spec ground truth 与 workflow 路由。
       // 位置与 session guidance 相邻——与「探索与计划」相关的指令聚在同一段附近；
-      // 它自带三条渲染条件，不满足即返回 null。
+      // 它按开关和当前 scope 工具能力判断，不探测磁盘上是否已有 spec。
       const thinkrailSection = this.config.thinkrail
         ? buildThinkrailSection({
             enabled: this.config.thinkrail.enabled,
-            hasSpec: this.config.thinkrail.hasSpec,
             specRule: this.config.thinkrail.specRule,
             workflowRule: this.config.thinkrail.workflowRule,
             toolNames: this.config.guidanceToolNames ?? [],
@@ -221,6 +220,9 @@ export class ContextBuilder {
       const skillsSection = buildSkillsSection({
         outcome: this.config.skills,
         metadataBudget: this.config.skillMetadataBudget,
+        contextWindow: this.config.model?.properties.contextWindow,
+        listingBudgetFraction: this.config.skillListingBudgetFraction,
+        maxDescriptionChars: this.config.skillListingMaxDescChars,
       });
       if (skillsSection) {
         sections.push(skillsSection);

@@ -3333,9 +3333,10 @@ function seedE2EStartupState(specs: string[] = []) {
         ? {}
         : // Bug 根因：I20 不验证账号登录，却播种假 ZCode JWT；带账号身份的旁路请求
           // 会把它发往真实控制面，401 随后弹出登录过期对话框并遮挡目标交互。
-          // 该 case 与系统提示词设置只验证本地行为，不注入无关账号身份。
+          // 这些设置 case 只验证本地行为，假账号会引入无关鉴权失败和登录重建，不注入账号身份。
           builtInSubagentModelOverridesSpec ||
-            workerSpecsContain(specs, "settings-system-prompt.test.ts")
+            workerSpecsContain(specs, "settings-system-prompt.test.ts") ||
+            workerSpecsContain(specs, "conversation-session-agent-kernel.test.ts")
           ? {}
           : subagentLoginCatalogStaleSpec
             ? {}
@@ -4313,9 +4314,16 @@ async function seedUpstreamE2EModelConfig(specs: string[] = []) {
     models: PersonalProviderConfigSeed["models"];
     visibility?: "visible" | "hidden";
   }): PersonalProviderConfigSeed => ({
-    apiFormat: "anthropic-messages",
+    // 验收 Claude → 模型协议桥 → 非 Anthropic 上游，不能只覆盖原生 Messages 连接。
+    apiFormat: workerSpecsContain(specs, "conversation-session-agent-kernel.test.ts")
+      ? "openai-chat-completions"
+      : "anthropic-messages",
     apiKey: params.apiKey ?? apiKey,
-    baseURL: params.baseURL ?? anthropicBaseURL,
+    baseURL:
+      params.baseURL ??
+      (workerSpecsContain(specs, "conversation-session-agent-kernel.test.ts")
+        ? upstreamE2EBaseUrl
+        : anthropicBaseURL),
     enabled: params.enabled ?? true,
     id: params.id,
     label: params.label,
@@ -4403,6 +4411,22 @@ async function seedUpstreamE2EModelConfig(specs: string[] = []) {
   ];
   for (const provider of appProviders) {
     await seedPersonalProviderConfig(E2E_APP_PROVIDER_CONFIG_FILE, provider);
+  }
+  if (workerSpecsContain(specs, "conversation-session-agent-kernel.test.ts")) {
+    // 原因：旧夹具关闭文档插件掩盖固定账号 Provider 的缺陷；此场景必须全部开启并继承当前连接。
+    const cliFixtureConfig = JSON.parse(
+      await readFile(E2E_CLI_CONFIG_FILE, "utf-8").catch((error) => {
+        if (error.code === "ENOENT") return "{}";
+        throw error;
+      }),
+    );
+    await mkdir(E2E_CLI_CONFIG_DIR, { recursive: true });
+    cliFixtureConfig.plugins ??= {};
+    cliFixtureConfig.plugins.enabledPlugins ??= {};
+    for (const name of ["documents", "pdf", "presentations", "spreadsheets"]) {
+      cliFixtureConfig.plugins.enabledPlugins[`${name}@zcode-plugins-official`] = true;
+    }
+    await writeFile(E2E_CLI_CONFIG_FILE, JSON.stringify(cliFixtureConfig, null, 2), "utf-8");
   }
   await seedPersonalDefaultModelSelection(E2E_APP_PROVIDER_CONFIG_FILE, {
     providerId: e2eProviderPreset.providerId,

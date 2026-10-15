@@ -1,5 +1,6 @@
 /* oxlint-disable eslint(max-lines) -- AppSettings schema 聚合历史迁移、默认值和 patch 校验，拆分会削弱设置迁移的单一入口。 */
 import { z } from "zod";
+import { agentKernelIdSchema } from "./agent-kernels.js";
 import type { AppSettings } from "./protocol.js";
 import { REMOTE_ASSET_INSTALL_MODES } from "./remoteAssetInstallMode.js";
 import { isKnownRemoteResourcePackageId } from "./remoteResourcePackages.js";
@@ -502,6 +503,8 @@ const appSettingsObjectSchema = z.object({
   // ThinkRail 总开关（docs/thinkrail/design.md D2）：缺席即关，不给存量用户改默认。
   thinkrailEnabled: z.boolean().optional(),
   mainSystemPrompt: z.string().max(65536).optional(),
+  kernelSystemPrompts: z.record(agentKernelIdSchema, z.string().max(65536)).optional(),
+  agentKernel: agentKernelIdSchema.default("zcode"),
   enabledBuiltinAgentCliProviders: enabledBuiltinAgentCliProvidersSchema.default([
     ...ZCODE_ENABLED_AGENT_PROVIDERS,
   ]),
@@ -582,6 +585,8 @@ export const appSettingsPatchSchema = z.object({
   dynamicWorkflowMode: z.union([z.enum(DYNAMIC_WORKFLOW_MODES), z.literal("")]).optional(),
   thinkrailEnabled: z.boolean().optional(),
   mainSystemPrompt: z.string().max(65536).optional(),
+  kernelSystemPrompts: z.record(agentKernelIdSchema, z.string().max(65536)).optional(),
+  agentKernel: agentKernelIdSchema.optional(),
   enabledBuiltinAgentCliProviders: enabledBuiltinAgentCliProvidersSchema.optional(),
   startPlanRecommendationDismissed: z.boolean().optional(),
   providerFamilyConnectionSelections: providerFamilyConnectionSelectionSettingsSchema.optional(),

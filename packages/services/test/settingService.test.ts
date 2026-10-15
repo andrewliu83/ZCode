@@ -61,6 +61,37 @@ afterEach(() => {
 });
 
 describe("settingService", () => {
+  it("Agent 内核默认 ZCode，切换 SDK 后重新加载仍保持保存值", async () => {
+    const home = makeTempHome();
+    const service = await createSettingServiceInHome(home);
+    expect((await service.get()).agentKernel ?? "zcode").toBe("zcode");
+    await service.update({ agentKernel: "claude" });
+    const restored = await createSettingServiceInHome(home);
+    expect((await restored.get()).agentKernel).toBe("claude");
+    await restored.update({ agentKernel: "zcode" });
+    expect((await restored.get()).agentKernel).toBe("zcode");
+    await expect(
+      restored.update({ agentKernel: "INVALID ID" } as unknown as Partial<AppSettings>),
+    ).rejects.toThrow();
+  });
+  it("不同内核正文独立保存，并发补丁不会抹掉另一内核；清空只恢复对应内核", async () => {
+    const service = await createSettingServiceInHome(makeTempHome());
+    await service.update({ mainSystemPrompt: "ZCODE ONLY" });
+    await Promise.all([
+      service.update({ kernelSystemPrompts: { claude: "CLAUDE ONLY" } }),
+      service.update({ kernelSystemPrompts: { "fixture-agent": "THIRD ONLY" } }),
+    ]);
+    expect(await service.get()).toMatchObject({
+      mainSystemPrompt: "ZCODE ONLY",
+      kernelSystemPrompts: { claude: "CLAUDE ONLY", "fixture-agent": "THIRD ONLY" },
+    });
+    await service.update({ kernelSystemPrompts: { claude: "" } });
+    expect(await service.get()).toMatchObject({
+      mainSystemPrompt: "ZCODE ONLY",
+      kernelSystemPrompts: { claude: "", "fixture-agent": "THIRD ONLY" },
+    });
+  });
+
   it("显式桌面 home 覆盖只写隔离实例设置，不污染普通 home", async () => {
     const ordinaryHome = makeTempHome();
     const desktopHome = makeTempHome();

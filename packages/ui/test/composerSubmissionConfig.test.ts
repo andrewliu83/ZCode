@@ -44,6 +44,7 @@ describe("createComposerSubmissionConfig", () => {
     draft.planEnabled = false;
     draft.modelSelection.options.reasoningLevel = "high";
     expect(submission).toEqual({
+      agentKernel: "zcode",
       mode: "yolo",
       planEnabled: true,
       modelSelection: {
@@ -53,6 +54,17 @@ describe("createComposerSubmissionConfig", () => {
       },
     });
     expect(Object.isFrozen(submission?.modelSelection.options)).toBe(true);
+  });
+
+  it("冻结显式内核选择，后续编辑不能把 Claude 首发退回 ZCode", () => {
+    const draft = {
+      agentKernel: "claude" as "claude" | "zcode",
+      mode: "build",
+      modelSelection: view.preferredSelection!,
+    };
+    const submission = createComposerSubmissionConfig(draft, view);
+    draft.agentKernel = "zcode";
+    expect(submission?.agentKernel).toBe("claude");
   });
 
   it("空选择、空档位和失效档位不创建 Submission，也不使用 preferred", () => {

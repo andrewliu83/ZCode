@@ -15,6 +15,7 @@ export interface SessionSummaryDeriveExtra {
   workspaceId: string;
   createdAt: number;
   lastActivityAt: number;
+  persisted?: boolean;
   parentSessionId?: string;
 }
 
@@ -80,6 +81,7 @@ export function deriveSessionSummary(
     title: snapshot.meta.title,
     titleSource: snapshot.meta.titleSource,
     phase: snapshot.control.phase,
+    ...(extra.persisted !== undefined ? { persisted: extra.persisted } : {}),
     // 忠实透传 control.sessionEnded（语义：成功轮收口后即 true，不代表已删除）。
     sessionEnded: snapshot.control.sessionEnded,
     hasBackgroundWork,
@@ -109,6 +111,7 @@ function summariesEqual(a: SessionSummary, b: SessionSummary): boolean {
     a.title === b.title &&
     a.titleSource === b.titleSource &&
     a.phase === b.phase &&
+    a.persisted === b.persisted &&
     a.sessionEnded === b.sessionEnded &&
     a.hasBackgroundWork === b.hasBackgroundWork &&
     // phase 翻转 / 结算 / 在跑子代理数变化永不被 conflation 吃掉；反之只改 node 的事件在这里判等

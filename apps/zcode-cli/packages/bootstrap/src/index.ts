@@ -1,6 +1,7 @@
 // Bootstrap public API surface.
 
 export * from "./app/create-app.js";
+export { AgentKernelRegistry, type AgentKernelRegistration } from "./app/agent-kernel-registry.js";
 export type {
   ListZCodeSessionsOptions,
   PromptInput,

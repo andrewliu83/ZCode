@@ -1,3 +1,4 @@
+import { agentKernelIdSchema, agentKernelDescriptorSchema } from "../agent-kernels.js";
 import { requestVerificationReasons } from "../request-security-edition/verification-policy.js";
 import { zcodeProtocolTraceSchema } from "./trace.js";
 // Bot 反向回复的名字解析/待澄清结果与 App、CLI 使用同一严格 schema。
@@ -1909,6 +1910,7 @@ export const zcodeDynamicWorkflowModeSchema = z.enum(DYNAMIC_WORKFLOW_MODES);
 
 export const zcodeSessionCreateParamsSchema = z
   .object({
+    agentKernel: agentKernelIdSchema.optional(),
     sessionId: nonEmptyString.optional(),
     workspace: zcodeWorkspaceRefSchema,
     parentSessionId: nonEmptyString.optional(),
@@ -3124,6 +3126,8 @@ export const zcodeSystemPromptReadParamsSchema = z
   .object({
     workspace: zcodeWorkspaceRefSchema,
     sessionId: nonEmptyString.optional(),
+    // 仅供无会话预览；会话查询始终使用自己的持久化内核绑定。
+    agentKernel: agentKernelIdSchema.optional(),
     presentationSurface: z.enum(["terminal", "zcode_desktop"]).optional(),
   })
   .strict();
@@ -3143,11 +3147,19 @@ export const zcodeSystemPromptSectionSchema = z
 export const zcodeSystemPromptReadResultSchema = z
   .object({
     authority: z.enum(["session", "workspace"]),
+    nativeKernel: agentKernelIdSchema.optional(),
     basePrompt: z.string(),
     defaultPrompt: z.string(),
     sections: z.array(zcodeSystemPromptSectionSchema),
     busy: z.boolean(),
-    availableSessions: z.array(z.object({ sessionId: nonEmptyString }).strict()).optional(),
+    availableAgentKernels: z.array(agentKernelDescriptorSchema).optional(),
+    availableSessions: z
+      .array(
+        z
+          .object({ sessionId: nonEmptyString, agentKernel: agentKernelIdSchema.optional() })
+          .strict(),
+      )
+      .optional(),
     lastRequest: z
       .object({ at: z.string(), systemMessages: z.array(z.string()) })
       .strict()
@@ -3159,6 +3171,7 @@ export const zcodeWorkspaceUpdateSystemPromptPolicyParamsSchema = z
   .object({
     workspace: zcodeWorkspaceRefSchema,
     mainSystemPrompt: z.string().max(65536),
+    kernelSystemPrompts: z.record(agentKernelIdSchema, z.string().max(65536)).optional(),
   })
   .strict();
 export const zcodeWorkspaceUpdateSystemPromptPolicyResultSchema =

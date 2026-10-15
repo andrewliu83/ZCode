@@ -13,7 +13,8 @@ const makeClient = () => ({
 });
 function createPolicy(
   resolve?: () => Promise<string | undefined>,
-  forward?: (value: string | undefined) => Promise<void>,
+  forward?: (value: string | undefined, kernels?: Record<string, string>) => Promise<void>,
+  resolveKernels?: () => Promise<Record<string, string> | undefined>,
 ) {
   const fake = makeClient();
   const entry = {
@@ -22,6 +23,7 @@ function createPolicy(
   };
   const sync = createMainSystemPromptPolicySync({
     resolve,
+    resolveKernels,
     forward,
     entries: () => [entry],
     workspaceKey: (workspace) => workspace.workspaceIdentity || workspace.workspacePath,
@@ -35,6 +37,30 @@ function createPolicy(
 }
 
 describe("主智能体正文的 Host 策略同步", () => {
+  it("按内核同步完整策略，转发保留各正文并能只清空对应内核", async () => {
+    let kernels = { claude: "CLAUDE", "fixture-agent": "THIRD" };
+    const forward = vi.fn(async () => {});
+    const { fake, entry, sync } = createPolicy(
+      async () => "ZCODE",
+      forward,
+      async () => kernels,
+    );
+    await sync.update(entry);
+    expect(fake.request.mock.calls.at(-1)?.[1]).toMatchObject({
+      mainSystemPrompt: "ZCODE",
+      kernelSystemPrompts: kernels,
+    });
+    kernels = { ...kernels, claude: "" };
+    await sync.sync("STALE", { claude: "MUST NOT APPLY" });
+    expect(fake.request.mock.calls.at(-1)?.[1]).toMatchObject({
+      mainSystemPrompt: "ZCODE",
+      kernelSystemPrompts: { claude: "", "fixture-agent": "THIRD" },
+    });
+    expect(forward).toHaveBeenCalledWith("ZCODE", kernels);
+    await sync.update(entry);
+    expect(fake.request).toHaveBeenCalledTimes(2);
+  });
+
   it("初始化与设置保存共享串行队列，迟到的旧读取不会覆盖新正文，恢复会发送空值", async () => {
     let authoritative: string | undefined = "OLD";
     let resolveOld!: (value: string) => void;

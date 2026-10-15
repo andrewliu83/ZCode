@@ -686,6 +686,7 @@ function buildSessionCreateParams(
 ) {
   return {
     sessionId: params.sessionId,
+    ...(params.agentKernel === "claude" ? { agentKernel: "claude" as const } : {}),
     workspace: buildWorkspaceRef(params),
     parentSessionId: params.parentSessionId,
     mode: params.mode,
@@ -1003,8 +1004,16 @@ interface CreateZCodeAgentServiceOptions extends Omit<
   forwardDynamicWorkflowUserMode?: (mode: DynamicWorkflowMode | undefined) => void;
   /** ThinkRail 开关变化后交给装配层转发（Desktop Host 推给本窗口的远程 Host），与上面同形。 */
   forwardThinkrailEnabled?: (enabled: boolean | undefined) => void;
+  resolveSystemPromptPolicy?: () => Promise<{
+    mainSystemPrompt?: string;
+    kernelSystemPrompts?: Record<string, string>;
+  }>;
   resolveMainSystemPrompt?: () => Promise<string | undefined>;
-  forwardMainSystemPrompt?: (value: string | undefined) => void | Promise<void>;
+  resolveKernelSystemPrompts?: () => Promise<Record<string, string> | undefined>;
+  forwardMainSystemPrompt?: (
+    value: string | undefined,
+    kernels?: Record<string, string>,
+  ) => void | Promise<void>;
   /**
    * ThinkRail 总开关的读取点（docs/thinkrail/design.md D2）：拥有设置权威的 Host 注入，
    * 每次 client work 前现读设置文件。desktop-attached remote Host 读不到桌面的设置，
@@ -1319,7 +1328,9 @@ export function createZCodeAgentService(
   >();
   const activeClientsByWorkspaceKey = new Map<string, ActiveWorkspaceClient>();
   const mainSystemPromptPolicy = createMainSystemPromptPolicySync({
+    resolvePolicy: options?.resolveSystemPromptPolicy,
     resolve: options?.resolveMainSystemPrompt,
+    resolveKernels: options?.resolveKernelSystemPrompts,
     forward: options?.forwardMainSystemPrompt,
     entries: () => activeClientsByWorkspaceKey.values(),
     workspaceKey: resolveWorkspaceKey,
@@ -3858,8 +3869,11 @@ export function createZCodeAgentService(
      *
      * 已有会话在下一轮命令边界采用进程策略；正在执行的 turn 保持原工具与技能快照。
      */
-    async syncMainSystemPrompt(params: { mainSystemPrompt?: string }): Promise<void> {
-      await mainSystemPromptPolicy.sync(params.mainSystemPrompt);
+    async syncMainSystemPrompt(params: {
+      mainSystemPrompt?: string;
+      kernelSystemPrompts?: Record<string, string>;
+    }): Promise<void> {
+      await mainSystemPromptPolicy.sync(params.mainSystemPrompt, params.kernelSystemPrompts);
     },
 
     async syncThinkrailEnabled(params: { enabled?: boolean }): Promise<void> {
@@ -3909,6 +3923,9 @@ export function createZCodeAgentService(
     },
 
     async createSession(params: ZCodeAgentCreateSessionParams) {
+      // 聊天创建携带自己的选择；旧全局设置不再是隐式内核来源。
+      const agentKernel = params.agentKernel ?? "zcode";
+      params = { ...params, agentKernel };
       const startedAt = Date.now();
       const client = await getClient(params);
       await ensureAccountProviderConfigSynced({
@@ -4414,11 +4431,13 @@ export function createZCodeAgentService(
           mainSystemPromptPolicy.update(entry),
           enqueueThinkrailPolicySync(entry),
         ]);
+      const agentKernel = params.sessionId ? undefined : params.agentKernel;
       return client.request(
         zcodeProtocolMethods.systemPromptRead,
         {
           workspace: buildWorkspaceRef(params),
           ...(params.sessionId ? { sessionId: params.sessionId } : {}),
+          ...(agentKernel === "claude" ? { agentKernel } : {}),
           // 原因：Host 的 desktop 是启动表面，CLI wire 使用 zcode_desktop；直接传值会被严格校验拒绝。
           presentationSurface:
             options?.presentationSurface === "desktop"

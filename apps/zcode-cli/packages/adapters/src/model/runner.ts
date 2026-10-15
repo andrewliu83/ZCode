@@ -217,6 +217,11 @@ export class AiSdkModelAdapter {
       return {
         messages: request.messages,
         tools: request.tools,
+        toolChoice: request.toolChoice,
+        temperature: request.temperature,
+        topP: request.topP,
+        topK: request.topK,
+        stopSequences: request.stopSequences,
         responseJsonSchema: request.responseJsonSchema,
         abortSignal: request.abortSignal,
         maxOutputTokens: request.options.maxOutputTokens,

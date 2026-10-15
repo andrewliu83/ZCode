@@ -467,6 +467,26 @@ describe("desktopRuntimeEnv buildHostProcessEnv", () => {
     }
   });
 
+  it("SDK 资源缺失时 Host env 仍只有字符串，不能继承外部 CLI 路径", async () => {
+    const { buildHostProcessEnv } = await import("../src/main/desktopRuntimeEnv.js");
+    const env = buildHostProcessEnv({ ZCODE_CLAUDE_SDK_RUNTIME_PATH: "/external/claude" });
+    expect(Object.values(env).every((value) => typeof value === "string")).toBe(true);
+    expect(env.ZCODE_CLAUDE_SDK_RUNTIME_PATH).not.toBe("/external/claude");
+  });
+
+  it("只有 JS Agent 的安装包也能直接定位自带 SDK 资源", async () => {
+    const resources = mkdtempSync(join(tmpdir(), "sdk-assets-"));
+    createdDirs.push(resources);
+    const sdkDir = join(resources, "glm", "claude-sdk");
+    mkdirSync(sdkDir, { recursive: true });
+    const sdkPath = join(sdkDir, process.platform === "win32" ? "claude.exe" : "claude");
+    writeFileSync(sdkPath, "fixture");
+    appMock.isPackaged = true;
+    Object.defineProperty(process, "resourcesPath", { value: resources, configurable: true });
+    const { buildHostProcessEnv } = await import("../src/main/desktopRuntimeEnv.js");
+    expect(buildHostProcessEnv({}).ZCODE_CLAUDE_SDK_RUNTIME_PATH).toBe(sdkPath);
+  });
+
   it("host 进程 env 不再注入 NODE_NO_WARNINGS", async () => {
     const { buildHostProcessEnv } = await import("../src/main/desktopRuntimeEnv.js");
 
