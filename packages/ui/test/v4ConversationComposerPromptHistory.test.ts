@@ -20,16 +20,18 @@ import {
 import { getComposerDraftRevision } from "@/v4/composer/composerDraftRevision.js";
 import type { ComposerSubmissionConfig } from "@/v4/composer/composerSubmissionConfig.js";
 
-const { attachmentState, chatPromptEditorProps, dialogOpenStates, inputClear } = vi.hoisted(() => ({
-  attachmentState: {
-    adoptSentAttachments: vi.fn(async () => {}),
-    hasUnreadyAttachments: false,
-    prepareForSend: vi.fn(async () => []),
-  },
-  chatPromptEditorProps: [] as Array<Record<string, unknown>>,
-  dialogOpenStates: [] as boolean[],
-  inputClear: vi.fn(),
-}));
+const { attachmentState, chatPromptEditorProps, dialogOpenStates, inputClear, editorState } =
+  vi.hoisted(() => ({
+    editorState: { text: "" },
+    attachmentState: {
+      adoptSentAttachments: vi.fn(async () => {}),
+      hasUnreadyAttachments: false,
+      prepareForSend: vi.fn(async () => []),
+    },
+    chatPromptEditorProps: [] as Array<Record<string, unknown>>,
+    dialogOpenStates: [] as boolean[],
+    inputClear: vi.fn(),
+  }));
 
 function expectedTelemetrySendOptions() {
   return expect.objectContaining({
@@ -85,12 +87,17 @@ vi.mock("@/prompt-editor/ChatPromptEditor.js", async () => {
         | undefined;
       if (inputApiRef) {
         inputApiRef.current = {
-          clear: inputClear,
+          clear: () => {
+            editorState.text = "";
+            inputClear();
+          },
           focus: vi.fn(),
           getEditorState: () => null,
-          getMarkdown: () => "",
+          getMarkdown: () => editorState.text,
           setEditorStateJson: vi.fn(),
-          setText: vi.fn(),
+          setText: vi.fn((value: string) => {
+            editorState.text = value;
+          }),
         };
       }
       return React.createElement(
@@ -280,6 +287,25 @@ function installMinimalDom() {
   return createMinimalElement(documentMock, "div");
 }
 
+function holdAnimationFrames() {
+  const pending = new Map<number, FrameRequestCallback>();
+  let nextId = 0;
+  vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
+    const id = ++nextId;
+    pending.set(id, callback);
+    return id;
+  });
+  vi.stubGlobal("cancelAnimationFrame", (id: number) => pending.delete(id));
+  return {
+    size: () => pending.size,
+    flush: () => {
+      const batch = [...pending.values()];
+      pending.clear();
+      for (const callback of batch) callback(0);
+    },
+  };
+}
+
 function flushAsyncWork() {
   return new Promise((resolve) => setTimeout(resolve, 0));
 }
@@ -362,6 +388,8 @@ function renderComposer(
 }
 
 afterEach(() => {
+  vi.unstubAllGlobals();
+  editorState.text = "";
   chatPromptEditorProps.length = 0;
   attachmentState.hasUnreadyAttachments = false;
   attachmentState.adoptSentAttachments.mockClear();
@@ -935,5 +963,142 @@ describe("ConversationComposer prompt history", () => {
     await act(async () => {
       root.unmount();
     });
+  });
+  it("同 scope 的 owner 回调换代不能在发送清空后重放旧草稿", async () => {
+    const container = installMinimalDom();
+    const root = createRoot(container);
+    const onSendText = vi.fn(async () => {});
+    let draft: V4ComposerDraft = { text: "已提交正文", updatedAt: 1 };
+    const updateContent = (
+      content: Pick<V4ComposerDraft, "text" | "editorStateJson" | "mention">,
+    ) => {
+      draft = { ...draft, ...content };
+      persistV4ComposerDraft("/workspace", undefined, "session-a", draft);
+    };
+    act(() =>
+      root.render(
+        renderComposerElement(
+          onSendText,
+          "session-a",
+          undefined,
+          null,
+          undefined,
+          draft,
+          updateContent,
+        ),
+      ),
+    );
+    expect(editorState.text).toBe("已提交正文");
+    const frames = holdAnimationFrames();
+    try {
+      act(() =>
+        root.render(
+          renderComposerElement(
+            onSendText,
+            "session-a",
+            undefined,
+            null,
+            undefined,
+            draft,
+            (content) => updateContent(content),
+          ),
+        ),
+      );
+      await act(async () => {
+        (chatPromptEditorProps.at(-1)!.onSubmit as (value: string) => boolean)("已提交正文");
+        await flushAsyncWork();
+      });
+      expect(editorState.text).toBe("");
+      await act(async () => {
+        frames.flush();
+        await flushAsyncWork();
+      });
+      expect(editorState.text).toBe("");
+      expect(readV4ComposerDraft("/workspace", undefined, "session-a")?.text ?? "").toBe("");
+      expect(onSendText).toHaveBeenCalledOnce();
+    } finally {
+      await act(async () => root.unmount());
+    }
+  });
+
+  it.each(["zcode", "claude"] as const)(
+    "%s 发送后尚未执行的初始恢复不能回填已提交正文",
+    async (agentKernel) => {
+      const container = installMinimalDom();
+      const frames = holdAnimationFrames();
+      const root = createRoot(container);
+      const onSendText = vi.fn(async () => {});
+      try {
+        act(() =>
+          root.render(
+            renderComposerElement(
+              onSendText,
+              "session-a",
+              undefined,
+              null,
+              () => ({ agentKernel, mode: "build" }),
+              { text: "待恢复的旧正文", agentKernel, updatedAt: 1 },
+            ),
+          ),
+        );
+        expect(frames.size()).toBeGreaterThan(0);
+        editorState.text = "待恢复的旧正文";
+        await act(async () => {
+          (chatPromptEditorProps.at(-1)!.onSubmit as (value: string) => boolean)(editorState.text);
+          await flushAsyncWork();
+        });
+        expect(editorState.text).toBe("");
+        await act(async () => {
+          frames.flush();
+          await flushAsyncWork();
+        });
+        expect(editorState.text).toBe("");
+        expect(onSendText).toHaveBeenCalledOnce();
+      } finally {
+        await act(async () => root.unmount());
+      }
+    },
+  );
+
+  it("延迟恢复不能覆盖同 scope 的新输入，真正切 scope 仍恢复目标草稿", async () => {
+    const container = installMinimalDom();
+    const frames = holdAnimationFrames();
+    const root = createRoot(container);
+    const onSendText = vi.fn(async () => {});
+    try {
+      act(() =>
+        root.render(
+          renderComposerElement(onSendText, "session-a", undefined, null, undefined, {
+            text: "旧正文",
+            updatedAt: 1,
+          }),
+        ),
+      );
+      editorState.text = "新的未提交正文";
+      act(() =>
+        (chatPromptEditorProps.at(-1)!.onChange as (value: string) => void)(editorState.text),
+      );
+      await act(async () => {
+        frames.flush();
+        await flushAsyncWork();
+      });
+      expect(editorState.text).toBe("新的未提交正文");
+      act(() =>
+        root.render(
+          renderComposerElement(onSendText, "session-b", undefined, null, undefined, {
+            text: "B 的草稿",
+            updatedAt: 2,
+          }),
+        ),
+      );
+      await act(async () => {
+        frames.flush();
+        await flushAsyncWork();
+      });
+      expect(editorState.text).toBe("B 的草稿");
+      expect(onSendText).not.toHaveBeenCalled();
+    } finally {
+      await act(async () => root.unmount());
+    }
   });
 });

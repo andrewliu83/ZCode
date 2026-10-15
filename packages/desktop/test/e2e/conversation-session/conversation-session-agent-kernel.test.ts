@@ -118,6 +118,7 @@ describe("聊天输入框 Agent 内核", () => {
     expect((await getV4PaneSnapshot()).rowCount).toBe(0);
     await selectV4TaskById(originalId);
     await waitForV4TimelineContaining("AK_SEED_OK", timeout);
+    expect(await getV4ComposerText()).toBe("");
     expect(await picker().getAttribute("data-agent-kernel")).toBe("zcode");
     await selectV4TaskById(newZcodeId);
     await browser.waitUntil(async () => (await getV4ComposerText()) === "PRESERVE_ENGINE_DRAFT", {
@@ -142,6 +143,18 @@ describe("聊天输入框 Agent 内核", () => {
       "Native turn did not complete",
       timeout,
     );
+    expect(await getV4ComposerText()).toBe("");
+    const completedRows = (await getV4PaneSnapshot()).rowCount;
+    await sendV4Prompt("E2E_AK_NATIVE 同一会话再次发送，验证 accepted 后没有旧草稿回填");
+    await waitForV4Pane(
+      (s) =>
+        !s.canStop &&
+        s.rowCount > completedRows &&
+        s.timelineText.split("AK_NATIVE_OK").length >= 3,
+      "Native follow-up did not complete",
+      60_000,
+    );
+    expect(await getV4ComposerText()).toBe("");
     expect(await picker().getAttribute("data-agent-kernel")).toBe("claude");
     expect(await pane().getAttribute("data-bound-agent-kernel")).toBe("claude");
   });

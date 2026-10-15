@@ -855,6 +855,7 @@ function ConversationComposerImpl({
   });
   const draftPersistTimerRef = useRef<number | null>(null);
   const suppressDraftPersistRef = useRef(false);
+  const draftRestoreGenerationRef = useRef(0);
 
   const snapshotDraftOfEditor = useCallback((): {
     text: string;
@@ -1026,8 +1027,8 @@ function ConversationComposerImpl({
     workspaceKey,
   ]);
 
-  // scope 切换：先落旧 scope 草稿，再恢复新 scope（editorStateJson 优先，退纯文本）。
-  useEffect(() => {
+  // Bugfix：回调引用换代不能触发同 scope 恢复；仅在真实目标变化时调用最新恢复逻辑。
+  const restoreScopedDraft = () => {
     const previousTarget = draftTargetRef.current;
     const targetChanged =
       previousTarget.scopeId !== draftScopeId ||
@@ -1063,6 +1064,8 @@ function ConversationComposerImpl({
     };
 
     const draft = transferredDraft ?? composerDraft;
+    const restoreRevision = contentRevisionRef.current;
+    const restoreGeneration = draftRestoreGenerationRef.current;
     const restoreDraftInto = (api: LexicalChatInputHandle) => {
       if (!draft) {
         if (textRef.current) {
@@ -1082,6 +1085,12 @@ function ConversationComposerImpl({
       );
     };
     const applyDraft = () => {
+      // 已提交或被新编辑取代的恢复不得在下一帧回填，避免 clear 后旧正文复活。
+      if (
+        contentRevisionRef.current !== restoreRevision ||
+        draftRestoreGenerationRef.current !== restoreGeneration
+      )
+        return;
       const api = inputApiRef.current;
       if (!api) return;
       restoreDraftInto(api);
@@ -1095,18 +1104,15 @@ function ConversationComposerImpl({
     }
     applyDraft();
     return undefined;
-    // 依赖收敛到 scope/workspace：draft 恢复只应发生在 scope 切换或 workspace 切换。
-  }, [
-    draftScopeId,
-    persistDraftNow,
-    requestComposerFocus,
-    snapshotDraftOfEditor,
-    updateText,
-    updateComposerContent,
-    workspaceIdentity,
-    workspacePath,
-    replaceComposerDraft,
-  ]);
+  };
+  const restoreScopedDraftRef = useRef(restoreScopedDraft);
+  useEffect(() => {
+    restoreScopedDraftRef.current = restoreScopedDraft;
+  });
+  useEffect(
+    () => restoreScopedDraftRef.current(),
+    [draftScopeId, workspaceIdentity, workspacePath],
+  );
 
   useEffect(() => {
     ownerDraftRef.current = {
@@ -1292,6 +1298,8 @@ function ConversationComposerImpl({
         workspaceKind: workspaceIdentity?.trim() ? "remote" : "local",
       });
       pendingRef.current = true;
+      // 提交开始即作废旧恢复；即使 accepted/失败发生在下一帧之前，也不能重放旧快照。
+      draftRestoreGenerationRef.current += 1;
       setPending(true);
       // Bug 根因：草稿 intent 只保存用户显式改动，正常继承模型位于冻结初始化 config。
       // prewarm snapshot 尚未到达时若只读 draftConfig，send_btn 会错误落成空模型/glm。

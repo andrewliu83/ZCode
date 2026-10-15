@@ -19,3 +19,29 @@
 - 桌面端重启恢复使用 localStorage 的小型 JSON 缓存；key 中必须包含 workspace key，避免远程 workspace 同路径串线。
 - 普通附件只持久化可恢复引用：带 `localPath` 的文件附件可以恢复；没有可恢复路径的浏览器 `File` 不复制到应用存储，重启后丢弃并提示用户重新添加。
 - task 删除或发送成功后清理对应草稿，避免旧附件引用继续出现在后续会话。
+
+## 延迟恢复与提交边界
+
+- Composer 正文由已有草稿 owner 保存；延迟恢复只在挂载或 workspace/session scope 改变时发生。配置水合、回调引用变化、模型切换不能触发同 scope 的正文重放。
+- 每个恢复任务绑定目标 scope、创建时的正文 revision 与提交代次。用户编辑、开始一次有效提交或离开目标后，旧任务失效；不能在 accepted 清空后重新填回已发送正文。
+- ACK 只清理本次提交的正文；等待期间的新正文（包括改过再改回原文）保留。拒绝、失败和待确认继续沿既有草稿恢复路径，不复制 accepted queue。
+- Desktop continuous 与 Web remote replayable 共用这套 renderer 草稿规则；Host/Runtime 仍是已接受输入的唯一所有者，恢复任务不发送或重放命令。
+
+```mermaid
+sequenceDiagram
+  participant Owner as Composer 草稿 owner
+  participant Restore as 延迟恢复
+  participant UI as 编辑器
+  participant Host as Host / Runtime
+  Owner->>Restore: 绑定 scope、revision、提交代次
+  UI->>Owner: 编辑或提交使旧恢复失效
+  UI->>Host: 既有 sendText 命令
+  Host-->>UI: accepted
+  UI->>UI: 仅清空本次未被更新的正文
+  Restore->>Owner: 校验恢复令牌
+  Owner-->>Restore: 已失效，禁止回填
+```
+
+验收：同 scope 回调换代不重放；旧恢复晚于 accepted 不回填；恢复前的新输入不被覆盖；发送失败可重试；scope 切换正确恢复目标；ZCode/Claude 的真实编辑器首发与后续发送均保持清空。
+
+2026-10-15 验证：新增四项可控帧竞态测试先红后绿；178 项 UI/草稿/图领域回归及 26 项 CLI 集成回归通过。三个桌面 E2E 通过，包含 ZCode 首发、重新打开原会话、Claude 同会话连续两次发送后正文持续为空。第一次桌面扩展测试因回放夹具只允许一次模型响应而失败，补齐第二次响应后通过；未修改产品超时。根目录 typecheck/lint/architecture、CLI core/bootstrap typecheck 通过，Lint 为 63 warnings、0 errors。

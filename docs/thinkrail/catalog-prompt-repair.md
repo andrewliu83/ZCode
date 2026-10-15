@@ -160,3 +160,16 @@ E2E 使用源码测试构建与 fixture workspace，验证目录行为；没有�
   CLI core/bootstrap typecheck 及修改文件格式检查通过。
 - E2E 证据：`packages/desktop/.e2e-artifacts/desktop-e2e-20261015032244844-p16782-6caf3e17d2cc358a/`。
   本轮未重新生成安装包、未提交代码；测试仅证明规则接线，不代表模型必然选择建图。
+
+## 2026-10-15：已有代码且无图时优先初始化
+
+按用户后续裁决，路由不再完全沿用原 DSH 表：确认已有代码但无 spec 图时，
+包括只读熟悉请求，都先进入 setting-up-a-project，再由该技能派发 importing-a-codebase。
+常驻指针要求在判无匹配前确认图状态、查询后重新路由；条件和写入边界见 design.md D3。
+搜索示例显式指定 regex=true，局部无匹配和未知 root 错误不能证明整个图为空。
+技能沿既有 SDK 内容哈希资源准备流程分发，不新增独立路由状态或写入路径。
+
+204 项 UI/领域/CLI 回归和 3 项桌面 E2E 通过；真实 SDK + 本地模型接口夹具
+依次加载了三份仓库技能，4 次模型请求均完成，证明正文交付与执行接口可用。
+本次同时修复 Composer 清空后被延迟草稿回填的问题；详见 ../ui/task-scoped-composer-drafts.md。
+本轮未重新打包或提交代码。

@@ -15,10 +15,7 @@
       "match": {
         "method": "POST",
         "pathIncludes": "/",
-        "bodyIncludes": [
-          "Generate a concise title",
-          "E2E_AK_"
-        ]
+        "bodyIncludes": ["Generate a concise title", "E2E_AK_"]
       },
       "response": {
         "statusCode": 200,
@@ -41,13 +38,8 @@
       "match": {
         "method": "POST",
         "pathIncludes": "/",
-        "lastUserMessageIncludes": [
-          "E2E_AK_SEED"
-        ],
-        "bodyExcludes": [
-          "Generate a concise title",
-          "CRITICAL: Respond with TEXT ONLY"
-        ]
+        "lastUserMessageIncludes": ["E2E_AK_SEED"],
+        "bodyExcludes": ["Generate a concise title", "CRITICAL: Respond with TEXT ONLY"]
       },
       "response": {
         "statusCode": 200,
@@ -59,24 +51,19 @@
     },
     {
       "id": "agent-kernel-native",
-      "description": "原生 SDK 发出的首轮请求，完整走随包 runtime 与事件桥。",
+      "description": "原生 SDK 的首轮与连续发送请求，完整走随包 runtime 与事件桥。",
       "metadata": {
         "kind": "main",
         "timingPolicy": "fast-text",
         "source": "synthetic",
         "syntheticReason": "验证真实 SDK 请求、UI 投影与终态，不依赖外部供应商或用户 CLI。"
       },
-      "maxMatches": 1,
+      "maxMatches": 2,
       "match": {
         "method": "POST",
         "pathIncludes": "/",
-        "lastUserMessageIncludes": [
-          "E2E_AK_NATIVE"
-        ],
-        "bodyExcludes": [
-          "Generate a concise title",
-          "CRITICAL: Respond with TEXT ONLY"
-        ]
+        "lastUserMessageIncludes": ["E2E_AK_NATIVE"],
+        "bodyExcludes": ["Generate a concise title", "CRITICAL: Respond with TEXT ONLY"]
       },
       "response": {
         "statusCode": 200,
@@ -99,13 +86,8 @@
       "match": {
         "method": "POST",
         "pathIncludes": "/",
-        "lastUserMessageIncludes": [
-          "E2E_AK_BUSY"
-        ],
-        "bodyExcludes": [
-          "Generate a concise title",
-          "CRITICAL: Respond with TEXT ONLY"
-        ]
+        "lastUserMessageIncludes": ["E2E_AK_BUSY"],
+        "bodyExcludes": ["Generate a concise title", "CRITICAL: Respond with TEXT ONLY"]
       },
       "response": {
         "statusCode": 200,

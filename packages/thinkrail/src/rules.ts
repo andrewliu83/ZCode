@@ -10,8 +10,7 @@
 import { SPEC_GET_TOOL_NAME, SPEC_GRAPH_TOOL_NAME, SPEC_GREP_TOOL_NAME } from "./tool-names.js";
 
 /**
- * spec ground truth。常驻注入的前提是「这个工作区真的有 spec」——空项目里它只会指向空目录，
- * 判定在 core 的 section 侧（见 core/src/context/sections/thinkrail.ts）。
+ * spec ground truth。按开关与工具能力注入，图状态由工具确认，不作为常驻提示词门槛。
  */
 export const SPEC_RULE = [
   "Specs are this project's ground truth.",
@@ -28,4 +27,6 @@ export const WORKFLOW_RULE = [
   "At the start of any new piece of work — a request, feature, change, fix, or fresh project idea —",
   "read the choosing-a-workflow skill FIRST and follow it: it routes the work to the workflow skill",
   "that governs it, or tells you none applies.",
+  // 无图时曾先判只读而跳过初始化；提醒按共享技能的 onboarding 优先级重新判定。
+  "When spec tools are available, confirm graph status before ruling out a workflow, and re-check the route after spec discovery.",
 ].join("\n");

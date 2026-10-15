@@ -1470,6 +1470,8 @@ focused adapter test 与本组 permission 来源 tag 断言共同锁住该边界
 | R01        | covered  | DR     | completed task 切出/切回时，未发送正文、普通文件附件、图片附件按 taskId 作用域恢复               |
 | R02        | covered  | DR     | running task 后台继续运行期间切出/切回，未发送正文和附件不被 inactive stream 或 runtime 更新清空 |
 | R03        | covered  | DR     | 尚未发送的新 task 草稿使用 `draft/null` 作用域，切到已有 task 再回到 New task 时仍恢复正文和附件 |
+| R04        | partial  | Composer focused + AK | focused 测试控制恢复帧晚于 accepted、同 scope 回调换代；AK 代表实际 ZCode 首发和 Claude 连续发送的 DOM 清空，未在桌面注入延迟恢复帧 |
+| R05        | partial  | Composer focused + DR | focused 覆盖恢复前新输入和真实 scope 切换；DR 继续提供跨 task 草稿隔离证据，未在桌面注入新输入与恢复帧竞态 |
 
 ## TEL. V4 对话埋点覆盖口径
 

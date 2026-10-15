@@ -62,7 +62,7 @@ it("已有会话在下一轮同步 spec 开关，无 spec 时实际模型请求�
       if (value)
         expect(
           JSON.stringify(request.messages.filter((message) => message.role === "tool")),
-        ).toContain("# Choosing a Workflow");
+        ).toContain("Existing code without a spec graph takes priority");
       const catalog = await app.getSkillCatalog();
       expect(catalog.skills.some((skill) => skill.name === "choosing-a-workflow")).toBe(value);
       expect(catalog.skills.some((skill) => skill.name === "known-user-skill")).toBe(true);

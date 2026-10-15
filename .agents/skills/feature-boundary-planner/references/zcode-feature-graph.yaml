@@ -100,7 +100,7 @@ nodes:
         symbol: "buildThinkrailSection"
     invariants:
       - "Settings owns the switch; Host serializes process policy; each running turn keeps its admitted snapshot and queued turns read the next policy."
-      - "Workflow routing requires Skill but no existing spec; spec guidance independently requires actual spec and read tools."
+      - "Workflow routing requires Skill but no existing spec; spec guidance requires Skill and the spec read tools. Existing code without a confirmed spec graph enters setting-up-a-project before a read-only fallback."
       - "Builtin assets remain read-only and visible; custom profiles retain precedence; legacy catalog endpoint keeps its closed scope contract."
       - "UI invalidates derived catalogs only after policy acknowledgement; workspace identity and remote attachment remain isolated."
   - id: "surface.thinkrail-catalogs"

@@ -1,6 +1,6 @@
 ---
 name: setting-up-a-project
-description: "Use whenever asked to set up, onboard, initialize, or spec a project — the front door when the workspace has no spec graph yet (brand-new or an existing codebase); also reachable by loading this skill explicitly. Not for feature work in an already-specced project — use the brainstorming skill."
+description: "Use when real source code exists but no spec graph, including read-only project familiarization; also whenever asked to set up, onboard, initialize, or spec a project. Dispatch existing code to importing-a-codebase, empty workspaces to starting-a-new-project. Not for feature work in an already-specced project."
 ---
 
 > 移植自 JetBrains/ThinkRail 的 `packages/pi-thinkrail-workflow/skills/setting-up-a-project`（MIT），
@@ -9,13 +9,16 @@ description: "Use whenever asked to set up, onboard, initialize, or spec a proje
 # Setting up a project — dispatcher
 
 The single entry point for turning a project into a spec graph. Figure out which situation you're in, then
-follow the matching skill — don't improvise the flow yourself.
+follow the matching skill — don't improvise the flow yourself. Existing code without a graph enters
+this dispatcher even when the request is only to become familiar with the project. Preserve explicit
+read-only limits and the downstream clarification/adoption/review steps; entering this skill alone
+does not authorize overwriting documents.
 
 ## 1. Detect
 
 Look at the workspace and use the spec tools (`spec_grep` / `spec_graph`):
 
-- Is there already a spec graph (a `goal-and-requirements.md` or any `SPEC.md`)?
+- Is there already a spec graph? Confirm with an unfiltered spec query. A file named `SPEC.md` or `goal-and-requirements.md` only counts when it has the spec graph frontmatter; ordinary design documents are candidates to adopt. A filtered no-match or unknown-root error is not evidence of an empty graph.
 - Is there real source code, or is the repo empty / near-empty (just a README or scaffolding)?
 
 ## 2. Route

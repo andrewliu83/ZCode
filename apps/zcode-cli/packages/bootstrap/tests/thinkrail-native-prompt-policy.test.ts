@@ -62,7 +62,10 @@ it("Claude 已有代码但无 spec 时也注入 spec 规则，已有会话下一
       expect(Boolean(section?.content.includes("Specs are this project's ground truth."))).toBe(
         value,
       );
-      if (value) expect(section?.readOnly).toBe(true);
+      if (value) {
+        expect(section?.readOnly).toBe(true);
+        expect(request.appendSystemPrompt).toContain("re-check the route after spec discovery");
+      }
     }
     expect(requests).toHaveLength(3);
     expect(requests[1]?.resumeSessionId).toBe(nativeId);

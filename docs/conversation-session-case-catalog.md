@@ -1617,6 +1617,8 @@ child tool。raw child event、event store 和 model-io 仍属于 child session�
 | R01 | Task A `completed(success)`，composer 有文本和附件 | 切到其他 task，再切回 Task A        | composerDraftScopedByTask  | Task A 的未发送正文、普通文件附件和图片附件完整恢复；其他 task 的 composer 内容不能串入 A       | accepted |
 | R02 | Task B `running`，composer 有文本和附件            | 切到其他 task，再切回 Task B        | composerDraftScopedByTask  | Task B 后台继续运行；切回时未发送正文和附件完整恢复，不因 inactive stream 或 runtime 事件被清空 | accepted |
 | R03 | 未发送的新 task 草稿，composer 有文本和附件        | 切到已有 task，再回到新 task 草稿态 | composerDraftScopedByDraft | 尚未创建 taskId 的草稿也按 `draft/null` 作用域保存并恢复；不会被最近一个真实 task 的草稿覆盖    | accepted |
+| R04 | 同 scope 已有延迟恢复；用户提交正文 | accepted 清空后旧恢复执行，或 owner 回调换代 | staleComposerRestoreCannotReviveSubmittedDraft | ZCode/Claude 正文与持久草稿持续为空，旧恢复不能回填；拒绝/失败保留可重试内容 | accepted |
+| R05 | 初始草稿恢复尚未执行 | 用户输入新正文，再执行旧恢复 | staleComposerRestoreCannotOverwriteNewInput | 新输入保留；随后真实 scope 切换仍正确恢复目标，不串 workspace identity | accepted |
 
 ## PH. Composer Prompt History / 输入历史连续去重
 

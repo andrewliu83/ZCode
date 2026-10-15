@@ -35,7 +35,7 @@ describe("常驻规则", () => {
 
   it("两段正文都短（常驻段每轮都在，字节稳定才不搅动 prompt 缓存）", () => {
     expect(SPEC_RULE.length).toBeLessThan(700);
-    expect(WORKFLOW_RULE.length).toBeLessThan(300);
+    expect(WORKFLOW_RULE.length).toBeLessThan(500);
   });
 });
 
