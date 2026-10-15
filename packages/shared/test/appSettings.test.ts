@@ -2,6 +2,17 @@ import { describe, expect, it } from "vitest";
 import { appSettingsPatchSchema, appSettingsSchema } from "../src/validationAppSettings.js";
 
 describe("app settings", () => {
+  it("defaults ThinkRail to on only for complete settings and preserves explicit off", () => {
+    expect(appSettingsSchema.parse({}).thinkrailEnabled).toBe(true);
+    expect(appSettingsSchema.parse({ locale: "en-US" }).thinkrailEnabled).toBe(true);
+    expect(appSettingsSchema.parse({ thinkrailEnabled: false }).thinkrailEnabled).toBe(false);
+    expect(appSettingsSchema.parse({ thinkrailEnabled: true }).thinkrailEnabled).toBe(true);
+    expect(appSettingsPatchSchema.parse({})).not.toHaveProperty("thinkrailEnabled");
+    expect(appSettingsPatchSchema.parse({ locale: "en-US" })).not.toHaveProperty(
+      "thinkrailEnabled",
+    );
+    expect(appSettingsPatchSchema.parse({ thinkrailEnabled: false }).thinkrailEnabled).toBe(false);
+  });
   it("round-trips every structured Provider Family connection selection", () => {
     const selections = {
       zai: { kind: "individual-coding-plan" },

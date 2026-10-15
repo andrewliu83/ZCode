@@ -339,7 +339,7 @@ export interface AppSettings {
   dynamicWorkflowMode?: DynamicWorkflowMode;
   /**
    * ThinkRail（spec-graph + worktree 工作方式）的总开关，docs/thinkrail/design.md D2。
-   * 缺席 = 关：新老用户都不因升级得到新的工具面；技能、预设、面板同理。
+   * 完整设置读取时缺席默认开启；显式 false 保持关闭，局部更新不补默认值。
    * 这一位是**唯一所有者**——Host 从设置读它，经 workspace/updateThinkrailToolPolicy 推给
    * CLI，CLI 只缓存结论；不在 CLI config 或环境变量里另开一份。
    */

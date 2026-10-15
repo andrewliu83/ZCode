@@ -1,5 +1,7 @@
 # Conversation Session Case Catalog
 
+2026-10-15：ThinkRail 默认开启与 OpenChat 推理字段修复沿用既有 TR-01/KEX-05 入口；TDEF-01/02/03 为缺省、显式关闭和广播更新的 accepted 子场景，OCHAT-01/02/03/04 验收共同参数链与专用覆盖。没有新增会话状态。完整 setup/action/assert、剪枝边界见 [修复 spec](thinkrail-default-openchat-compatibility.md)。
+
 SHR22 补充验收：用户／项目自定义 profile 只支持 agents 根目录直接文件。服务与独立 CLI 测试覆盖初始化、热更新、重扫和插件递归发现不变；现有双 Host Desktop 用例加入深层用户文件，核对初始化及后续父轮实际 provider 请求不包含该定义，不新增 fixture 或 CI 准入。
 
 2026-09-18：实施 SHR22 目录监听修复；直接监听已有配置路径，缺失时切换已有父目录。补目录生命周期、稳定补扫及取消/I/O 测试，复用跨 Host Desktop 验证首次创建和重建。Windows 空目录移动使用随 scope 释放的原生父目录结构订阅；父目录检查不推迟已排队文件批次。六组 pending Desktop 最终 11/11 通过；macOS / Windows / 大小写敏感卷相关单测通过。既有红灯证据及平台跳过项保留，详见 `docs/subagent-runtime-refresh.md`。

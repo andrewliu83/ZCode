@@ -35,7 +35,7 @@
 ### 代价（必须承认）
 
 - **随 app 发布**：不能像插件那样独立迭代、不能被商店解释、不可卸载 —— 由开关承担「关掉」，
-  由默认关闭承担「不打扰」。
+  默认开启以交付工作流能力；用户明确关闭后持续尊重该选择。
 - **UI 面板是真 UI 工作**：桌面 + Web + 手机 web、`DESIGN.md`、i18n、测试。插件路线的沙箱页面
   本来是白拿的。**这是本方案唯一显著的新增成本**，所以面板排在最后一段。
 - **内核维护面**：spec 图与 worktree 加起来约 4.8k 行（源 `lib/` 4796 行），进 core 后属于
@@ -87,12 +87,12 @@ workflow 技能族与路由、具名 subagent 预设、spec 图面板与工作�
 **为什么是一个包**：spec / worktree / workflow 共享同一份 spec 模型与花名册，拆开会让
 `spec/index` 被复制多份。源插件也是一个包（`lib/` 下四个子目录）。
 
-### D2. 开关：唯一所有者，默认关
+### D2. 开关：唯一所有者，默认开
 
 | 项       | 决定                                                                                                                                                                                         |
 | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 形状     | `AppSettings.thinkrailEnabled?: boolean`（`packages/shared/src/protocol.ts`）                                                                                                                |
-| 默认     | `undefined` 即关：新用户与老用户都不因升级得到新工具面                                                                                                                                       |
+| 默认     | 完整设置读取时缺省为 `true`：新装与缺少字段的旧设置默认开启；显式 `false` 保持关闭，局部更新不补默认值                                                                                                                                       |
 | 所有者   | `~/.zcode/v2/setting.json`（services/setting 是唯一写入方；UI 经设置 RPC 写，Host 读）                                                                                                       |
 | 生效链路 | 设置文件 → Host 每次 client work 前现读 → `workspace/updateThinkrailToolPolicy` → CLI `appRuntimePreferences` → 会话 `runtimeConfig.runtimeFeatures.thinkrail` → `registerBuiltInTools` 的门 |
 | 设置行   | `packages/ui/src/settings/ThinkrailSetting.tsx`（P6），先例 `DynamicWorkflowModeSetting.tsx`                                                                                                 |

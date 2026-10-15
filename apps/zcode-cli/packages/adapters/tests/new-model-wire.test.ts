@@ -8,9 +8,16 @@ import {
   parseZCodeBuiltinModelConfigRules,
 } from "@zcode/provider";
 import { AiSdkModelAdapter } from "../src/model/runner.js";
+import { createNativeModelGateway } from "../src/agent-kernel/model-gateway.js";
 
 describe("新目录通过真实 SDK 发出的请求", () => {
   for (const [modelId, apiType, baseUrl, levels] of [
+    [
+      "gongsi/glm-5.3-flash",
+      "openai-chat-completions",
+      "https://fixture.invalid/v1",
+      ["low", "high", "max"],
+    ],
     ["gpt-6-astra", "openai-responses", "https://api.openai.com/v1", ["low", "max"]],
     ["claude-fable-5-1", "anthropic-messages", "https://api.anthropic.com/v1", ["low", "max"]],
     // 厂商的无预算 enabled 不能穿透到 OpenRouter；验证最终 SDK wire 而非只编译 Map。
@@ -68,9 +75,20 @@ describe("新目录通过真实 SDK 发出的请求", () => {
         );
         if (!modelConfig.ok || !providerConfig.ok) throw new Error("incomplete fixture");
         let body: Record<string, unknown> | undefined;
+        const realFetch = globalThis.fetch;
         vi.stubGlobal("fetch", async (url: RequestInfo | URL, init?: RequestInit) => {
           const request = new Request(url, init);
           body = await request.json();
+          // 通用 Chat 曾混入 OpenRouter 的对象字段，严格网关按 byte[] 解码会返回 500。
+          if (
+            apiType === "openai-chat-completions" &&
+            body?.reasoning &&
+            typeof body.reasoning === "object"
+          )
+            return Response.json(
+              { error: { message: "reasoning must not be an object in this Chat endpoint" } },
+              { status: 500 },
+            );
           if (apiType === "anthropic-messages")
             return Response.json({
               id: "fixture",
@@ -145,6 +163,30 @@ describe("新目录通过真实 SDK 发出的请求", () => {
                 }
               : {}),
           });
+          if (modelId.startsWith("gongsi/")) {
+            const lease = await createNativeModelGateway({
+              models: new Map([[modelId, model]]),
+              signal: AbortSignal.timeout(10_000),
+            });
+            try {
+              const response = await realFetch(`${lease.baseUrl}/v1/messages`, {
+                method: "POST",
+                headers: { "x-api-key": lease.apiKey, "content-type": "application/json" },
+                body: JSON.stringify({
+                  model: modelId,
+                  messages: [{ role: "user", content: "hi" }],
+                  max_tokens: 4000,
+                }),
+              });
+              expect(response.status).toBe(200);
+              expect(await response.json()).toMatchObject({
+                content: [{ type: "text", text: "ok" }],
+              });
+              expect(body).not.toHaveProperty("reasoning");
+            } finally {
+              await lease.close();
+            }
+          }
           expect(body?.model).toBe(modelId);
           if (apiType === "openai-responses") {
             expect(body).toMatchObject({

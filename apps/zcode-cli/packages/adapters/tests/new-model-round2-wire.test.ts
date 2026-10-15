@@ -343,13 +343,14 @@ describe("Todo138 通用两档的真实 SDK 请求体", () => {
           expect(body.thinking).toEqual({ type: level === "disabled" ? "disabled" : "adaptive" });
           if (level === "disabled") expect(body).not.toHaveProperty("output_config");
           else expect(body.output_config).toEqual({ effort: "high" });
-        } else {
+        } else if (api === "openai-responses") {
           expect(body.reasoning).toEqual({ effort });
-          if (api === "openai-chat-completions") {
-            expect(body.reasoning_effort).toBe(effort);
-            expect(body.thinking).toEqual({ type: level === "disabled" ? "disabled" : "enabled" });
-            expect(body.enable_thinking).toBe(level !== "disabled");
-          }
+        } else {
+          // 通用 Chat 不混入其它协议的对象，关闭与开启档位仍由原有字段表达。
+          expect(body).not.toHaveProperty("reasoning");
+          expect(body.reasoning_effort).toBe(effort);
+          expect(body.thinking).toEqual({ type: level === "disabled" ? "disabled" : "enabled" });
+          expect(body.enable_thinking).toBe(level !== "disabled");
         }
       });
     }

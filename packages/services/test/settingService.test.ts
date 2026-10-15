@@ -61,6 +61,20 @@ afterEach(() => {
 });
 
 describe("settingService", () => {
+  it("ThinkRail 新装与旧设置缺字段默认开启，显式关闭经其它偏好保存与重载仍保留", async () => {
+    const fresh = await createSettingServiceInHome(makeTempHome());
+    expect((await fresh.get()).thinkrailEnabled).toBe(true);
+    const home = makeTempHome();
+    const directory = join(home, ".zcode", "v2");
+    mkdirSync(directory, { recursive: true });
+    writeFileSync(join(directory, "setting.json"), JSON.stringify({ locale: "en-US" }));
+    const legacy = await createSettingServiceInHome(home);
+    expect((await legacy.get()).thinkrailEnabled).toBe(true);
+    await legacy.update({ thinkrailEnabled: false });
+    await legacy.update({ locale: "zh-CN" });
+    const restored = await createSettingServiceInHome(home);
+    expect((await restored.get()).thinkrailEnabled).toBe(false);
+  });
   it("Agent 内核默认 ZCode，切换 SDK 后重新加载仍保持保存值", async () => {
     const home = makeTempHome();
     const service = await createSettingServiceInHome(home);

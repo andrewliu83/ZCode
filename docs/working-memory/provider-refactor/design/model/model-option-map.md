@@ -141,7 +141,7 @@ OpenAI Responses
 表达式写作与排版统一遵循 [Option Map 写作风格](option-map-writing-style.md)：对象展开、两空格缩进、简单三目同行。写作风格与下列改造/兼容约束分开维护。
 
 - 专用 Map 的整理只允许合法输入的请求等价化：同名 effort 直接透传，条件下沉到变化字段；字段是否存在不同才保留对象分支。不得用 `null` 代替省略，也不改模式、预算和值域。
-- API Schema 兜底增强：Chat Completions 同时输出 `thinking.type`、`enable_thinking`、`reasoning_effort`、`reasoning.effort`，关闭 `disabled/none` 统一为关闭开关与 effort `none`；Responses 仅使用 `reasoning.effort`；Messages 为 `disabled` 或 Adaptive + 原 effort，不增加手动预算模式。
+- API Schema 兜底增强：Chat Completions 输出 `thinking.type`、`enable_thinking`、`reasoning_effort`，关闭 `disabled/none` 统一为关闭开关与 effort `none`；不再默认加入 `reasoning` 对象，避免严格 Chat 网关将其按非 Object 类型解码而返回 500。OpenRouter 的 `reasoning` 仍由已确认的站点专用 Map 或 Personal Map 声明；Responses 继续使用 `reasoning.effort`；Messages 为 `disabled` 或 Adaptive + 原 effort，不增加手动预算模式。
 - 混合 Chat 兜底依赖用户已接受的假设：未知字段被忽略，一致的重复控制可并存，关闭模式下额外 effort 可被忽略或允许 `none`。不是所有站点的已验证保证；不兼容正常报错，不删字段重试。
 - 通用 values 仍只有 `disabled`，新增合法档位才能使用该档位；专用规则与 Personal Map 仍按既有 Overlay 顺序覆盖兜底。Reasoning Map 不写输出上限。
 - 非原生关闭档位改名为单独兼容变更；未经 Personal Map-only 覆盖与执行入口的安全验证，不把 `off/nothink` 改成 `disabled`。来源受限的旧选择兼容不能替代对用户 Map 语义的保护。

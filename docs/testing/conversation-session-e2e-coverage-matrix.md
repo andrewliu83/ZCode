@@ -1,5 +1,7 @@
 # Conversation Session E2E Coverage Matrix
 
+2026-10-15：TDEF-01/03 由 `settings-thinkrail-broadcast.test.ts` 验证首次默认开启、手动关闭及跨窗口刷新，TDEF-02 由 AppSettings/SettingService 回归验证保存与重载。OCHAT-01/02 由真实 Built-in → AI SDK wire/协议桥及 `claude-sdk-openchat.test.mjs` 的严格本地上游验收；模型/站点/Personal 覆盖沿用 Provider Node 与各协议 wire 回归。聊天内核的三个既有 Desktop 场景保持通过；本地协议夹具不代表线上所有服务兼容。见 [spec 与验证记录](../thinkrail-default-openchat-compatibility.md)。
+
 SHR22 范围补充：`subagentRuntimeConfig.test.ts` 验证用户／项目扫描不进入子目录及重载隔离；`subagentRuntimeConfigWatcher.test.ts` 验证真实热更新和目录重建范围；`subagentsService.test.ts` 与 Bootstrap `subagents.test.ts` 验证 Settings／独立 CLI 第一层加载，保留插件递归发现。复用 cross-host pending 的 SHR22，断言两个 Host 的初始化及后续父轮 provider 请求不包含预置深层用户定义。
 
 2026-09-18：实施 SHR22 目录监听修复；直接监听已有配置路径，缺失时切换已有父目录。补目录生命周期、稳定补扫及取消/I/O 测试，复用跨 Host Desktop 验证首次创建和重建。Windows 空目录移动使用随 scope 释放的原生父目录结构订阅；父目录检查不推迟已排队文件批次。六组 pending Desktop 最终 11/11 通过；macOS / Windows / 大小写敏感卷相关单测通过。既有红灯证据及平台跳过项保留，详见 `docs/subagent-runtime-refresh.md`。

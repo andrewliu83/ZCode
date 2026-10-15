@@ -27,7 +27,7 @@ describe("ThinkRail 设置广播 E2E", () => {
     await clearAppData();
   });
 
-  it("TR-01：本窗口操作成功后，外部关闭通知继续更新控件", async function () {
+  it("TR-01/TDEF-01/03：默认开启，本窗口操作成功后外部关闭通知继续更新控件", async function () {
     this.timeout(90_000);
     // 通用工作区 helper 用 Escape 关闭职业引导，不在设置回归里另行推进初始化页面。
     await waitForDefaultWorkspaceReady(30_000);
@@ -37,9 +37,15 @@ describe("ThinkRail 设置广播 E2E", () => {
     await clickTestIdByDom(testId(TID_SETTINGS_SECTION_NAV, "general"));
     const control = $(sel(TID_SETTINGS_THINKRAIL_ENABLED_SWITCH));
     await control.waitForDisplayed({ timeout: SETTINGS_TIMEOUT_MS });
+    expect(await control.getAttribute("aria-checked")).toBe("true");
+    const settingsPath = join(getE2EAppDataPaths().appDataDir, "setting.json");
+    await clickTestIdByDom(TID_SETTINGS_THINKRAIL_ENABLED_SWITCH);
+    await browser.waitUntil(
+      async () => (await readSettings(settingsPath)).thinkrailEnabled === false,
+      { timeout: SETTINGS_TIMEOUT_MS, timeoutMsg: "默认开启后显式关闭未落盘" },
+    );
     expect(await control.getAttribute("aria-checked")).toBe("false");
     await clickTestIdByDom(TID_SETTINGS_THINKRAIL_ENABLED_SWITCH);
-    const settingsPath = join(getE2EAppDataPaths().appDataDir, "setting.json");
     await browser.waitUntil(
       async () => (await readSettings(settingsPath)).thinkrailEnabled === true,
       { timeout: SETTINGS_TIMEOUT_MS, timeoutMsg: "ThinkRail 开关未落盘" },

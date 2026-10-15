@@ -217,7 +217,6 @@ describe("Todo95 API Schema 兜底", () => {
                   thinking: { type: disabled ? "disabled" : "enabled" },
                   enable_thinking: !disabled,
                   reasoning_effort: effort,
-                  reasoning: { effort },
                 };
         const outputField =
           apiType === "anthropic-messages"

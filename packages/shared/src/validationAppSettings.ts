@@ -500,8 +500,8 @@ const appSettingsObjectSchema = z.object({
   askUserQuestionAutoResolutionEnabled: z.boolean().default(true),
   modelIoFullRetentionEnabled: z.boolean().default(false),
   dynamicWorkflowMode: dynamicWorkflowModeSettingSchema,
-  // ThinkRail 总开关（docs/thinkrail/design.md D2）：缺席即关，不给存量用户改默认。
-  thinkrailEnabled: z.boolean().optional(),
+  // 完整读取才补默认开启；保留显式 false，局部补丁不能覆盖用户关闭的选择。
+  thinkrailEnabled: z.boolean().default(true),
   mainSystemPrompt: z.string().max(65536).optional(),
   kernelSystemPrompts: z.record(agentKernelIdSchema, z.string().max(65536)).optional(),
   agentKernel: agentKernelIdSchema.default("zcode"),

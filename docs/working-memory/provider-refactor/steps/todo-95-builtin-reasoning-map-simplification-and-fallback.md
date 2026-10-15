@@ -1,5 +1,7 @@
 # Todo 95：专用 Reasoning Map 等价美化与兜底增强
 
+> 2026-10-15 修正：真实 Chat 上游将通用 `reasoning` 对象按 `byte[]` 解码并返回 500，推翻该字段可普遍混传的假设。当前通用 Chat Map 移除此对象，保留 `thinking`、`enable_thinking`、`reasoning_effort`；专用站点/Personal Map 与 Responses 保持原语义。下文四字段表达式为历史方案，不再作为当前请求预期。详见 [修复与验收](../../../thinkrail-default-openchat-compatibility.md)。
+
 > 2026-09-12 后续裁决：[Todo138](./todo-138-reasoning-level-ui-and-api-defaults.md) 将 Model 通用档位改为 disabled/enabled，三种 API 通用 map 增加 enabled → high；取代本文原先“不新增 enabled → high”的限制。专用 map、个人覆盖及规则层级仍按原语义。本文其余内容保留为当时实施记录。
 
 
