@@ -2,6 +2,10 @@
 *.mjs text eol=lf
 *.sh  text eol=lf
 
+# 固定运行资源以原始字节计算 SHA256；Windows CRLF 转换会让合法资源校验失败。
+apps/zcode-cli/packages/visualize-plugin/skills/visualize/assets/** -text
+packages/desktop/src/renderer/src/plugin-sandbox/genUiTweakRuntime.js -text
+
 # E2E PDF fixture 含规范 xref 尾空格，必须按二进制处理，避免 diff --check 误报。
 packages/desktop/test/e2e/fixtures/fs/**/*.pdf binary
 

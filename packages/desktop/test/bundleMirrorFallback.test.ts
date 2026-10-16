@@ -8,8 +8,20 @@ vi.mock("../../../scripts/intranetDefaults.mjs", async (importOriginal) => ({
   },
 }));
 
-const { OFFICIAL_ELECTRON_BUILDER_BINARIES_MIRROR, resolveElectronBuilderBinariesMirror } =
-  await import("../scripts/bundle.mjs");
+const {
+  OFFICIAL_ELECTRON_BUILDER_BINARIES_MIRROR,
+  resolveElectronBuilderBinariesMirror,
+  resolveElectronMirror,
+} = await import("../scripts/bundle.mjs");
+
+it("保留发行环境隔离后的 Electron runtime 专用镜像", () => {
+  expect(
+    resolveElectronMirror({
+      ZCODE_ELECTRON_RUNTIME_MIRROR: "https://github.com/electron/electron/releases/download/",
+      ELECTRON_MIRROR: "",
+    }),
+  ).toBe("https://github.com/electron/electron/releases/download/");
+});
 
 describe("未配置内网依赖源时的 electron-builder binaries 镜像", () => {
   it("回退到官方 release 下载地址，打包不因内网地址缺失而失败", () => {

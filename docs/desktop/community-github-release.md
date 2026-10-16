@@ -20,13 +20,15 @@ title: ZCode Community 独立发行与 GitHub 自动更新
 
 1. GitHub Actions 接受 `community-v*` tag 和手动构建。tag 必须与根版本精确匹配，源仓库必须匹配 distribution owner/repo；手动构建默认只上传 Actions artifacts，不自动发布。
 2. 交付 macOS arm64、Windows x64、Linux x64，分别使用原生 GitHub runner。macOS 提供 DMG/ZIP，Windows 提供 NSIS EXE，Linux 提供 AppImage/DEB/RPM。Node、pnpm 使用 mise.toml 与根 packageManager，依赖只使用根冻结锁。
-3. workflow 显式关闭远程资产制备，只交付本地桌面资源；Electron 下载走官方地址。独立终端 SEA 和远程 server runtime 不在本次 Release 资产范围内。
+3. workflow 显式关闭远程资产制备，只交付本地桌面资源；Electron 下载走官方地址。Electron runtime 镜像只通过 `ZCODE_ELECTRON_RUNTIME_MIRROR` 传入 builder 配置；发行环境清空全局 Electron 镜像别名，避免覆盖 DMG 等辅助工具自身的下载源，初次 app 打包和最终 `--prepackaged` 封装使用同一隔离环境。`--plan` 仅展示无凭据的下载配置，不输出完整环境。独立终端 SEA 和远程 server runtime 不在本次 Release 资产范围内。
 4. `bundle:desktop -- --app-only` 只产出应用目录并检查运行时依赖；在签名前写入 `Resources/app-update.yml`（固定 Community GitHub 源及独立缓存），发布校验必须读取并核对该文件。签名后才压缩最终安装包，避免重复压缩。无证书时：构建 `.app` → 独立 ad hoc 签名 SDK 与原生资源 → 签整个 app → 严格校验 → 重新生成 DMG/ZIP/更新清单 → 校验 sha512 → 上传。
 5. 有完整 Apple 证书及公证凭据时：自动导入临时 keychain、签名并公证／staple，随后生成最终资产。凭据配置不完整必须失败，不能无声降级；清理临时 keychain 和凭据文件。
 6. 三个平台各自校验最终产物、平台更新 YAML、blockmap 与 sha512。汇总任务要求三个平台齐全、版本/tag/commit 一致，并重新验证全部摘要，拒绝资产重名；不能通过平铺下载覆盖各平台的校验文件。全部成功后才创建 draft、上传并公开同一个 Release；任何平台失败均不发布。tag push 自动发布，手动构建只上传 artifacts。
 7. Windows 默认生成未配置 Authenticode 的 NSIS 包，不依赖原库的企业签名服务。Linux 由 runner 安装公开的 RPM/FUSE 打包依赖，不发布 Arch 包。各平台只有一个首期架构，更新 YAML 分别为 latest-mac.yml、latest.yml、latest-linux.yml。
 8. Windows 更新沿用 NsisUpdater；Linux 按安装格式沿用 AppImageUpdater、DebUpdater 或 RpmUpdater，DEB/RPM 安装遵循系统授权，不自行增加提权实现。各平台更新均使用 Community GitHub Provider，不得跳转上游更新服务。Linux 各格式串行封装，先生成无 package-type 的 AppImage，再由 DEB/RPM 写各自标记，最终合并同版本更新清单；不能让共享资源目录并发改写包格式。
 9. 每个平台在封装前用随包 Electron Node 执行 Agent `--version`，使用临时数据目录且不发送模型请求，60 秒内不能成功启动就停止发行。汇总要求每个平台有启动验证记录，不能只验证安装包文件存在。
+10. Gen UI 清单覆盖的固定运行资源、vendor 与许可按仓库原始字节 checkout，Windows 的 `core.autocrlf` 不得改写；构建继续使用原始 SHA256 校验，不在校验前归一化内容或重写摘要。
+11. 安装包名称使用已解析的目标架构 `x64` / `arm64`，不使用宿主架构，也不由 electron-builder 的格式宏改为 `x86_64` / `amd64`。builder、更新清单、单平台验证与汇总使用同一规范名称；DEB/RPM 包内部的架构元数据仍由各格式的原生打包器负责。
 
 # macOS 安装边界
 
@@ -72,6 +74,9 @@ sequenceDiagram
 | CR-10 | Linux 发布    | 原生 x64 runner 构建 AppImage/DEB/RPM、latest-linux.yml；三种包可从同一更新目录选到匹配格式 | native CI / provider integration    |
 | CR-11 | 多平台汇总    | 缺平台、版本/commit 不一致、摘要损坏或同名资产均阻止发布；合法三平台产物可合并              | artifact integration                |
 | CR-12 | 跨平台命令    | 原生 host/arch 不匹配先失败；Windows pnpm shim 与目录边界合法；macOS 签名顺序保持           | plan / command / existing Mac tests |
+| CR-13 | 固定资源字节  | core.autocrlf=true checkout 后运行资源与许可仍匹配原始 SHA256                               | temporary Git checkout / asset copy |
+| CR-14 | 下载源隔离    | 继承镜像变量不覆盖 DMG 工具下载源；两次封装共用隔离环境，runtime 保持官方地址               | release plan / real URL resolver    |
+| CR-15 | 规范产物名    | 真实 builder 按三种 Linux 格式展开后仍使用目标 x64/arm64，与严格校验一致                    | builder macro / artifact validation |
 
 # 影响说明（Impact Brief）
 
@@ -98,10 +103,18 @@ sequenceDiagram
 - 扩展后的发布入口已在本机重建 macOS 0.1.0，并用随包 Electron Node 启动 Agent（0.16.9）验证通过；产品版本与独立 Agent CLI 版本不要求相同。Windows/Linux 原生构建与安装尚未实际执行，需要首次 Actions 运行验证，不能将本地计划/清单测试算作对应平台编译通过。
 - 本地验证不代表 GitHub 原生构建或公开发版已完成；在线执行结果以 Actions 和 Releases 为准。Developer ID／Apple 公证路径需要 Secrets，当前没有凭据，未计为实际执行通过。旧 Preview 3.x 需要手动安装第一份 Community 包。
 
+## 跨平台发行阻断修复验证（2026-10-16）
+
+- 对应失败记录为 Actions run `38852225520`（`80ef42ac`）：Windows 固定资源换行影响 SHA256；macOS 全局 Electron 镜像污染 DMG 工具下载源；Linux 格式架构宏与规范文件名不一致。
+- 新增回归先复现失败，修复后发布脚本 17 项、桌面构建/资源 15 项通过。真实 Git `core.autocrlf=true` checkout 保持资源原始摘要；真实 `@electron/get` URL 解析保留 DMG 工具自身源；真实 builder 展开覆盖 Linux x64/arm64 的三格式及 macOS/Windows 目标。固定资源测试已纳入根 Vitest 默认发现范围。
+- 根 `pnpm typecheck`、`pnpm lint`、`pnpm architecture:check --changed` 通过；Lint 为既有 65 个警告、0 个错误。本次修改文件的定向 Lint 无警告，格式和 diff 空白检查通过。
+- 本机 Node 24.14.0、pnpm 10.33.2、macOS arm64 执行完整 `pnpm release:desktop -- --os mac --arch arm64`，输出隔离在 `packages/desktop/dist/verification-community-release-portability/`。DMG、ZIP、blockmap、更新清单和 SHA512 全部生成，ad hoc 严格签名、运行时依赖与随包 Agent 0.16.9 启动验证通过；修正后的 DMG 工具官方地址 HTTP 200。
+- 本轮未在 Windows/Linux 原生系统执行打包，未运行 UI E2E，未触发 GitHub Actions、提交、推送或发布。契约回归不代替这两个平台的原生发行结果。
+
 # 使用方式
 
 - 在对应原生系统执行：macOS `pnpm release:desktop -- --os mac --arch arm64`；Windows `pnpm release:desktop -- --os win --arch x64`；Linux `pnpm release:desktop -- --os linux --arch x64`。输出分别在 `packages/desktop/dist/community/macos-arm64/`、`windows-x64/`、`linux-x64/`；添加 `--plan` 仅查看配置，不要求当前主机匹配目标。实际构建在清理目录前验证 host/arch，拒绝跨平台错配。
-- 首次发行：提交并推送源码后，推送 `community-v0.1.0` 标签。Actions 自动构建并发布；在 GitHub Actions 中手动运行则只上传 artifacts。后续更新根版本并创建同版本的 `community-v…` 标签，或使用 `pnpm release patch`／`minor`。
+- 当前发行版本为 `0.1.1`：提交并推送源码后，创建指向该提交的 `community-v0.1.1` 标签。Actions 自动构建并发布；在 GitHub Actions 中手动运行则只上传 artifacts。重跑旧标签仍构建其原始提交，修复后递增根版本并创建新的 `community-v…` 标签，不移动旧标签；也可使用 `pnpm release patch`／`minor`。
 - 工作流的矩阵从 `scripts/community-release-targets.mjs` 读取：macOS 使用 `macos-15`（arm64），Windows 使用 `windows-2022`（x64），Linux 使用 `ubuntu-22.04`（x64）。Linux 安装 rpm、libfuse2、patchelf；Windows 启用长路径。所有 runner 只使用根冻结锁。
 - macOS 无 Apple 凭据时无需配置 Secrets，走 ad hoc。正式签名需同时配置 `MACOS_CERTIFICATE_P12_BASE64`、`APPLE_SIGNING_IDENTITY`（Developer ID Application 完整名称）、`APPLE_ID`、`APPLE_APP_SPECIFIC_PASSWORD`、`APPLE_TEAM_ID`；加密 P12 另设 `MACOS_CERTIFICATE_PASSWORD`。进入正式签名后保持签名身份稳定。凭据不完整时失败。
 - 下载构建 artifacts 时保留每个平台目录，由 `scripts/collect-community-release.mjs` 校验并汇总为一份 SHA512SUMS、构建记录和发行说明。三个平台全部成功才上传 draft，全部资产上传后才公开；已发布版本不覆盖，修改内容必须递增版本。Windows 当前未做 Authenticode 签名；DEB/RPM 更新沿用系统授权安装。

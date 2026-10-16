@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
+import { createRequire } from "node:module";
 import {
   COMMUNITY_RELEASE_TARGETS,
   resolveCommunityReleaseTarget,
@@ -101,6 +102,49 @@ test("Windows and Linux release plans can be inspected without spawning native t
     assert.equal(plan.target.arch, "x64");
     assert.equal(plan.signing, "unsigned");
     assert.equal(plan.autoUpdate, "1");
+  }
+});
+
+test("real builder expansion keeps canonical target architecture across installer formats", () => {
+  const require = createRequire(import.meta.url);
+  require("app-builder-lib");
+  const { PlatformPackager } = require("app-builder-lib/out/platformPackager.js");
+  const { Arch } = require("builder-util");
+  for (const [os, arch, extensions] of [
+    ["mac", "arm64", ["dmg", "zip"]],
+    ["win", "x64", ["exe"]],
+    ["linux", "x64", ["AppImage", "deb", "rpm"]],
+    ["linux", "arm64", ["AppImage", "deb", "rpm"]],
+  ]) {
+    const result = spawnSync(
+      process.execPath,
+      [
+        "--input-type=module",
+        "-e",
+        'const { default: config } = await import("./packages/desktop/electron-builder.config.js"); process.stdout.write(JSON.stringify({ pattern: config[process.env.FIXTURE_OS].artifactName }));',
+      ],
+      {
+        cwd: new URL("../..", import.meta.url),
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          ZCODE_TARGET_OS: os,
+          ZCODE_TARGET_ARCH: arch,
+          ZCODE_ENV: "production",
+          ZCODE_PREVIEW_IDENTITY: "0",
+          FIXTURE_OS: os,
+        },
+      },
+    );
+    assert.equal(result.status, 0, result.stderr);
+    const { pattern } = JSON.parse(result.stdout);
+    const packager = Object.create(PlatformPackager.prototype);
+    packager.appInfo = { version };
+    packager.platform = { buildConfigurationKey: os };
+    for (const extension of extensions) {
+      const actual = packager.computeArtifactName(pattern, extension, Arch[arch]);
+      assert.equal(actual, `zcode-community-${version}-${os}-${arch}.${extension}`);
+    }
   }
 });
 

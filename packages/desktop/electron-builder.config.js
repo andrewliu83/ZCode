@@ -234,8 +234,8 @@ const PACKAGING_PRUNE_PATTERNS = [
 ];
 
 function buildDesktopArtifactName(platformName, extension = "${ext}") {
-  // 测试环境产物必须和正式安装包文件名区分，避免上传、下载或人工验收时混用。
-  return `${desktopProductIdentity.linuxExecutableName}-\${version}-${platformName}-\${arch}${desktopArtifactEnvSuffix}.${extension}`;
+  // builder 的 arch 宏按格式改成 amd64/x86_64，文件名使用规范目标架构才能通过发行校验。
+  return `${desktopProductIdentity.linuxExecutableName}-\${version}-${platformName}-${targetPlatform.arch}${desktopArtifactEnvSuffix}.${extension}`;
 }
 
 function runAsarCommand(args) {

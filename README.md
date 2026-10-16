@@ -1,6 +1,6 @@
 # ZCode Community
 
-ZCode Community 是基于 [ZCode](https://github.com/zai-org/ZCode) 的社区发行版，提供桌面、Web 和终端 AI 编程工作台。当前 Community 版本为 **0.1.0**，使用独立应用 ID、安装包名称和 `community-v*` 标签，与上游 3.x 版本分开安装和更新。
+ZCode Community 是基于 [ZCode](https://github.com/zai-org/ZCode) 的社区发行版，提供桌面、Web 和终端 AI 编程工作台。当前 Community 版本为 **0.1.1**，使用独立应用 ID、安装包名称和 `community-v*` 标签，与上游 3.x 版本分开安装和更新。
 
 <div align="center">
   <img src="public/logo/icons/1024x1024.png" alt="ZCode" width="128" height="128" />
@@ -194,12 +194,14 @@ pnpm release:desktop -- --os win --arch x64 --plan
 
 [Community Desktop Release](.github/workflows/community-release.yml) 使用原生 macOS、Windows 和 Linux runner 构建。三个平台全部成功并通过版本、提交和摘要校验后，才公开同一个 Release。
 
-首次发行在源码提交并推送后，创建与根 `package.json` 版本一致的标签：
+发行前先提交并推送源码，再创建与根 `package.json` 版本一致、指向该提交的标签：
 
 ```bash
-git tag community-v0.1.0
-git push origin community-v0.1.0
+git tag community-v0.1.1
+git push origin community-v0.1.1
 ```
+
+重跑旧标签对应的 Actions 仍使用旧提交。修复后发布新版本和新标签，不移动旧标签。
 
 后续可用 `pnpm release patch` 或 `pnpm release minor` 更新版本并推送发行标签。只推送 `main` 不会创建 Release；手动运行 Actions 只上传构建产物。已公开的版本不可覆盖，修改后需要递增版本。
 

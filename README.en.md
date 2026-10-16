@@ -1,6 +1,6 @@
 # ZCode Community
 
-ZCode Community is a community distribution based on [ZCode](https://github.com/zai-org/ZCode), with desktop, Web and terminal AI coding interfaces. The current Community version is **0.1.0**, with its own application ID, package names and `community-v*` tags. It installs and updates separately from upstream 3.x releases.
+ZCode Community is a community distribution based on [ZCode](https://github.com/zai-org/ZCode), with desktop, Web and terminal AI coding interfaces. The current Community version is **0.1.1**, with its own application ID, package names and `community-v*` tags. It installs and updates separately from upstream 3.x releases.
 
 <div align="center">
   <img src="public/logo/icons/1024x1024.png" alt="ZCode" width="128" height="128" />
@@ -190,12 +190,14 @@ The lower-level development packager remains `pnpm bundle:desktop`; use `pnpm bu
 
 The [Community Desktop Release workflow](.github/workflows/community-release.yml) builds on native macOS, Windows and Linux runners. It publishes one release only after all three platforms succeed and their versions, commits and checksums are verified.
 
-For the first release, commit and push the source, then create a tag matching the root `package.json` version:
+Commit and push the source, then create a tag matching the root `package.json` version and pointing to that commit:
 
 ```bash
-git tag community-v0.1.0
-git push origin community-v0.1.0
+git tag community-v0.1.1
+git push origin community-v0.1.1
 ```
+
+Rerunning Actions for an old tag still builds its original commit. Publish fixes with a new version and tag instead of moving an existing tag.
 
 For subsequent releases, use `pnpm release patch` or `pnpm release minor` to update the version and push its release tag. Pushing `main` alone does not create a release; a manual Actions run only uploads build artifacts. Published versions cannot be overwritten; changes require a new version.
 

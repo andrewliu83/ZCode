@@ -14,6 +14,60 @@ import { resolveAppleSigningMode } from "../apple-signing.mjs";
 import { verifyCommunityRelease } from "../verify-community-release.mjs";
 
 const repository = "andrewliu83/ZCode";
+
+test("release packaging isolates Electron runtime and generic tool download sources", async () => {
+  const mirrorKeys = [
+    "ELECTRON_MIRROR",
+    "NPM_CONFIG_ELECTRON_MIRROR",
+    "npm_config_electron_mirror",
+    "npm_package_config_electron_mirror",
+  ];
+  const inherited = Object.fromEntries(
+    mirrorKeys.map((key) => [key, "https://inherited.invalid/"]),
+  );
+  const result = spawnSync(
+    process.execPath,
+    ["scripts/release-desktop.mjs", "--os", "linux", "--arch", "x64", "--plan"],
+    {
+      cwd: new URL("../..", import.meta.url),
+      env: { ...process.env, ...inherited },
+      encoding: "utf8",
+    },
+  );
+  assert.equal(result.status, 0, result.stderr);
+  const { downloads } = JSON.parse(result.stdout);
+  assert(downloads, "release plan must expose its non-secret download environment");
+  assert.equal(
+    downloads.ZCODE_ELECTRON_RUNTIME_MIRROR,
+    "https://github.com/electron/electron/releases/download/",
+  );
+  for (const key of mirrorKeys) assert.equal(downloads[key], "");
+  const { createRequire } = await import("node:module");
+  const require = createRequire(import.meta.url);
+  const { getArtifactRemoteURL } = require("@electron/get/dist/cjs/artifact-utils.js");
+  const previous = Object.fromEntries(Object.keys(downloads).map((key) => [key, process.env[key]]));
+  try {
+    Object.assign(process.env, inherited, downloads);
+    const mirror =
+      "https://github.com/electron-userland/electron-builder-binaries/releases/download/";
+    const filename = "dmgbuild-bundle-arm64-75c8a6c.tar.gz";
+    assert.equal(
+      await getArtifactRemoteURL({
+        version: "1.2.0",
+        artifactName: filename,
+        isGeneric: true,
+        mirrorOptions: { mirror, customDir: "dmg-builder@1.2.0", customFilename: filename },
+      }),
+      `${mirror}dmg-builder@1.2.0/${filename}`,
+    );
+  } finally {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
+
 test("Community release tags, version and repository are independently validated", () => {
   assert.equal(COMMUNITY_DISTRIBUTION.appId, "io.github.andrewliu83.zcode");
   assert.deepEqual(communityPublishOptions(), {

@@ -124,7 +124,9 @@ function isMisconfiguredNpmMirrorElectronRuntimeMirror(mirror) {
 }
 
 export function resolveElectronMirror(env = process.env) {
+  // 隔离后的专用镜像须优先保留，否则下一次 bundle 会重新选回默认下载源。
   const existingMirror =
+    env.ZCODE_ELECTRON_RUNTIME_MIRROR ||
     env.NPM_CONFIG_ELECTRON_MIRROR ||
     env.npm_config_electron_mirror ||
     env.npm_package_config_electron_mirror ||

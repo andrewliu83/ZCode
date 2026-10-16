@@ -16,6 +16,11 @@ import {
 import { signCommunityMacApp } from "./sign-community-macos.mjs";
 import { smokeCommunityAgent } from "./smoke-community-agent.mjs";
 import {
+  createElectronBuilderBinariesMirrorEnv,
+  createElectronRuntimeMirrorEnv,
+  OFFICIAL_ELECTRON_BUILDER_BINARIES_MIRROR,
+} from "../packages/desktop/scripts/bundle.mjs";
+import {
   mergeCommunityUpdateManifests,
   verifyCommunityRelease,
 } from "./verify-community-release.mjs";
@@ -28,6 +33,11 @@ const target = resolveCommunityReleaseTarget(
   options.arch ?? process.env.ZCODE_TARGET_ARCH,
 );
 const signingMode = target.os === "mac" ? resolveAppleSigningMode(process.env) : "unsigned";
+// Electron 的全局镜像变量会覆盖 DMG 工具下载源，两次封装必须共用隔离后的环境。
+const downloads = {
+  ...createElectronRuntimeMirrorEnv("https://github.com/electron/electron/releases/download/"),
+  ...createElectronBuilderBinariesMirrorEnv(OFFICIAL_ELECTRON_BUILDER_BINARIES_MIRROR),
+};
 const env = {
   ...process.env,
   NODE_ENV: "production",
@@ -47,9 +57,7 @@ const env = {
   VITE_ZCODE_E2E_STORE_BRIDGE: "0",
   ZCODE_E2E_KEEP_BUILD_CACHE: "0",
   npm_config_registry: "https://registry.npmjs.org",
-  ELECTRON_MIRROR: "https://github.com/electron/electron/releases/download/",
-  ELECTRON_BUILDER_BINARIES_MIRROR:
-    "https://github.com/electron-userland/electron-builder-binaries/releases/download/",
+  ...downloads,
 };
 const directory = resolve(desktopRoot, env.ZCODE_DESKTOP_DIST_DIR);
 const withinDist = relative(resolve(desktopRoot, "dist"), directory);
@@ -70,6 +78,7 @@ if (options.plan) {
         signing: signingMode,
         directory,
         autoUpdate: env.ZCODE_AUTO_UPDATE,
+        downloads,
       },
       null,
       2,
