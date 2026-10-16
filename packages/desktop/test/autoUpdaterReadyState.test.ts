@@ -2,17 +2,23 @@ import { EventEmitter } from "node:events";
 import { PlatformChannels, desktopMenuMessageIds, formatDesktopMenuMessage } from "@zcode/shared";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { loggerErrorMock, loggerInfoMock, loggerWarnMock, readFileMock, spawnMock } = vi.hoisted(
-  () => {
-    return {
-      loggerErrorMock: vi.fn(),
-      loggerInfoMock: vi.fn(),
-      loggerWarnMock: vi.fn(),
-      readFileMock: vi.fn(),
-      spawnMock: vi.fn(),
-    };
-  },
-);
+const {
+  loggerErrorMock,
+  loggerInfoMock,
+  loggerWarnMock,
+  readFileMock,
+  resolveCommunityUpdaterMock,
+  spawnMock,
+} = vi.hoisted(() => {
+  return {
+    loggerErrorMock: vi.fn(),
+    loggerInfoMock: vi.fn(),
+    loggerWarnMock: vi.fn(),
+    readFileMock: vi.fn(),
+    resolveCommunityUpdaterMock: vi.fn((fallback: unknown) => fallback),
+    spawnMock: vi.fn(),
+  };
+});
 
 const originalPlatform = process.platform;
 
@@ -89,6 +95,10 @@ autoUpdaterMock.installerPath =
 autoUpdaterMock.autoRunAppAfterInstall = true;
 autoUpdaterMock.installDirectory = null;
 autoUpdaterMock.downloadedUpdateHelper = null;
+
+vi.mock("../src/main/communityUpdaterFactory.js", () => ({
+  resolveCommunityUpdater: resolveCommunityUpdaterMock,
+}));
 
 vi.mock("node:child_process", () => ({
   spawn: spawnMock,
@@ -214,10 +224,13 @@ describe("autoUpdater ready state sync", () => {
     autoUpdaterMock.removeAllListeners();
     autoUpdaterMock.autoDownload = false;
     autoUpdaterMock.autoInstallOnAppQuit = false;
-    autoUpdaterMock.checkForUpdates.mockClear();
+    resolveCommunityUpdaterMock.mockReset();
+    resolveCommunityUpdaterMock.mockImplementation((fallback: unknown) => fallback);
+    autoUpdaterMock.checkForUpdates.mockReset();
+    autoUpdaterMock.checkForUpdates.mockResolvedValue(undefined);
     autoUpdaterMock.downloadUpdate.mockClear();
     autoUpdaterMock.quitAndInstall.mockClear();
-    autoUpdaterMock.setFeedURL.mockClear();
+    autoUpdaterMock.setFeedURL.mockReset();
     autoUpdaterMock.forceDevUpdateConfig = false;
     autoUpdaterMock.currentVersion = null;
     autoUpdaterMock.installerPath =
@@ -287,6 +300,329 @@ describe("autoUpdater ready state sync", () => {
     expect(loggerInfoMock).toHaveBeenCalledWith(
       "[auto-update] skip manual check: updater disabled for this product flavor",
     );
+  });
+
+  it.each(["not-started", "initializing", "failed"] as const)(
+    "%s 初始化状态下所有检查入口都不能触碰 fallback",
+    async (initializationState) => {
+      const win = {
+        isDestroyed: () => false,
+        webContents: { id: 10, send: vi.fn() },
+      };
+      browserWindows.push(win);
+      const {
+        checkForUpdateMenuClick,
+        getAutoUpdaterState,
+        initAutoUpdater,
+        refreshAutoUpdaterReleaseChannel,
+        requestAutoUpdateCheckWithoutWindow,
+        requestForceAutoUpdate,
+      } = await importAutoUpdaterWithLocale();
+      let resolveSelection: ((updater: typeof autoUpdaterMock) => void) | undefined;
+      let initialization: Promise<void> | undefined;
+      if (initializationState === "initializing") {
+        resolveCommunityUpdaterMock.mockReturnValueOnce(
+          new Promise<typeof autoUpdaterMock>((resolve) => {
+            resolveSelection = resolve;
+          }),
+        );
+        initialization = initAutoUpdater();
+      } else if (initializationState === "failed") {
+        resolveCommunityUpdaterMock.mockRejectedValueOnce(new Error("updater module unavailable"));
+        await initAutoUpdater();
+      }
+
+      checkForUpdateMenuClick(win as never);
+      requestAutoUpdateCheckWithoutWindow();
+      const onStateChange = vi.fn();
+      const dispose = requestForceAutoUpdate(onStateChange);
+      refreshAutoUpdaterReleaseChannel(true);
+      await Promise.resolve();
+      await Promise.resolve();
+
+      expect(autoUpdaterMock.checkForUpdates).not.toHaveBeenCalled();
+      expect(autoUpdaterMock.setFeedURL).not.toHaveBeenCalled();
+      expect(autoUpdaterMock.downloadUpdate).not.toHaveBeenCalled();
+      expect(autoUpdaterMock.quitAndInstall).not.toHaveBeenCalled();
+      expect(getAutoUpdaterState()).toEqual({ kind: "idle", enabled: true });
+      expect(menuItem.enabled).toBe(true);
+      expect(win.webContents.send).toHaveBeenCalledWith(
+        PlatformChannels.UpdateCheckResult,
+        expect.objectContaining({
+          kind: "error",
+          message: expect.stringMatching(
+            initializationState === "not-started"
+              ? /not initialized/i
+              : initializationState === "initializing"
+                ? /initializing/i
+                : /updater module unavailable/,
+          ),
+        }),
+      );
+      expect(onStateChange).toHaveBeenLastCalledWith(
+        expect.objectContaining({ kind: "error", message: expect.any(String) }),
+      );
+      dispose();
+
+      if (initialization) {
+        resolveSelection?.(autoUpdaterMock);
+        await initialization;
+        expect(autoUpdaterMock.listenerCount("update-not-available")).toBe(1);
+        // 初始化期间的点击立即结束，不在初始化成功后额外排队检查。
+        expect(autoUpdaterMock.checkForUpdates).toHaveBeenCalledTimes(1);
+      }
+    },
+  );
+
+  it.each(["selection-throw", "selection-reject", "configuration"] as const)(
+    "%s 初始化失败在 Main 内收敛并记录可读原因",
+    async (failureStage) => {
+      const failure = new Error(`updater ${failureStage} failed`);
+      if (failureStage === "selection-throw") {
+        resolveCommunityUpdaterMock.mockImplementationOnce(() => {
+          throw failure;
+        });
+      } else if (failureStage === "selection-reject") {
+        resolveCommunityUpdaterMock.mockRejectedValueOnce(failure);
+      } else {
+        autoUpdaterMock.setFeedURL.mockImplementationOnce(() => {
+          throw failure;
+        });
+      }
+      const { getAutoUpdaterState, initAutoUpdater } = await importAutoUpdaterWithLocale();
+
+      await expect(initAutoUpdater()).resolves.toBeUndefined();
+
+      expect(getAutoUpdaterState()).toEqual({ kind: "idle", enabled: true });
+      expect(autoUpdaterMock.checkForUpdates).not.toHaveBeenCalled();
+      expect(autoUpdaterMock.listenerCount("checking-for-update")).toBe(0);
+      expect(loggerErrorMock).toHaveBeenCalledWith(
+        expect.stringContaining(failure.message),
+        expect.stringContaining(failure.message),
+      );
+    },
+  );
+
+  it("初始化期间和成功后的重复初始化不会重复注册或检查", async () => {
+    let resolveSelection: ((updater: typeof autoUpdaterMock) => void) | undefined;
+    resolveCommunityUpdaterMock.mockReturnValueOnce(
+      new Promise<typeof autoUpdaterMock>((resolve) => {
+        resolveSelection = resolve;
+      }),
+    );
+    const { initAutoUpdater } = await importAutoUpdaterWithLocale();
+    const initialization = initAutoUpdater();
+
+    await initAutoUpdater();
+    expect(resolveCommunityUpdaterMock).toHaveBeenCalledTimes(1);
+    expect(autoUpdaterMock.checkForUpdates).not.toHaveBeenCalled();
+    resolveSelection?.(autoUpdaterMock);
+    await initialization;
+    await initAutoUpdater();
+
+    expect(autoUpdaterMock.listenerCount("update-not-available")).toBe(1);
+    expect(autoUpdaterMock.setFeedURL).toHaveBeenCalledTimes(1);
+    expect(autoUpdaterMock.checkForUpdates).toHaveBeenCalledTimes(1);
+  });
+
+  it("部分监听注册后初始化失败会保留原因，重复初始化不能叠加监听", async () => {
+    const failure = new Error("update IPC registration failed");
+    ipcMainHandle.mockImplementationOnce(() => {
+      throw failure;
+    });
+    const win = {
+      isDestroyed: () => false,
+      webContents: { id: 15, send: vi.fn() },
+    };
+    browserWindows.push(win);
+    const { checkForUpdateMenuClick, getAutoUpdaterState, initAutoUpdater } =
+      await importAutoUpdaterWithLocale();
+
+    await expect(initAutoUpdater()).resolves.toBeUndefined();
+    await initAutoUpdater();
+    checkForUpdateMenuClick(win as never);
+
+    expect(resolveCommunityUpdaterMock).toHaveBeenCalledTimes(1);
+    expect(autoUpdaterMock.listenerCount("update-not-available")).toBe(1);
+    expect(autoUpdaterMock.checkForUpdates).not.toHaveBeenCalled();
+    expect(getAutoUpdaterState()).toEqual({ kind: "idle", enabled: true });
+    expect(win.webContents.send).toHaveBeenCalledWith(PlatformChannels.UpdateCheckResult, {
+      kind: "error",
+      message: expect.stringContaining(failure.message),
+    });
+  });
+
+  it("初始化完成前恢复 ready 展示不会提前启动轮询", async () => {
+    vi.useFakeTimers();
+    try {
+      settingServiceMock.get.mockResolvedValue({
+        recentProjects: [],
+        locale: "en-US",
+        pendingPostUpdateReleaseNotes: {
+          version: "0.1.25",
+          title: "Release v0.1.25",
+          markdown: "cached update",
+        },
+      });
+      let resolveSelection: ((updater: typeof autoUpdaterMock) => void) | undefined;
+      resolveCommunityUpdaterMock.mockReturnValueOnce(
+        new Promise<typeof autoUpdaterMock>((resolve) => {
+          resolveSelection = resolve;
+        }),
+      );
+      const { hydratePendingPostUpdateReleaseNotes, initAutoUpdater } =
+        await importAutoUpdaterWithLocale();
+      await hydratePendingPostUpdateReleaseNotes(settingServiceMock);
+      const initialization = initAutoUpdater();
+
+      expect(vi.getTimerCount()).toBe(0);
+      await vi.advanceTimersByTimeAsync(FIFTEEN_MINUTES_MS);
+      expect(autoUpdaterMock.checkForUpdates).not.toHaveBeenCalled();
+      resolveSelection?.(autoUpdaterMock);
+      await initialization;
+      expect(vi.getTimerCount()).toBe(1);
+      expect(autoUpdaterMock.checkForUpdates).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("Provider 配置尚未完成时点击检查也不能提前调用 updater", async () => {
+    const win = {
+      isDestroyed: () => false,
+      webContents: { id: 11, send: vi.fn() },
+    };
+    browserWindows.push(win);
+    const { checkForUpdateMenuClick, initAutoUpdater } = await importAutoUpdaterWithLocale();
+    autoUpdaterMock.setFeedURL.mockImplementationOnce(() => {
+      checkForUpdateMenuClick(win as never);
+      expect(autoUpdaterMock.checkForUpdates).not.toHaveBeenCalled();
+    });
+
+    await initAutoUpdater();
+
+    expect(win.webContents.send).toHaveBeenCalledWith(PlatformChannels.UpdateCheckResult, {
+      kind: "error",
+      message: expect.stringMatching(/initializing/i),
+    });
+    expect(autoUpdaterMock.checkForUpdates).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(["disabled", "development"] as const)(
+    "%s 跳过语义适用于手动、无窗口和强制检查",
+    async (runtime) => {
+      const win = {
+        isDestroyed: () => false,
+        webContents: { id: 12, send: vi.fn() },
+      };
+      browserWindows.push(win);
+      appMock.isPackaged = runtime !== "development";
+      const {
+        checkForUpdateMenuClick,
+        initAutoUpdater,
+        requestAutoUpdateCheckWithoutWindow,
+        requestForceAutoUpdate,
+      } = await importAutoUpdaterWithLocale();
+      await initAutoUpdater({ enabled: runtime !== "disabled" });
+
+      checkForUpdateMenuClick(win as never);
+      requestAutoUpdateCheckWithoutWindow();
+      const onStateChange = vi.fn();
+      requestForceAutoUpdate(onStateChange)();
+      await Promise.resolve();
+
+      expect(win.webContents.send).toHaveBeenCalledWith(PlatformChannels.UpdateCheckResult, {
+        kind: "dev-skipped",
+      });
+      expect(onStateChange).toHaveBeenLastCalledWith(
+        expect.objectContaining({ kind: "dev-skipped" }),
+      );
+      expect(autoUpdaterMock.checkForUpdates).not.toHaveBeenCalled();
+      expect(resolveCommunityUpdaterMock).not.toHaveBeenCalled();
+    },
+  );
+
+  it.each(["idle", "update-available"] as const)(
+    "手动检查仅 reject 时恢复 %s 并允许重试",
+    async (initialMenuState) => {
+      const win = {
+        isDestroyed: () => false,
+        webContents: { id: 13, send: vi.fn() },
+      };
+      browserWindows.push(win);
+      const { checkForUpdateMenuClick, getAutoUpdaterState, initAutoUpdater } =
+        await importAutoUpdaterWithLocale();
+      await initAutoUpdater();
+      autoUpdaterMock.emit(
+        initialMenuState === "idle" ? "update-not-available" : "update-available",
+        { version: initialMenuState === "idle" ? "0.1.24" : "0.1.25" },
+      );
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      const previousState = getAutoUpdaterState();
+      autoUpdaterMock.checkForUpdates.mockRejectedValueOnce(new Error("manual feed offline"));
+
+      checkForUpdateMenuClick(win as never);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+
+      expect(win.webContents.send).toHaveBeenCalledWith(PlatformChannels.UpdateCheckResult, {
+        kind: "error",
+        message: "manual feed offline",
+      });
+      expect(getAutoUpdaterState()).toEqual(previousState);
+      expect(menuItem.enabled).toBe(true);
+
+      checkForUpdateMenuClick(win as never);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(autoUpdaterMock.checkForUpdates).toHaveBeenCalledTimes(3);
+      autoUpdaterMock.emit("update-not-available", { version: "0.1.24" });
+      expect(win.webContents.send).toHaveBeenLastCalledWith(
+        PlatformChannels.UpdateCheckResult,
+        initialMenuState === "idle"
+          ? { kind: "up-to-date", currentVersion: "0.1.24" }
+          : { kind: "available", version: "0.1.25", channel: "stable" },
+      );
+    },
+  );
+
+  it("旧手动检查在结果事件后迟到的 reject 不会覆盖下一次检查", async () => {
+    const win = {
+      isDestroyed: () => false,
+      webContents: { id: 14, send: vi.fn() },
+    };
+    browserWindows.push(win);
+    const { checkForUpdateMenuClick, getAutoUpdaterState, initAutoUpdater } =
+      await importAutoUpdaterWithLocale();
+    await initAutoUpdater();
+    autoUpdaterMock.emit("update-not-available", { version: "0.1.24" });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    let rejectFirstCheck: ((error: Error) => void) | undefined;
+    autoUpdaterMock.checkForUpdates.mockReturnValueOnce(
+      new Promise((_resolve, reject) => {
+        rejectFirstCheck = reject;
+      }),
+    );
+    checkForUpdateMenuClick(win as never);
+    await Promise.resolve();
+    autoUpdaterMock.emit("update-not-available", { version: "0.1.24" });
+    await Promise.resolve();
+    checkForUpdateMenuClick(win as never);
+    await Promise.resolve();
+    win.webContents.send.mockClear();
+
+    rejectFirstCheck?.(new Error("stale manual failure"));
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(getAutoUpdaterState()).toEqual({ kind: "checking", enabled: false });
+    expect(win.webContents.send).not.toHaveBeenCalledWith(
+      PlatformChannels.UpdateCheckResult,
+      expect.objectContaining({ kind: "error" }),
+    );
+    autoUpdaterMock.emit("update-not-available", { version: "0.1.24" });
+    expect(win.webContents.send).toHaveBeenLastCalledWith(PlatformChannels.UpdateCheckResult, {
+      kind: "up-to-date",
+      currentVersion: "0.1.24",
+    });
   });
 
   it("Linux arm64 主更新检查默认使用 Community GitHub provider", async () => {

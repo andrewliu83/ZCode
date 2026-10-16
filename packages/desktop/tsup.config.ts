@@ -158,6 +158,9 @@ function createMainDefines() {
 
 const desktopNodeRuntimeExternals = [
   "electron",
+  // 更新器的 CommonJS 依赖含 require("events")，内联进 ESM 动态 chunk 会在初始化时崩溃。
+  "electron-updater",
+  "builder-util-runtime",
   "node-pty",
   "ssh2",
   "undici",

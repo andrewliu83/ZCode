@@ -61,10 +61,11 @@ const acknowledgedPostUpdateReleaseNotesVersions = new Set<string>();
 const cancelledDownloadTokens = new WeakSet<CancellationToken>();
 let pendingCancelledDownloadErrorCount = 0;
 let autoUpdaterSettingService: SettingServiceLike | undefined;
-// initAutoUpdater({ enabled: false }) 只清轮询并 return，electron-updater 实例保持未配置
-// （占位 feed、autoDownload 默认值）。任何漏改成按身份判断的入口若仍调用手动检查，
-// 都会对占位 feed 发真实请求。这里记住“本 flavor 已禁用”，让手动检查在模块内部 fail-closed。
-let autoUpdaterDisabledForProductFlavor = false;
+type AutoUpdaterInitializationState =
+  | { kind: "not-started" | "initializing" | "ready" | "disabled" | "dev-skipped" }
+  | { kind: "failed"; message: string };
+// 动态加载或构造失败时 fallback 仍未配置，且没有结果监听；必须由 Main 拦住检查，避免请求占位 feed 后永久 checking。
+let autoUpdaterInitializationState: AutoUpdaterInitializationState = { kind: "not-started" };
 
 type SettingServiceLike = Pick<ISettingService, "get" | "update">;
 
@@ -160,6 +161,19 @@ function isDevAutoUpdateEnabled(): boolean {
 
 function canUseAutoUpdaterInCurrentRuntime(): boolean {
   return app.isPackaged || isDevAutoUpdateEnabled();
+}
+
+function getAutoUpdaterInitializationError(): string | null {
+  switch (autoUpdaterInitializationState.kind) {
+    case "ready":
+      return null;
+    case "initializing":
+      return "Auto updater is initializing. Try again shortly.";
+    case "failed":
+      return `Auto updater initialization failed: ${autoUpdaterInitializationState.message}`;
+    default:
+      return "Auto updater is not initialized.";
+  }
 }
 
 function shouldRelaunchForDevAutoUpdateInstall(): boolean {
@@ -1423,6 +1437,10 @@ export function refreshAutoUpdaterReleaseChannel(
 ) {
   const nextChannel: ElectronReleaseChannel = receivePreviewUpdates ? "preview" : "stable";
 
+  if (autoUpdaterInitializationState.kind !== "ready") {
+    logger.info(`[auto-update] skip ${reason}: updater ${autoUpdaterInitializationState.kind}`);
+    return;
+  }
   if (!canUseAutoUpdaterInCurrentRuntime()) {
     logger.info(`[auto-update] skip ${reason}: not packaged`);
     return;
@@ -1529,7 +1547,7 @@ export async function acknowledgePostUpdateReleaseNotes(
 
 export async function initAutoUpdater(options: InitAutoUpdaterOptions = {}): Promise<void> {
   if (options.enabled === false) {
-    autoUpdaterDisabledForProductFlavor = true;
+    autoUpdaterInitializationState = { kind: "disabled" };
     if (autoUpdatePollTimer) {
       clearInterval(autoUpdatePollTimer);
       autoUpdatePollTimer = null;
@@ -1537,11 +1555,38 @@ export async function initAutoUpdater(options: InitAutoUpdaterOptions = {}): Pro
     logger.info("[auto-update] disabled for this desktop product flavor");
     return;
   }
-  autoUpdaterDisabledForProductFlavor = false;
-  if (!canUseAutoUpdaterInCurrentRuntime()) return;
+  if (!canUseAutoUpdaterInCurrentRuntime()) {
+    autoUpdaterInitializationState = { kind: "dev-skipped" };
+    return;
+  }
 
-  const selectedUpdater = resolveCommunityUpdater(autoUpdater);
-  autoUpdater = selectedUpdater instanceof Promise ? await selectedUpdater : selectedUpdater;
+  // 部分监听注册后也可能失败；保留首次结果，避免重入叠加监听或覆盖原始失败原因。
+  if (
+    autoUpdaterInitializationState.kind === "initializing" ||
+    autoUpdaterInitializationState.kind === "ready" ||
+    autoUpdaterInitializationState.kind === "failed"
+  ) {
+    return;
+  }
+  autoUpdaterInitializationState = { kind: "initializing" };
+  try {
+    const selectedUpdater = resolveCommunityUpdater(autoUpdater);
+    autoUpdater = selectedUpdater instanceof Promise ? await selectedUpdater : selectedUpdater;
+    configureAutoUpdater(options);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    autoUpdaterInitializationState = { kind: "failed", message };
+    // logger 会 JSON.stringify(Error) 而丢失 message/stack；加载失败必须留下可定位的字符串。
+    logger.error(
+      `[auto-update] initialization failed: ${message}`,
+      error instanceof Error ? (error.stack ?? message) : message,
+    );
+    setAutoUpdaterMenuState({ kind: "idle", enabled: true });
+    ensureAutoUpdatePollInterval();
+  }
+}
+
+function configureAutoUpdater(options: InitAutoUpdaterOptions): void {
   onBeforeQuitAndInstall = options.onBeforeQuitAndInstall;
   if (options.locale) {
     menuLocale = options.locale;
@@ -1577,6 +1622,9 @@ export async function initAutoUpdater(options: InitAutoUpdaterOptions = {}): Pro
   applyManifestUpdateProvider(options);
 
   const triggerCheckForUpdates = (reason: string) => {
+    if (autoUpdaterInitializationState.kind !== "ready") {
+      return;
+    }
     if (checkForUpdatesInFlight) {
       logger.info(`[auto-update] skip ${reason}: check already in flight`);
       return;
@@ -1846,8 +1894,6 @@ export async function initAutoUpdater(options: InitAutoUpdaterOptions = {}): Pro
     await skipAvailableUpdateVersion(validatedVersion, options.settingService);
   });
 
-  triggerCheckForUpdates("startup");
-  ensureAutoUpdatePollInterval();
   app.on("before-quit", (event) => {
     if (process.platform === "win32" || quitAndInstallInFlight || !isReadyUpdateCurrentTarget()) {
       return;
@@ -1855,10 +1901,13 @@ export async function initAutoUpdater(options: InitAutoUpdaterOptions = {}): Pro
     event.preventDefault();
     void quitAndInstallUpdate();
   });
+  autoUpdaterInitializationState = { kind: "ready" };
+  triggerCheckForUpdates("startup");
+  ensureAutoUpdatePollInterval();
 }
 
 function ensureAutoUpdatePollInterval() {
-  if (menuState.kind === "download-progress") {
+  if (autoUpdaterInitializationState.kind !== "ready" || menuState.kind === "download-progress") {
     if (autoUpdatePollTimer) {
       clearInterval(autoUpdatePollTimer);
       autoUpdatePollTimer = null;
@@ -1896,10 +1945,21 @@ export function requestForceAutoUpdate(
   logger.info(`[force-update] 自动升级开始 reason=${reason}`);
   onStateChange({ kind: "checking" });
 
-  if (!canUseAutoUpdaterInCurrentRuntime()) {
-    const message = "not packaged";
+  if (!canUseAutoUpdaterInCurrentRuntime() || autoUpdaterInitializationState.kind === "disabled") {
+    const message =
+      autoUpdaterInitializationState.kind === "disabled"
+        ? "updater disabled for this product flavor"
+        : "not packaged";
     logger.info(`[force-update] 自动升级跳过：${message}`);
     onStateChange({ kind: "dev-skipped", message });
+    return dispose;
+  }
+
+  const initializationError = getAutoUpdaterInitializationError();
+  if (initializationError) {
+    logger.warn(`[force-update] skip ${reason}: ${initializationError}`);
+    onStateChange({ kind: "error", message: initializationError });
+    dispose();
     return dispose;
   }
 
@@ -1956,8 +2016,14 @@ export function requestForceAutoUpdate(
 export function requestAutoUpdateCheckWithoutWindow(reason = "force-update") {
   logger.info(`[auto-update] ${reason}: user requested update check without renderer window`);
 
-  if (!canUseAutoUpdaterInCurrentRuntime()) {
-    logger.info(`[auto-update] skip ${reason}: not packaged`);
+  if (!canUseAutoUpdaterInCurrentRuntime() || autoUpdaterInitializationState.kind === "disabled") {
+    logger.info(`[auto-update] skip ${reason}: updater disabled or not packaged`);
+    return;
+  }
+
+  const initializationError = getAutoUpdaterInitializationError();
+  if (initializationError) {
+    logger.warn(`[auto-update] skip ${reason}: ${initializationError}`);
     return;
   }
 
@@ -2018,11 +2084,21 @@ export function checkForUpdateMenuClick(originWindow?: BrowserWindow | null) {
     return;
   }
 
-  if (autoUpdaterDisabledForProductFlavor) {
+  if (autoUpdaterInitializationState.kind === "disabled") {
     // 入口本应已按产品身份隐藏；这里是最后一道闸，不让未初始化的 updater 实例向占位 feed 发请求。
     logger.info("[auto-update] skip manual check: updater disabled for this product flavor");
     targetWindow.webContents.send(PlatformChannels.UpdateCheckResult, {
       kind: "dev-skipped",
+    } satisfies UpdateCheckResultPayload);
+    return;
+  }
+
+  const initializationError = getAutoUpdaterInitializationError();
+  if (initializationError) {
+    logger.warn(`[auto-update] skip manual check: ${initializationError}`);
+    targetWindow.webContents.send(PlatformChannels.UpdateCheckResult, {
+      kind: "error",
+      message: initializationError,
     } satisfies UpdateCheckResultPayload);
     return;
   }
@@ -2062,11 +2138,12 @@ export function checkForUpdateMenuClick(originWindow?: BrowserWindow | null) {
     await autoUpdater.checkForUpdates();
   })()
     .catch((err) => {
-      logger.error("[auto-update] manual check failed:", err);
-      sendManualCheckResult({
-        kind: "error",
-        message: err instanceof Error ? err.message : String(err),
-      });
+      // 结果事件可能已经结束旧 generation；迟到的 reject 不能覆盖下一次手动检查。
+      if (activeAutoUpdateCheckId !== checkId) {
+        return;
+      }
+      // checkForUpdates 可能只 reject 而不发 error，仍需恢复菜单并保留可见目标供重试。
+      handleAutoUpdateFailure(err, "manual check failed");
     })
     .finally(() => {
       finishAutoUpdateCheck("manual check", checkId);

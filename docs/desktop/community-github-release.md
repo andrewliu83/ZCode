@@ -15,6 +15,7 @@ title: ZCode Community 独立发行与 GitHub 自动更新
 - 保留 Main 的更新状态机、单检查代次、取消、跳过版本、通道切换和退出屏障。更新偏好仍默认不自动下载。stable 只选正式 Release；接收 preview 时允许本仓库预发布，不允许版本降级。
 - 更新请求不发送账号／设备 ID，也过滤 electron-updater 自动生成的 `X-User-Staging-ID` 灰度标识。
 - 只有显式开发测试可覆盖更新 manifest；正常包固定 GitHub Provider。包内 publish 和 Main 运行时必须一致，不保留上游服务端更新入口。
+- Main 在更新器加载、构造、配置和结果监听完成后才准入检查。初始化失败保留可读原因并通过既有错误结果反馈；初始化期间的请求明确返回未就绪，不能调用未配置的 fallback。单进程初始化只执行一次，失败原因保留至进程退出，重复调用不叠加监听。手动检查直接 reject 时同样恢复可操作状态，不能依赖额外的 `error` 事件结束 checking。
 
 # 构建与发布
 
@@ -30,6 +31,7 @@ title: ZCode Community 独立发行与 GitHub 自动更新
 10. Gen UI 清单覆盖的固定运行资源、vendor 与许可按仓库原始字节 checkout，Windows 的 `core.autocrlf` 不得改写；构建继续使用原始 SHA256 校验，不在校验前归一化内容或重写摘要。
 11. 安装包名称使用已解析的目标架构 `x64` / `arm64`，不使用宿主架构，也不由 electron-builder 的格式宏改为 `x86_64` / `amd64`。builder、更新清单、单平台验证与汇总使用同一规范名称；DEB/RPM 包内部的架构元数据仍由各格式的原生打包器负责。
 12. Windows NSIS 阶段补丁由 `artifactBuildStarted` 在 `nsis` / `nsis-web` 编译前应用，覆盖普通构建和独立 `--prepackaged` 进程；不得依赖只在应用目录打包时运行的 `beforePack`。同进程重复事件幂等，进程退出恢复上游模板原字节，安装器与卸载器均保留 warnings-as-errors。
+13. macOS ad hoc 更新器的 `electron-updater`、`builder-util-runtime` 保持外置运行时依赖，不把其 CommonJS 实现内联到 ESM 动态 chunk。回归必须实际构建生产 ESM 并在真实 Electron 中加载、构造和检查本地更新源；仅替换 AppUpdater 的单测不足以证明可用。
 
 # macOS 安装边界
 
@@ -61,24 +63,26 @@ sequenceDiagram
 
 # 验收
 
-| ID    | 场景          | 断言                                                                                        | 证据                                |
-| ----- | ------------- | ------------------------------------------------------------------------------------------- | ----------------------------------- |
-| CR-01 | 版本与身份    | 0.1.0、community tag、独立 appId/name/cache；上游 tag 不能触发发行                          | unit / workflow validation          |
-| CR-02 | GitHub 更新源 | 账号 endpoint 不影响 repo；stable/preview/关闭检查符合设置，未发布时报告无可用发行          | unit / provider integration         |
-| CR-03 | 无证书发包    | 真实 arm64 app 严格签名通过；DMG/ZIP/YAML 指向签名后产物                                    | local build / digest validation     |
-| CR-04 | 下载安全      | 损坏校验、错误版本/身份/架构、越界 ZIP 均拒绝且原 app 保留                                  | unit / installer integration        |
-| CR-05 | 自动更新安装  | 测试 app 从 0.1.0 更新为 0.1.1；等待退出、重启；交换失败回滚                                | filesystem/process integration      |
-| CR-06 | 更新 UI       | 检查、下载进度、ready、取消和重启仍沿用 Main 状态机                                         | existing regressions / desktop E2E  |
-| CR-07 | Apple 配置    | 无凭据走 ad hoc，部分凭据失败，完整凭据走 Developer ID+公证；不在日志输出凭据               | unit / CI when secrets configured   |
-| CR-08 | 隐私及隔离    | 无旧上报依赖，无上游强更，无凭据随包，原安装与业务会话不被删除                              | scan / unit                         |
-| CR-09 | Windows 发布  | 原生 x64 runner 构建 NSIS、latest.yml；身份和更新缓存独立，manifest 摘要与 EXE 一致         | native CI / release script tests    |
-| CR-10 | Linux 发布    | 原生 x64 runner 构建 AppImage/DEB/RPM、latest-linux.yml；三种包可从同一更新目录选到匹配格式 | native CI / provider integration    |
-| CR-11 | 多平台汇总    | 缺平台、版本/commit 不一致、摘要损坏或同名资产均阻止发布；合法三平台产物可合并              | artifact integration                |
-| CR-12 | 跨平台命令    | 原生 host/arch 不匹配先失败；Windows pnpm shim 与目录边界合法；macOS 签名顺序保持           | plan / command / existing Mac tests |
-| CR-13 | 固定资源字节  | core.autocrlf=true checkout 后运行资源与许可仍匹配原始 SHA256                               | temporary Git checkout / asset copy |
-| CR-14 | 下载源隔离    | 继承镜像变量不覆盖 DMG 工具下载源；两次封装共用隔离环境，runtime 保持官方地址               | release plan / real URL resolver    |
-| CR-15 | 规范产物名    | 真实 builder 按三种 Linux 格式展开后仍使用目标 x64/arm64，与严格校验一致                    | builder macro / artifact validation |
-| CR-16 | NSIS 最终封装 | 跳过 beforePack 后仍在 target 编译前应用阶段补丁；双侧 -WX 编译通过，退出恢复模板原字节     | artifact hook / real NSIS compiler  |
+| ID    | 场景          | 断言                                                                                            | 证据                                |
+| ----- | ------------- | ----------------------------------------------------------------------------------------------- | ----------------------------------- |
+| CR-01 | 版本与身份    | 0.1.0、community tag、独立 appId/name/cache；上游 tag 不能触发发行                              | unit / workflow validation          |
+| CR-02 | GitHub 更新源 | 账号 endpoint 不影响 repo；stable/preview/关闭检查符合设置，未发布时报告无可用发行              | unit / provider integration         |
+| CR-03 | 无证书发包    | 真实 arm64 app 严格签名通过；DMG/ZIP/YAML 指向签名后产物                                        | local build / digest validation     |
+| CR-04 | 下载安全      | 损坏校验、错误版本/身份/架构、越界 ZIP 均拒绝且原 app 保留                                      | unit / installer integration        |
+| CR-05 | 自动更新安装  | 测试 app 从 0.1.0 更新为 0.1.1；等待退出、重启；交换失败回滚                                    | filesystem/process integration      |
+| CR-06 | 更新 UI       | 检查、下载进度、ready、取消和重启仍沿用 Main 状态机                                             | existing regressions / desktop E2E  |
+| CR-07 | Apple 配置    | 无凭据走 ad hoc，部分凭据失败，完整凭据走 Developer ID+公证；不在日志输出凭据                   | unit / CI when secrets configured   |
+| CR-08 | 隐私及隔离    | 无旧上报依赖，无上游强更，无凭据随包，原安装与业务会话不被删除                                  | scan / unit                         |
+| CR-09 | Windows 发布  | 原生 x64 runner 构建 NSIS、latest.yml；身份和更新缓存独立，manifest 摘要与 EXE 一致             | native CI / release script tests    |
+| CR-10 | Linux 发布    | 原生 x64 runner 构建 AppImage/DEB/RPM、latest-linux.yml；三种包可从同一更新目录选到匹配格式     | native CI / provider integration    |
+| CR-11 | 多平台汇总    | 缺平台、版本/commit 不一致、摘要损坏或同名资产均阻止发布；合法三平台产物可合并                  | artifact integration                |
+| CR-12 | 跨平台命令    | 原生 host/arch 不匹配先失败；Windows pnpm shim 与目录边界合法；macOS 签名顺序保持               | plan / command / existing Mac tests |
+| CR-13 | 固定资源字节  | core.autocrlf=true checkout 后运行资源与许可仍匹配原始 SHA256                                   | temporary Git checkout / asset copy |
+| CR-14 | 下载源隔离    | 继承镜像变量不覆盖 DMG 工具下载源；两次封装共用隔离环境，runtime 保持官方地址                   | release plan / real URL resolver    |
+| CR-15 | 规范产物名    | 真实 builder 按三种 Linux 格式展开后仍使用目标 x64/arm64，与严格校验一致                        | builder macro / artifact validation |
+| CR-16 | NSIS 最终封装 | 跳过 beforePack 后仍在 target 编译前应用阶段补丁；双侧 -WX 编译通过，退出恢复模板原字节         | artifact hook / real NSIS compiler  |
+| CR-17 | 更新器加载    | 生产 ESM 的 ad hoc 动态入口在真实 Electron 中可加载、构造并完成同版本、新版本和错误清单检查     | production build / Electron fixture |
+| CR-18 | 检查失败收敛  | 初始化前、初始化中、初始化失败及直接 reject 不遗留 checking；不触碰未配置 fallback 或覆盖新代次 | unit / desktop menu E2E             |
 
 # 影响说明（Impact Brief）
 
@@ -119,6 +123,14 @@ sequenceDiagram
 - `--prepackaged` 跳过原 `beforePack` 补丁入口；补丁已移至真实 NSIS target 编译前的 `artifactBuildStarted`，保留 `-WX`、同进程幂等与退出恢复，不改安装、卸载及所有权清理行为。
 - 真实 NSIS 编译回归先复现同一条 6010，再验证 `nsis` / `nsis-web` hook、安装器/卸载器严格编译、上游模板隔离与恢复。发布脚本 17 项及桌面相关 19 项通过；2 项仅 Windows 可执行的安装行为测试在 macOS 跳过。根 typecheck、lint（65 个既有警告、0 错误）、架构、格式与 diff 空白检查通过。
 - macOS arm64 用隔离的小型 PE 载荷调用真实 electron-builder `prepackaged` 流程，安装器/卸载器均编译成功并生成 EXE、blockmap 与更新清单；进程退出后上游模板 SHA256 与运行前完全相同。该验证不是完整产品发行包，也未执行 Windows 安装器。本轮未重新推送、移动标签或触发发布。
+
+## macOS 更新检查挂起修复验证（2026-10-16）
+
+- 0.1.2 实际安装包的 ad hoc 更新器动态 chunk 在 Electron 中报 `Dynamic require of "events" is not supported`；初始化未注册结果监听，手动检查因而无法收口。`electron-updater`、`builder-util-runtime` 已显式外置。
+- 回归先复现缺失外置配置和真实 ESM 动态加载失败；修复后 8 个文件共 146 项更新相关测试通过。真实 Electron 41.0.3 加载生产压缩 ESM、构造实际更新器，使用隔离数据目录和本地 HTTP 源完成同版本、新版本及错误清单检查，不下载或安装真实 app。
+- Main 的初始化状态阻止未配置 fallback 被调用；加载、构造或配置失败有可读日志和错误回执。初始化只执行一次；手动检查直接 reject 复用失败收敛，旧代次失败不覆盖新检查，已有可见目标仍可重试。
+- 真实桌面生产构建成功。帮助菜单 E2E 的更新状态/禁用/重开（HM-02）与真实检查命令回执（HM-03）通过；HM-01、HM-04 因已移除的“问题上报／功能建议”旧菜单预期失败，未将整个套件记为通过。此 E2E 是未打包开发壳，实际 ad hoc 加载由上面的真实 Electron 构建回归覆盖。
+- Node 24.14.0、pnpm 10.33.2 下根 `pnpm typecheck`、`pnpm lint`（65 个既有警告、0 错误）、架构检查（0 违规）、格式和 diff 空白检查通过。独立代码复核无可操作问题。本次不改版本、不提交推送、不替换本机 app、不发布新安装包。
 
 # 使用方式
 
