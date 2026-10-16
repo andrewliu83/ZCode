@@ -92,7 +92,9 @@ export const E2E_DESKTOP_BUILD_ENV_NAMES = [
   "ZCODE_ENV",
   "ZCODE_E2E_COVERAGE",
   "ZCODE_E2E_KEEP_BUILD_CACHE",
-
+  // 签名和安装模式决定原生更新器或 ad hoc 助手，不能跨模式复用旧 bundle。
+  "ZCODE_ENABLE_MAC_SIGN",
+  "ZCODE_MAC_UPDATE_MODE",
   "ZCODE_PRODUCTION_BASE_URL",
   "ZCODE_TEST_BASE_URL",
 ];

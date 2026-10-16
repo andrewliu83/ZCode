@@ -96,7 +96,7 @@ sequenceDiagram
 - `pnpm typecheck`、`pnpm lint`、`pnpm architecture:check --changed` 通过；Lint 为 65 个警告、0 个错误；工作流 `actionlint` 通过。额外独立 Main TypeScript 检查仍报图标、浏览器等未修改文件的类型错误，没有将该检查记为通过。
 - `pnpm release:desktop` 实际产出 Community 0.1.0 arm64 app、DMG、ZIP、更新清单、blockmap 和 SHA512 文件；最终应用严格签名、内置更新配置与 ZIP/DMG 摘要校验通过。
 - 扩展后的发布入口已在本机重建 macOS 0.1.0，并用随包 Electron Node 启动 Agent（0.16.9）验证通过；产品版本与独立 Agent CLI 版本不要求相同。Windows/Linux 原生构建与安装尚未实际执行，需要首次 Actions 运行验证，不能将本地计划/清单测试算作对应平台编译通过。
-- 尚未推送工作流或在线执行 GitHub Actions；未公开发布 Release。Developer ID／Apple 公证路径需要 Secrets，当前没有凭据，未计为实际执行通过。旧 Preview 3.x 需要手动安装第一份 Community 包。
+- 本地验证不代表 GitHub 原生构建或公开发版已完成；在线执行结果以 Actions 和 Releases 为准。Developer ID／Apple 公证路径需要 Secrets，当前没有凭据，未计为实际执行通过。旧 Preview 3.x 需要手动安装第一份 Community 包。
 
 # 使用方式
 
