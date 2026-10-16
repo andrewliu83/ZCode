@@ -22,7 +22,10 @@ import {
   resolveDesktopProductIdentity,
 } from "./scripts/desktop-product-identity.mjs";
 import { createWindowsPowerShellSecurityArgs } from "./scripts/powershell-command.mjs";
-import { isSharpRequiredByComputerUse, verifyStagedSharp } from "./scripts/sharp-package-assets.mjs";
+import {
+  isSharpRequiredByComputerUse,
+  verifyStagedSharp,
+} from "./scripts/sharp-package-assets.mjs";
 import { isRealComputerUseProducerInstalled } from "./scripts/computer-use-producer.mjs";
 import { verifyStagedKoffi } from "./scripts/koffi-package-assets.mjs";
 import {
@@ -39,6 +42,11 @@ import {
   patchNsisInstallSectionFile,
   restoreNsisInstallSectionFileSync,
 } from "./scripts/patch-nsis-install-section.mjs";
+
+import {
+  COMMUNITY_DISTRIBUTION,
+  communityPublishOptions,
+} from "../../scripts/community-distribution.mjs";
 
 const buildMetadata = getBuildMetadata();
 const targetPlatform = getTargetPlatform();
@@ -227,7 +235,7 @@ const PACKAGING_PRUNE_PATTERNS = [
 
 function buildDesktopArtifactName(platformName, extension = "${ext}") {
   // 测试环境产物必须和正式安装包文件名区分，避免上传、下载或人工验收时混用。
-  return `\${productName}-\${version}-${platformName}-\${arch}${desktopArtifactEnvSuffix}.${extension}`;
+  return `${desktopProductIdentity.linuxExecutableName}-\${version}-${platformName}-\${arch}${desktopArtifactEnvSuffix}.${extension}`;
 }
 
 function runAsarCommand(args) {
@@ -542,9 +550,10 @@ export default {
   // Linux deb 打包（fpm）会校验 package metadata 中的 homepage、author.email、maintainer。
   // CI 环境下若这些字段缺失会在产物阶段直接失败。这里统一在构建配置补齐，避免依赖外部注入。
   extraMetadata: {
+    name: COMMUNITY_DISTRIBUTION.executableName,
     version: buildMetadata.appVersion,
     zcodeProductFlavor: desktopProductIdentity.flavor,
-    homepage: "https://zcode.z.ai",
+    homepage: "https://github.com/andrewliu83/ZCode",
     author: {
       name: "ZCode",
       email: "dev@zcode.z.ai",
@@ -910,14 +919,5 @@ export default {
     installerHeaderIcon: "build/icon_installer.ico",
   },
   detectUpdateChannel: false,
-  publish: {
-    provider: "generic",
-    // 当前 OSS/CDN 对多 Range 请求返回 206，但 Content-Type 仍是 application/x-msdownload，
-    // electron-updater 会因缺少 multipart/byteranges 直接回退整包下载。关闭 multiple range 后仍走差分，
-    // 只是按单 Range 顺序拉取差异块，避免 Windows 用户更新时从约 15MB 退化成 300MB+ 全量包。
-    useMultipleRangeRequest: false,
-    // 新客户端运行时使用服务端 manifest provider；这里仅保留 electron-builder 必需的
-    // generic publish 占位，避免打包产物继续携带可配置的旧 stable feed。
-    url: "http://localhost:8081",
-  },
+  publish: communityPublishOptions(),
 };

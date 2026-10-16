@@ -289,7 +289,7 @@ describe("autoUpdater ready state sync", () => {
     );
   });
 
-  it("Linux arm64 主更新检查默认使用服务端 manifest provider", async () => {
+  it("Linux arm64 主更新检查默认使用 Community GitHub provider", async () => {
     mockProcessPlatform("linux");
     process.env["TEST_UPDATER_ARCH"] = "arm64";
 
@@ -299,7 +299,7 @@ describe("autoUpdater ready state sync", () => {
     expect(autoUpdaterMock.setFeedURL).toHaveBeenCalledWith(
       expect.objectContaining({
         provider: "custom",
-        releasePlatform: "linux-aarch64",
+        updateProvider: expect.any(Function),
       }),
     );
     expect(autoUpdaterMock.checkForUpdates).toHaveBeenCalledTimes(1);
@@ -336,7 +336,7 @@ describe("autoUpdater ready state sync", () => {
     expect(loggerInfoMock).toHaveBeenCalledWith("[auto-update] dev update enabled version=3.3.1");
   });
 
-  it("服务端 manifest provider 会按设置选择 stable 或 preview 通道", async () => {
+  it("GitHub provider 按设置选择 stable 或 preview，不携带上游 endpoint 和设备身份", async () => {
     settingServiceMock.get.mockResolvedValue({
       recentProjects: [],
       locale: "en-US",
@@ -355,10 +355,8 @@ describe("autoUpdater ready state sync", () => {
       resolveEndpointOrigin?: () => string | Promise<string>;
       resolveReleaseChannel?: () => Promise<string>;
     };
-    expect(options.deviceMid).toBe("mid-1");
-    await expect(Promise.resolve(options.resolveEndpointOrigin?.())).resolves.toBe(
-      "https://endpoint.example.test",
-    );
+    expect(options.deviceMid).toBeUndefined();
+    expect(options.resolveEndpointOrigin).toBeUndefined();
     await expect(options.resolveReleaseChannel?.()).resolves.toBe("preview");
   });
 
@@ -748,7 +746,8 @@ describe("autoUpdater ready state sync", () => {
     });
   });
 
-  it("启动时可覆盖服务端 manifest 接口 URL", async () => {
+  it("仅显式开发测试可覆盖 manifest URL", async () => {
+    process.env["ZCODE_AUTO_UPDATE_DEV"] = "1";
     mockProcessPlatform("darwin");
     process.env["TEST_UPDATER_ARCH"] = "arm64";
     const { initAutoUpdater } = await import("../src/main/autoUpdater.js");
@@ -762,15 +761,15 @@ describe("autoUpdater ready state sync", () => {
     expect(autoUpdaterMock.setFeedURL).toHaveBeenCalledWith(
       expect.objectContaining({
         provider: "custom",
-        manifestUrl:
-          "https://zcode.z.ai/api/v1/releases/electron/manifest?platform=old&channel=1",
+        manifestUrl: "https://zcode.z.ai/api/v1/releases/electron/manifest?platform=old&channel=1",
         releasePlatform: "darwin-aarch64",
       }),
     );
     expect(autoUpdaterMock.checkForUpdates).toHaveBeenCalledTimes(1);
   });
 
-  it("manifest URL 覆盖不会切换到 generic feed", async () => {
+  it("开发态 manifest URL 覆盖不会切换到 generic feed", async () => {
+    process.env["ZCODE_AUTO_UPDATE_DEV"] = "1";
     mockProcessPlatform("darwin");
     process.env["TEST_UPDATER_ARCH"] = "arm64";
     const { initAutoUpdater } = await import("../src/main/autoUpdater.js");
@@ -1849,6 +1848,25 @@ describe("autoUpdater ready state sync", () => {
       "[auto-update] prepare quit and install failed:",
       prepareError,
     );
+  });
+
+  it("异步安装助手启动失败会返回错误并保留应用，不丢弃 Promise", async () => {
+    mockProcessPlatform("darwin");
+    const failure = new Error("installer could not start");
+    autoUpdaterMock.quitAndInstall.mockRejectedValueOnce(failure);
+    const { initAutoUpdater } = await import("../src/main/autoUpdater.js");
+    await initAutoUpdater();
+    const handler = ipcMainHandle.mock.calls.find(
+      ([channel]: [string, unknown]) => channel === PlatformChannels.QuitAndInstallUpdate,
+    )?.[1] as () => Promise<void>;
+    autoUpdaterMock.emit("update-downloaded", { version: "0.1.25" });
+    await Promise.resolve();
+    await expect(handler()).rejects.toBe(failure);
+    expect(loggerErrorMock).toHaveBeenCalledWith(
+      "[auto-update] start update installation failed:",
+      failure,
+    );
+    expect(appMock.exit).not.toHaveBeenCalled();
   });
 
   it("没有已下载更新时安装请求不会执行退出准备", async () => {

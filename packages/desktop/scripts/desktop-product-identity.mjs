@@ -3,23 +3,25 @@
  * 典型用法是 `ZCODE_ENV=production ZCODE_PREVIEW_IDENTITY=1`，得到一个连接生产后端、
  * 可与正式版并排安装的 `ZCode Preview`。
  */
+import { COMMUNITY_DISTRIBUTION } from "../../../scripts/community-distribution.mjs";
+
 export const ZCODE_PREVIEW_IDENTITY_ENV = "ZCODE_PREVIEW_IDENTITY";
 
 const PRODUCTION_IDENTITY = Object.freeze({
   flavor: "production",
-  appId: "dev.zcode.app",
-  productName: "ZCode",
-  linuxExecutableName: "zcode",
-  linuxPackageName: "zcode",
+  appId: COMMUNITY_DISTRIBUTION.appId,
+  productName: COMMUNITY_DISTRIBUTION.name,
+  linuxExecutableName: COMMUNITY_DISTRIBUTION.executableName,
+  linuxPackageName: COMMUNITY_DISTRIBUTION.executableName,
   cuaHelperInstallVariant: null,
 });
 
 const PREVIEW_IDENTITY = Object.freeze({
   flavor: "preview",
-  appId: "dev.zcode.app.preview",
-  productName: "ZCode Preview",
-  linuxExecutableName: "zcode-preview",
-  linuxPackageName: "zcode-preview",
+  appId: `${COMMUNITY_DISTRIBUTION.appId}.preview`,
+  productName: `${COMMUNITY_DISTRIBUTION.name} Preview`,
+  linuxExecutableName: `${COMMUNITY_DISTRIBUTION.executableName}-preview`,
+  linuxPackageName: `${COMMUNITY_DISTRIBUTION.executableName}-preview`,
   cuaHelperInstallVariant: "preview",
 });
 

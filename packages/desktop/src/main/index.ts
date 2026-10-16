@@ -126,7 +126,6 @@ import { applyAppIcon } from "./desktopWindowChrome.js";
 import { resolveWindowsAppUserModelIdForFlavor } from "../../scripts/desktop-product-identity.mjs";
 import type { DesktopWindowSize } from "./desktopWindowSize.js";
 import { maybeWarnArchitectureMismatch } from "./desktopArchitectureGuard.js";
-import { maybeBlockStartupForForceUpdate } from "./forceUpdateGuard.js";
 import { createDesktopTray, updateWindowsDesktopTrayMenu } from "./desktopTray.js";
 import {
   createCloseToTrayCapabilityMonitor,
@@ -2321,32 +2320,7 @@ app.whenReady().then(async () => {
 
   registerDesktopNetworkDiagnostics(logger);
 
-  // 本地未打包 dev 构建（app.isPackaged === false）必须跳过远端强制升级 gate。
-  // 原因：force-update gate 只看 ZCODE_ENV === "production"，但 dev 构建（如 dev:desktop:cua
-  // 连真实后端测 computer use）虽指向 production 后端，版本号却滞后于线上 release（feature
-  // 分支不 bump 版本），会被 release minimalVersion 误判为"需强制升级"而启动秒退。force-update
-  // 是面向打包发布客户端的安全门，对未打包 dev 运行时无意义。打包版 app.isPackaged === true，
-  // gate 照常生效，对真实用户零影响。
-  const skipForceUpdateForLocalDevRuntime = !app.isPackaged;
-  const forceUpdateGuardResult =
-    ZCODE_PRODUCT_FLAVOR === "production" && !skipForceUpdateForLocalDevRuntime
-      ? await maybeBlockStartupForForceUpdate({
-          locale: currentApplicationLocale,
-          logger,
-          endpointOrigin: await resolveCurrentZCodeEndpointOrigin(),
-          onBlocked: () => {
-            forceUpdateMainWindowCreationBlocked = true;
-          },
-        })
-      : { blocked: false };
-  if (ZCODE_PRODUCT_FLAVOR !== "production") {
-    logger.info("[force-update] Preview 跳过远端强制升级检查");
-  } else if (skipForceUpdateForLocalDevRuntime) {
-    logger.info("[force-update] 本地 dev 构建（未打包）跳过远端强制升级检查");
-  }
-  if (forceUpdateGuardResult.blocked) {
-    return;
-  }
+  // Community 使用独立版本和 GitHub Release；上游最低版本不得阻断本分支启动。
 
   logger.info("[startup] 创建主窗口");
   await primaryWindowCoordinator.ensurePrimaryWindow("app-ready");

@@ -13,9 +13,9 @@ async function writeDefaults(name, content) {
   return path;
 }
 
-test("没有私有配置时自动更新默认关闭，已移除上报能力不再返回配置", async () => {
+test("没有私有配置时 Community 自动更新默认开启，已移除上报能力不再返回配置", async () => {
   assert.deepEqual(await resolveBuildTimeConfig({}, { defaultsPath: join(dir, "missing.json") }), {
-    autoUpdateEnabled: false,
+    autoUpdateEnabled: true,
   });
 });
 

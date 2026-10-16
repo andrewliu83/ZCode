@@ -1,6 +1,6 @@
 {
   "name": "zcode",
-  "version": "3.15.1",
+  "version": "0.1.0",
   "private": true,
   "license": "Apache-2.0",
   "type": "module",
@@ -69,6 +69,8 @@
     "bootstrap": "node scripts/bootstrap.mjs",
     "bootstrap:with-remote": "node scripts/bootstrap.mjs --with-remote",
     "release": "release-it",
+    "release:desktop": "node scripts/release-desktop.mjs",
+    "release:validate": "node scripts/validate-community-release.mjs",
     "release:cli": "pnpm --dir apps/zcode-cli run release",
     "release:cli:dry": "pnpm --dir apps/zcode-cli run release:dry",
     "architecture:check": "node scripts/architecture/architecture-check.mjs check",

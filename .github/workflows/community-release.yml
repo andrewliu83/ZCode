@@ -1,0 +1,163 @@
+name: Community Desktop Release
+
+on:
+  push:
+    tags:
+      - community-v*
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: community-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    name: Validate release and prepare platform matrix
+    runs-on: ubuntu-22.04
+    outputs:
+      node_version: ${{ steps.toolchain.outputs.node }}
+      matrix: ${{ steps.matrix.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read toolchain
+        id: toolchain
+        shell: bash
+        run: |
+          node --input-type=module <<'JS'
+          import { readFile, appendFile } from 'node:fs/promises';
+          const node = (await readFile('mise.toml', 'utf8')).match(/^node\s*=\s*"([^"]+)"/m)?.[1];
+          if (!node) throw new Error('mise.toml must pin Node');
+          await appendFile(process.env.GITHUB_OUTPUT, `node=${node}\n`);
+          JS
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ steps.toolchain.outputs.node }}
+      - name: Validate version and read supported platforms
+        id: matrix
+        shell: bash
+        run: |
+          node scripts/validate-community-release.mjs
+          node --input-type=module <<'JS'
+          import { appendFile } from 'node:fs/promises';
+          import { COMMUNITY_RELEASE_TARGETS } from './scripts/community-release-targets.mjs';
+          const matrix = { include: COMMUNITY_RELEASE_TARGETS.map(({ id, os, arch, runner }) => ({ id, os, arch, runner })) };
+          await appendFile(process.env.GITHUB_OUTPUT, `matrix=${JSON.stringify(matrix)}\n`);
+          JS
+
+  build:
+    name: Build ${{ matrix.id }}
+    needs: prepare
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+    defaults:
+      run:
+        shell: bash
+    env:
+      RAYON_NUM_THREADS: 2
+      NODE_OPTIONS: --max-old-space-size=4096
+      npm_config_registry: https://registry.npmjs.org
+      ZCODE_TARGET_OS: ${{ matrix.os }}
+      ZCODE_TARGET_ARCH: ${{ matrix.arch }}
+      ZCODE_DESKTOP_DIST_DIR: dist/community/${{ matrix.id }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ needs.prepare.outputs.node_version }}
+          cache: pnpm
+      - name: Enable Windows long paths
+        if: runner.os == 'Windows'
+        run: git config --system core.longpaths true
+      - name: Prepare Linux package tools
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y rpm libfuse2 patchelf
+      - name: Check toolchain
+        run: pnpm ci:assert-node
+      - name: Install frozen dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Build macOS with optional Apple credentials
+        if: matrix.os == 'mac'
+        env:
+          MACOS_CERTIFICATE_P12_BASE64: ${{ secrets.MACOS_CERTIFICATE_P12_BASE64 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: pnpm release:desktop
+      - name: Build Windows or Linux
+        if: matrix.os != 'mac'
+        run: pnpm release:desktop
+      - uses: actions/upload-artifact@v4
+        with:
+          name: community-${{ matrix.id }}
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            packages/desktop/dist/community/${{ matrix.id }}/*.dmg
+            packages/desktop/dist/community/${{ matrix.id }}/*.zip
+            packages/desktop/dist/community/${{ matrix.id }}/*.exe
+            packages/desktop/dist/community/${{ matrix.id }}/*.AppImage
+            packages/desktop/dist/community/${{ matrix.id }}/*.deb
+            packages/desktop/dist/community/${{ matrix.id }}/*.rpm
+            packages/desktop/dist/community/${{ matrix.id }}/latest*.yml
+            packages/desktop/dist/community/${{ matrix.id }}/*.blockmap
+            packages/desktop/dist/community/${{ matrix.id }}/SHA512SUMS.txt
+            packages/desktop/dist/community/${{ matrix.id }}/release-build.json
+
+  publish:
+    name: Publish all verified Community platforms
+    if: github.event_name == 'push'
+    needs: [prepare, build]
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ needs.prepare.outputs.node_version }}
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: community-*
+          path: release-input
+          merge-multiple: false
+      - name: Verify and collect all platform assets
+        run: |
+          node scripts/validate-community-release.mjs
+          node scripts/collect-community-release.mjs
+      - name: Publish final assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          flags=()
+          version="${RELEASE_TAG#community-v}"
+          if [[ "$version" == *-* ]]; then flags+=(--prerelease); fi
+          # 全平台校验成功后才创建 draft；完整资产上传后公开，已发布版本不可覆盖。
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            if [[ "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" != true ]]; then
+              echo "Refusing to overwrite an already published version" >&2
+              exit 1
+            fi
+          else
+            gh release create "$RELEASE_TAG" --verify-tag --draft --title "ZCode Community ${RELEASE_TAG#community-v}" --notes-file release-assets/release-notes.md "${flags[@]}"
+          fi
+          gh release upload "$RELEASE_TAG" release-assets/* --clobber
+          if (( ${#flags[@]} )); then
+            gh release edit "$RELEASE_TAG" --draft=false --prerelease
+          else
+            gh release edit "$RELEASE_TAG" --draft=false --prerelease=false --latest
+          fi

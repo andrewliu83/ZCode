@@ -213,18 +213,17 @@ describe("desktopCommandHandlers without feedback upload", () => {
     ).toBe(join("/repo", "config", "default.json"));
   });
 
-  it("中文界面打开中文 changelog，其他语言打开英文 changelog", async () => {
+  it("版本历史打开 Community GitHub Releases", async () => {
     const { openChangelog } = await import("../src/main/desktopCommandHandlers.js");
     const { shell } = await import("electron");
 
-    await openChangelog("zh-CN");
-    await openChangelog("en-US");
-
-    expect(shell.openExternal).toHaveBeenNthCalledWith(1, "https://zcode.z.ai/cn/changelog");
-    expect(shell.openExternal).toHaveBeenNthCalledWith(2, "https://zcode.z.ai/en/changelog");
+    await openChangelog();
+    expect(shell.openExternal).toHaveBeenCalledWith(
+      "https://github.com/andrewliu83/ZCode/releases",
+    );
   });
 
-  it("changelog 按当前非生产 endpoint 打开", async () => {
+  it("版本历史不受账号 endpoint 影响", async () => {
     const { executeDesktopCommand } = await import("../src/main/desktopCommandHandlers.js");
     const { shell } = await import("electron");
     const commandOptions = createCommandOptions({
@@ -237,7 +236,9 @@ describe("desktopCommandHandlers without feedback upload", () => {
       currentApplicationLocale: "en-US",
     });
 
-    expect(shell.openExternal).toHaveBeenCalledWith("https://zcode.z.ai/en/changelog");
+    expect(shell.openExternal).toHaveBeenCalledWith(
+      "https://github.com/andrewliu83/ZCode/releases",
+    );
   });
 
   it("relaunch app 命令交给主进程重启回调", async () => {

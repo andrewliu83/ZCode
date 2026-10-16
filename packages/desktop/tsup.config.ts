@@ -130,6 +130,11 @@ function createSharedDefines() {
     __ZCODE_BUILD_TIME__: JSON.stringify(buildMetadata.buildTime),
     __ZCODE_ENV__: JSON.stringify(zcodeEnv),
     __ZCODE_PRODUCT_FLAVOR__: JSON.stringify(zcodeProductFlavor),
+    __ZCODE_MAC_UPDATE_MODE__: JSON.stringify(
+      process.env.ZCODE_MAC_UPDATE_MODE === "native" || process.env.ZCODE_ENABLE_MAC_SIGN === "1"
+        ? "native"
+        : "ad-hoc",
+    ),
     ...buildTimeConfigDefines,
     // Computer Use Helper build identity — helperInstaller 读它决定下载哪个 Helper bundle。
     // 缺失时 installer 抛 "Packaged ZCode is missing its embedded Computer Use Helper build identity"。

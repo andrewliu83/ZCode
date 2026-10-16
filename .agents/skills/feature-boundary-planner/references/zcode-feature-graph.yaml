@@ -711,9 +711,6 @@ nodes:
       - No ARMS, business-event, OTLP exporter, or feedback-upload service is registered.
       - Runtime identity isolates remote diagnostic samples; login device identity is independent from reporting.
 
-
-
-
   - id: "capability.resource-manager"
     kind: "capability"
     label: "Resource Manager window (CPU / memory by base services, built-in plugins, community plugins)"
@@ -789,9 +786,20 @@ nodes:
     docs:
       - "docs/product-capability-map-engineering-infrastructure.md"
       - "docs/desktop/zcode-preview-packaging.md"
+      - "docs/desktop/community-github-release.md"
     codeSeeds:
       - symbol: "runDesktopProductionBuild"
         file: "packages/desktop/scripts/run-production-build.mjs"
+      - symbol: "validateCommunityRelease"
+        file: "scripts/community-distribution.mjs"
+      - symbol: "resolveCommunityReleaseTarget"
+        file: "scripts/community-release-targets.mjs"
+      - symbol: "collectCommunityRelease"
+        file: "scripts/collect-community-release.mjs"
+      - symbol: "CommunityGitHubProvider"
+        file: "packages/desktop/src/main/communityGitHubProvider.ts"
+      - symbol: "prepareCommunityMacUpdate"
+        file: "packages/desktop/src/main/communityMacInstaller.ts"
 
   - id: "capability.development-storage-isolation"
     kind: "capability"
@@ -1418,7 +1426,6 @@ nodes:
       - "docs/ui/scheduled-tasks-main-view.md"
       - "docs/automation-edit-status.md"
       - "docs/testing/automation-workspace-selection-boundary.md"
-
 
   - id: "capability.off-peak-model-execution"
     kind: "capability"
@@ -2977,8 +2984,6 @@ nodes:
       - symbol: "AutomationEditView"
         file: "packages/ui/src/settings/AutomationEditView.tsx"
 
-
-
   - id: "state.subagent-form-draft"
     kind: "state-owner"
     label: "Subagent form draft"
@@ -3227,8 +3232,6 @@ nodes:
     codeSeeds:
       - symbol: "OAuthService"
         file: "packages/services/src/oauth/oauthService.ts"
-
-
 
   - id: "service.off-peak-task"
     kind: "service"
@@ -3683,7 +3686,6 @@ nodes:
         file: packages/services/src/deviceIdentity.ts
       - symbol: ensureCliDeviceMid
         file: apps/zcode-cli/packages/adapters/src/device/cli-device-mid.ts
-
 
   - id: "persistence.native-search-shared-deps"
     kind: "persistence"

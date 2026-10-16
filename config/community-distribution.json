@@ -1,0 +1,10 @@
+{
+  "name": "ZCode Community",
+  "appId": "io.github.andrewliu83.zcode",
+  "executableName": "zcode-community",
+  "tagPrefix": "community-v",
+  "github": {
+    "owner": "andrewliu83",
+    "repo": "ZCode"
+  }
+}

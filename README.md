@@ -1,21 +1,44 @@
-# ZCode
+# ZCode Community
+
+ZCode Community 是基于 [ZCode](https://github.com/zai-org/ZCode) 的社区发行版，提供桌面、Web 和终端 AI 编程工作台。当前 Community 版本为 **0.1.0**，使用独立应用 ID、安装包名称和 `community-v*` 标签，与上游 3.x 版本分开安装和更新。
 
 <div align="center">
   <img src="public/logo/icons/1024x1024.png" alt="ZCode" width="128" height="128" />
 </div>
 <p align="center">
-  <a href="https://applink.feishu.cn/client/chat/chatter/add_by_link?link_token=47ag983c-8fcb-4d6d-814b-5395193a712c&amp;qr_code=true">飞书社群</a> ·
-  <a href="https://discord.gg/z9aBcQXZQ3">Discord</a>
+  <a href="https://github.com/andrewliu83/ZCode/releases">下载安装包</a> ·
+  <a href="https://github.com/andrewliu83/ZCode/actions/workflows/community-release.yml">构建记录</a> ·
+  <a href="https://github.com/andrewliu83/ZCode/issues">问题反馈</a>
 </p>
 <p align="center">
   简体中文 | <a href="README.en.md">English</a>
 </p>
 
+本仓库包含客户端、后端服务、共享 UI，以及 Agent CLI 与运行时源码。
 
+## Community 功能
 
-ZCode 是 AI 编程工作台，提供桌面应用、浏览器界面和终端 Agent。本仓库包含客户端、后端服务、共享 UI，以及 Agent CLI 与运行时源码。
+- **双内核**：聊天输入框可选择 ZCode 或随包提供的 Claude Agent SDK；切换内核会创建新会话，保留未发送草稿和附件，无需预先安装 Claude CLI。
+- **ThinkRail**：默认开启，提供工作流、子智能体和 spec 图工具；已有代码且确认无 spec 图时进入项目初始化流程。用户明确关闭的设置会保留。
+- **按内核管理提示词**：可分别编辑基础正文，ThinkRail 等自动注入内容只读显示。
+- **隐私清理**：已移除 ARMS 上报、业务事件埋点、Agent OTLP 遥测和应用内反馈上传，保留本地日志、诊断导出及模型用量统计。模型调用仍会向选定 Provider 发送任务所需上下文；插件和 MCP 的网络行为由各自配置决定。
+- **独立更新**：三个桌面平台只从本仓库的 Community Releases 获取更新，不使用上游的自动更新服务。
 
-## 更新
+## 下载与安装
+
+在 [GitHub Releases](https://github.com/andrewliu83/ZCode/releases) 中选择 `community-v*` 版本。若尚无正式发行，可自行构建，或查看 [Actions](https://github.com/andrewliu83/ZCode/actions/workflows/community-release.yml) 中手动构建的 artifacts。
+
+| 系统    | 架构                  | 安装包                      |
+| ------- | --------------------- | --------------------------- |
+| macOS   | Apple Silicon / arm64 | `.dmg`、`.zip`              |
+| Windows | x64                   | NSIS `.exe`                 |
+| Linux   | x64                   | `.AppImage`、`.deb`、`.rpm` |
+
+macOS 打开 DMG 后，将 **ZCode Community.app** 拖入“应用程序”。未配置 Apple 证书的发行使用 ad hoc 签名，未经过 Apple 公证；首次打开被拦截时，可在“系统设置 → 隐私与安全性”中选择“仍要打开”。Windows 当前提供未做 Authenticode 签名的安装器。Linux AppImage 需要可执行权限；DEB／RPM 使用对应系统的包管理器安装。
+
+旧的 **ZCode Preview 3.x** 需要手动安装第一份 Community 包。之后应用默认检查并提示更新，保留自动下载偏好，下载校验后可重启安装；DEB／RPM 安装更新可能需要系统授权。Community 的版本与上游版本分别比较，不会把上游 3.x 当作自己的更新。
+
+## 上游更新记录（参考）
 
 - 2026-10-10：更新至 ZCode v3.15.1 版本。
 - 2026-9-23：更新至 ZCode v3.14.3 版本。
@@ -147,22 +170,40 @@ node apps/zcode-cli/packages/cli/dist/zcode.cjs --help
 
 ### 桌面版
 
-```bash
-pnpm bundle:desktop
-
-# 指定目标平台与 CPU 架构
-pnpm bundle:desktop -- --os win --arch x64
-
-pnpm bundle:desktop -- --help
-```
-
-默认目标为 macOS arm64，默认输出目录为 `packages/desktop/dist/`。`--os` 支持 `mac`、`win`、`linux`，`--arch` 支持 `x64`、`arm64`；实际打包与签名需要目标平台对应的工具和配置。
-
-安装：双击打开产物 DMG，将 ZCode 拖入"应用程序"。本地构建未签名，首次打开若被 macOS 拦截，执行：
+生成与 GitHub Release 相同的 Community 安装包，在对应原生系统执行：
 
 ```bash
-sudo xattr -rd com.apple.quarantine /Applications/ZCode.app
+# macOS / Apple Silicon
+pnpm release:desktop -- --os mac --arch arm64
+
+# Windows x64
+pnpm release:desktop -- --os win --arch x64
+
+# Linux x64
+pnpm release:desktop -- --os linux --arch x64
+
+# 仅查看构建计划，不执行编译
+pnpm release:desktop -- --os win --arch x64 --plan
 ```
+
+产物分别位于 `packages/desktop/dist/community/macos-arm64/`、`windows-x64/`、`linux-x64/`，包含安装包、更新清单和 SHA512 校验文件。构建会验证主机平台与架构，并检查随包 Agent 能否启动。
+
+底层开发打包入口仍为 `pnpm bundle:desktop`，使用 `pnpm bundle:desktop -- --help` 查看参数；正式发行请使用上述签名和校验完整的 `release:desktop` 流程。
+
+### GitHub 自动发行
+
+[Community Desktop Release](.github/workflows/community-release.yml) 使用原生 macOS、Windows 和 Linux runner 构建。三个平台全部成功并通过版本、提交和摘要校验后，才公开同一个 Release。
+
+首次发行在源码提交并推送后，创建与根 `package.json` 版本一致的标签：
+
+```bash
+git tag community-v0.1.0
+git push origin community-v0.1.0
+```
+
+后续可用 `pnpm release patch` 或 `pnpm release minor` 更新版本并推送发行标签。只推送 `main` 不会创建 Release；手动运行 Actions 只上传构建产物。已公开的版本不可覆盖，修改后需要递增版本。
+
+无证书时 macOS 使用 ad hoc 签名；完整配置 Apple Secrets 后自动签名和公证。具体凭据、更新安装边界和验证记录见 [Community 发行指南](docs/desktop/community-github-release.md)。这套工作流发布桌面安装包，终端／Web 发行仍使用下方的独立打包入口。
 
 ### ZCode 命令行版
 

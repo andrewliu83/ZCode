@@ -3,7 +3,10 @@ import { app, BrowserWindow, ipcMain, Menu } from "electron";
 import type { ISettingService } from "@zcode/services";
 import pkg, { CancellationToken } from "electron-updater";
 import semver from "semver";
-const { autoUpdater } = pkg;
+let autoUpdater = pkg.autoUpdater;
+import { COMMUNITY_DISTRIBUTION } from "../../../../scripts/community-distribution.mjs";
+import { resolveCommunityUpdater } from "./communityUpdaterFactory.js";
+import { CommunityGitHubProvider } from "./communityGitHubProvider.js";
 import {
   DEFAULT_LOCALE,
   DEFAULT_ZCODE_ENDPOINT_ORIGIN,
@@ -501,7 +504,11 @@ async function quitAndInstallUpdate(rejectUnavailable = false) {
     // 3.3.0 的 Windows 自定义 PowerShell delayed launcher 在 detached/hidden
     // 模式下可能只创建 powershell.exe，却没有稳定执行到安装器启动，用户看到应用关闭但版本不变。
     // 这里恢复 electron-updater 原生安装入口，避免把“launcher 进程创建成功”误当成更新已接管。
-    autoUpdater.quitAndInstall();
+    await autoUpdater.quitAndInstall();
+  } catch (error) {
+    // Community helper 的启动是异步的，必须收敛失败，不能留下未处理的 rejection 或误宣告安装。
+    handleAutoUpdateFailure(error, "start update installation failed");
+    if (rejectUnavailable) throw error;
   } finally {
     quitAndInstallInFlight = false;
   }
@@ -778,10 +785,26 @@ async function syncAutoUpdateCheckChannelFromSettings(
   // 如果 begin 阶段仍用默认 stable 作为 expected channel，冷启动 preview 结果会被误判为 stale。
   availableUpdateChannel = nextChannel;
   activeAutoUpdateCheckChannel = nextChannel;
+  autoUpdater.allowPrerelease = nextChannel === "preview";
+  autoUpdater.allowDowngrade = false;
 }
 
 function applyManifestUpdateProvider(options: InitAutoUpdaterOptions): void {
   const manifestUrl = options.updateFeedSource?.url.trim();
+  // Community 正常运行时固定 GitHub，不能由账号 endpoint 或旧环境 feed 接回上游。
+  if (!manifestUrl || !isDevAutoUpdateEnabled()) {
+    autoUpdater.setFeedURL({
+      provider: "custom",
+      updateProvider: CommunityGitHubProvider,
+      resolveReleaseChannel: () => resolveUpdateReleaseChannel(options.settingService),
+    });
+    autoUpdater.allowPrerelease = false;
+    autoUpdater.allowDowngrade = false;
+    logger.info(
+      `[auto-update] Community GitHub source ${COMMUNITY_DISTRIBUTION.github.owner}/${COMMUNITY_DISTRIBUTION.github.repo}`,
+    );
+    return;
+  }
   autoUpdater.setFeedURL({
     provider: "custom",
     updateProvider: ManifestUpdateProvider,
@@ -1517,6 +1540,8 @@ export async function initAutoUpdater(options: InitAutoUpdaterOptions = {}): Pro
   autoUpdaterDisabledForProductFlavor = false;
   if (!canUseAutoUpdaterInCurrentRuntime()) return;
 
+  const selectedUpdater = resolveCommunityUpdater(autoUpdater);
+  autoUpdater = selectedUpdater instanceof Promise ? await selectedUpdater : selectedUpdater;
   onBeforeQuitAndInstall = options.onBeforeQuitAndInstall;
   if (options.locale) {
     menuLocale = options.locale;
@@ -1688,9 +1713,7 @@ export async function initAutoUpdater(options: InitAutoUpdaterOptions = {}): Pro
           kind: "available",
           version:
             menuState.kind === "update-available" ? menuState.version : (readyUpdateVersion ?? ""),
-          ...(menuState.kind !== "checking" && menuState.channel
-            ? { channel: menuState.channel }
-            : {}),
+          ...("channel" in menuState && menuState.channel ? { channel: menuState.channel } : {}),
         });
         return;
       }

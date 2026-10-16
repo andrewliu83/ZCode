@@ -91,6 +91,30 @@ describe("帮助配置 client/configs", () => {
     );
   }
 
+  it("HC-00: 版本历史指向 Community，隔离 Preview 不启动正式更新检查", async () => {
+    const result = await browser.execute(async () => {
+      const bridge = (
+        window as unknown as {
+          zcode: {
+            executeDesktopCommand(command: string): Promise<void>;
+            onUpdateCheckResult(callback: (payload: { kind: string }) => void): () => void;
+          };
+        }
+      ).zcode;
+      const seen: string[] = [];
+      const stop = bridge.onUpdateCheckResult((payload) => seen.push(payload.kind));
+      try {
+        await bridge.executeDesktopCommand("checkForUpdates");
+        return seen;
+      } finally {
+        stop();
+      }
+    });
+    expect(result).toEqual([]);
+    await command("openChangelog");
+    await expectExternal("https://github.com/andrewliu83/ZCode/releases");
+  });
+
   it("HC-01: 真实帮助菜单、语言与成功缓存", async () => {
     expect(await available("en-US")).toBe(true);
     await $('button[aria-label="Help"]').click();

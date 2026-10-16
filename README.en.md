@@ -1,19 +1,44 @@
-# ZCode
+# ZCode Community
+
+ZCode Community is a community distribution based on [ZCode](https://github.com/zai-org/ZCode), with desktop, Web and terminal AI coding interfaces. The current Community version is **0.1.0**, with its own application ID, package names and `community-v*` tags. It installs and updates separately from upstream 3.x releases.
 
 <div align="center">
   <img src="public/logo/icons/1024x1024.png" alt="ZCode" width="128" height="128" />
 </div>
 <p align="center">
-  <a href="https://applink.feishu.cn/client/chat/chatter/add_by_link?link_token=47ag983c-8fcb-4d6d-814b-5395193a712c&amp;qr_code=true">Feishu community</a> ·
-  <a href="https://discord.gg/z9aBcQXZQ3">Discord</a>
+  <a href="https://github.com/andrewliu83/ZCode/releases">Downloads</a> ·
+  <a href="https://github.com/andrewliu83/ZCode/actions/workflows/community-release.yml">Builds</a> ·
+  <a href="https://github.com/andrewliu83/ZCode/issues">Issues</a>
 </p>
 <p align="center">
   <a href="README.md">简体中文</a> | English
 </p>
 
-ZCode is an AI coding workspace with desktop, browser, and terminal interfaces. This repository contains the clients, backend services, shared UI, and Agent CLI and runtime source code.
+This repository contains the clients, backend services, shared UI, and Agent CLI and runtime source code.
 
-## Updates
+## Community Features
+
+- **Two agent kernels**: select ZCode or the bundled Claude Agent SDK in the chat composer. Switching kernels creates a new session and preserves unsent drafts and attachments. No separate Claude CLI installation is required.
+- **ThinkRail**: enabled by default, with workflows, subagents and spec graph tools. Existing codebases with a confirmed empty spec graph enter project setup. An explicit disabled preference remains disabled.
+- **System prompts per kernel**: edit the base prompt independently while viewing ThinkRail and other injected content as read-only sections.
+- **Privacy cleanup**: ARMS reporting, business analytics, Agent OTLP telemetry and in-app feedback uploads have been removed. Local logs, diagnostic exports and model usage statistics remain. Model requests still send task context to the selected provider; plugins and MCP servers follow their own network configuration.
+- **Independent updates**: all three desktop platforms use this repository's Community Releases rather than the upstream update service.
+
+## Downloads and Installation
+
+Choose a `community-v*` version from [GitHub Releases](https://github.com/andrewliu83/ZCode/releases). If no release is available yet, build locally or check [Actions](https://github.com/andrewliu83/ZCode/actions/workflows/community-release.yml) for artifacts from manual builds.
+
+| System  | Architecture          | Packages                    |
+| ------- | --------------------- | --------------------------- |
+| macOS   | Apple Silicon / arm64 | `.dmg`, `.zip`              |
+| Windows | x64                   | NSIS `.exe`                 |
+| Linux   | x64                   | `.AppImage`, `.deb`, `.rpm` |
+
+On macOS, open the DMG and move **ZCode Community.app** to Applications. Releases without Apple credentials use ad hoc signing and are not notarized. If macOS blocks the first launch, use Open Anyway in System Settings → Privacy & Security. Windows installers currently do not have Authenticode signing. Linux AppImages need executable permission; install DEB or RPM packages through the corresponding package manager.
+
+Existing **ZCode Preview 3.x** users must install the first Community version manually. The app then checks for updates and prompts by default, preserves the automatic download preference, and verifies downloads before restarting to install. DEB/RPM updates may require system authorization. Community and upstream versions are compared separately; upstream 3.x releases are not Community updates.
+
+## Upstream release history (reference)
 
 - 2026-10-10: Updated to ZCode v3.15.1.
 - 2026-9-23: Updated to ZCode v3.14.3.
@@ -141,16 +166,40 @@ See [third-party/README.md](third-party/README.md) for notice generation, distri
 
 ### Desktop
 
+Build the same Community packages used by GitHub Releases on each supported native host:
+
 ```bash
-pnpm bundle:desktop
+# macOS / Apple Silicon
+pnpm release:desktop -- --os mac --arch arm64
 
-# Set the target platform and CPU architecture
-pnpm bundle:desktop -- --os win --arch x64
+# Windows x64
+pnpm release:desktop -- --os win --arch x64
 
-pnpm bundle:desktop -- --help
+# Linux x64
+pnpm release:desktop -- --os linux --arch x64
+
+# Inspect a build plan without compiling
+pnpm release:desktop -- --os win --arch x64 --plan
 ```
 
-The default target is macOS arm64, and the default output directory is `packages/desktop/dist/`. `--os` accepts `mac`, `win`, or `linux`; `--arch` accepts `x64` or `arm64`. Packaging and signing require the tools and configuration for the target platform.
+Outputs are written to `packages/desktop/dist/community/macos-arm64/`, `windows-x64/`, and `linux-x64/`, including installers, update manifests and SHA512 checksums. The build validates the host platform and architecture and checks that the packaged Agent starts.
+
+The lower-level development packager remains `pnpm bundle:desktop`; use `pnpm bundle:desktop -- --help` for its options. Use `release:desktop` for the complete signing and verification flow.
+
+### GitHub Releases
+
+The [Community Desktop Release workflow](.github/workflows/community-release.yml) builds on native macOS, Windows and Linux runners. It publishes one release only after all three platforms succeed and their versions, commits and checksums are verified.
+
+For the first release, commit and push the source, then create a tag matching the root `package.json` version:
+
+```bash
+git tag community-v0.1.0
+git push origin community-v0.1.0
+```
+
+For subsequent releases, use `pnpm release patch` or `pnpm release minor` to update the version and push its release tag. Pushing `main` alone does not create a release; a manual Actions run only uploads build artifacts. Published versions cannot be overwritten; changes require a new version.
+
+Without Apple credentials, macOS uses ad hoc signing. A complete set of Apple Secrets enables signing and notarization. See the [Community release guide](docs/desktop/community-github-release.md) for credentials, update installation boundaries and validation results. This workflow publishes desktop packages; terminal/Web distributions still use the separate packaging entry below.
 
 ### ZCode CLI distribution
 

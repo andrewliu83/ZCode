@@ -248,6 +248,7 @@ function printHelp() {
   --arch, -a <x64|arm64>       目标 CPU 架构，默认 arm64
   --skip-prepare               跳过 prepare:runtime-assets
   --skip-build                 跳过 pnpm build
+  --app-only                   仅装配应用目录，供签名后生成最终安装包
   --dry-run                    只打印最终命令，不执行打包
   -h, --help                   查看帮助
 
@@ -280,6 +281,7 @@ function parseArgs(argv) {
     skipPrepare: process.env.ZCODE_SKIP_PREPARE === "1",
     skipBuild: process.env.ZCODE_SKIP_BUILD === "1",
     dryRun: false,
+    appOnly: false,
     positionals: [],
   };
 
@@ -297,6 +299,11 @@ function parseArgs(argv) {
 
     if (arg === "--dry-run") {
       options.dryRun = true;
+      continue;
+    }
+
+    if (arg === "--app-only") {
+      options.appOnly = true;
       continue;
     }
 
@@ -355,6 +362,7 @@ function parseArgs(argv) {
     skipPrepare: options.skipPrepare,
     skipBuild: options.skipBuild,
     dryRun: options.dryRun,
+    appOnly: options.appOnly,
   };
 }
 
@@ -694,7 +702,7 @@ function verifyPackagedRuntimeDependencies(os, arch) {
 }
 
 async function main() {
-  const { os, arch, skipPrepare, skipBuild, dryRun } = parseArgs(process.argv.slice(2));
+  const { os, arch, skipPrepare, skipBuild, dryRun, appOnly } = parseArgs(process.argv.slice(2));
   const buildArgs = [
     "exec",
     "electron-builder",
@@ -702,6 +710,7 @@ async function main() {
     "electron-builder.config.js",
     osBuilderFlagMap[os],
     archBuilderFlagMap[arch],
+    ...(appOnly ? ["--dir"] : []),
   ];
 
   console.log(`[bundle] target=${os}/${arch}`);
@@ -734,6 +743,8 @@ async function main() {
   runTimedSync("bundle:verify-runtime-dependencies", () =>
     verifyPackagedRuntimeDependencies(os, arch),
   );
+
+  if (appOnly) return;
 
   const artifactPath = findBuiltArtifact(os, arch);
   runTimedSync("bundle:audit-bundle-size", () =>

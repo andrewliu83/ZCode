@@ -1,8 +1,8 @@
+import { COMMUNITY_DISTRIBUTION } from "../../../../scripts/community-distribution.mjs";
 import { getPluginSandboxHost } from "./pluginSandbox/index.js";
 /* eslint-disable max-lines -- 桌面命令分发需要共享窗口与平台上下文，集中维护更便于一致性 */
 import { readZCodeStdioTapDevState, setZCodeStdioTapDevEnabled } from "@zcode/services/node";
 import {
-  buildZCodeEndpointUrls,
   DEFAULT_ZCODE_ENDPOINT_ORIGIN,
   DesktopCommandIds,
   REWARDS_PARTITION,
@@ -10,7 +10,6 @@ import {
   getCommunityUrlFromConfigs,
   normalizeZCodeEndpointOrigin,
   PlatformChannels,
-  resolveZCodeEndpointOrigin,
   ZCODE_ENV,
   ZCODE_PRODUCT_FLAVOR,
   type AppSettings,
@@ -376,33 +375,10 @@ function toggleZCodeStdioTapDevProxy(options: {
   });
 }
 
-function resolveChangelogUrl(
-  locale: Locale,
-  endpointOrigin = DEFAULT_ZCODE_ENDPOINT_ORIGIN,
-): string {
-  // 帮助菜单里的外链以前只有固定英文地址，切到中文界面后仍会落到英文 changelog。
-  // 这里统一收口到主进程按当前应用语言分流，避免菜单模板里手写分支后续再出现多处不一致。
-  const origin = buildZCodeEndpointUrls(endpointOrigin).origin;
-  return locale === "zh-CN" ? `${origin}/cn/changelog` : `${origin}/en/changelog`;
-}
-
-export async function openChangelog(
-  locale: Locale,
-  endpointOrigin = DEFAULT_ZCODE_ENDPOINT_ORIGIN,
-) {
-  await shell.openExternal(resolveChangelogUrl(locale, endpointOrigin));
-}
-
-async function resolveCurrentZCodeEndpointOrigin(settingService: {
-  get(): Promise<{ zcodeEndpointOrigin?: string }>;
-  envBaseOrigin?: string | null;
-}): Promise<string> {
-  const settings = await settingService.get();
-  return resolveZCodeEndpointOrigin({
-    env: ZCODE_ENV,
-    envBaseOrigin: settingService.envBaseOrigin,
-    overrideOrigin: settings.zcodeEndpointOrigin,
-  });
+export async function openChangelog() {
+  // Community 版本历史必须与更新源一致，不能被账号 endpoint 导回上游版本。
+  const { owner, repo } = COMMUNITY_DISTRIBUTION.github;
+  await shell.openExternal(`https://github.com/${owner}/${repo}/releases`);
 }
 
 export async function executeDesktopCommand(options: {
@@ -511,13 +487,7 @@ export async function executeDesktopCommand(options: {
       await showAboutDialog(targetWindow ?? undefined, options.currentApplicationLocale);
       return;
     case DesktopCommandIds.OpenChangelog:
-      await openChangelog(
-        options.currentApplicationLocale,
-        await resolveCurrentZCodeEndpointOrigin({
-          ...options.settingService,
-          envBaseOrigin: options.zcodeEndpointEnvBaseOrigin,
-        }),
-      );
+      await openChangelog();
       return;
     case DesktopCommandIds.CheckForUpdates:
       // 按产品身份而不是后端环境放行：生产后端的 Preview 同样没有更新器。

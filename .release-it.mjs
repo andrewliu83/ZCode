@@ -4,11 +4,14 @@ import {
   RELEASE_CHANGELOG_TYPES,
 } from "./scripts/release-it/changelog-writer.mjs";
 
+import { COMMUNITY_DISTRIBUTION } from "./scripts/community-distribution.mjs";
+
 export default {
   git: {
-    commitMessage: "chore: release v${version}",
-    tagName: "v${version}",
-    tagAnnotation: "Release v${version}",
+    commitMessage: "chore: release Community ${version}",
+    tagName: COMMUNITY_DISTRIBUTION.tagPrefix + "${version}",
+    tagAnnotation: "ZCode Community ${version}",
+    tagMatch: COMMUNITY_DISTRIBUTION.tagPrefix + "*",
     push: true,
   },
   github: {
