@@ -177,44 +177,24 @@ describe("WindowsCaptionMenuButton", () => {
     expect(html).not.toContain("titleBar.menu.help.checkForUpdates");
   });
 
-  it("includes help actions migrated from the shared question-mark menu", async () => {
-    capturedWindowsCaptionMenu.openSubmit.mockClear();
-    capturedWindowsCaptionMenu.openFeatureRequest.mockClear();
+  it("retains docs and local diagnostic export without feedback upload", async () => {
     capturedWindowsCaptionMenu.openExternal.mockClear();
     capturedWindowsCaptionMenu.exportLogs.mockClear();
     capturedWindowsCaptionMenu.captureWindowScreenshot.mockClear();
-
     const html = await renderButton("header");
-
-    expect(html).toContain("titleBar.menu.help.feedback");
-    expect(html).toContain("workspaceHeader.help.productRequest");
+    expect(html).not.toContain("workspaceHeader.help.productRequest");
+    expect(html).not.toContain("titleBar.menu.help.feedback");
     expect(html).toContain("workspaceHeader.help.docs");
     expect(html).toContain("titleBar.menu.help.exportLogs");
-
     await capturedWindowsCaptionMenu.menuItems
-      .find((item) => item.label === "titleBar.menu.help.feedback")
-      ?.onSelect?.();
-    capturedWindowsCaptionMenu.menuItems
-      .find((item) => item.label === "workspaceHeader.help.productRequest")
-      ?.onSelect?.();
-    capturedWindowsCaptionMenu.menuItems
       .find((item) => item.label === "workspaceHeader.help.docs")
       ?.onSelect?.();
-    capturedWindowsCaptionMenu.menuItems
+    await capturedWindowsCaptionMenu.menuItems
       .find((item) => item.label === "titleBar.menu.help.exportLogs")
       ?.onSelect?.();
-
-    expect(capturedWindowsCaptionMenu.captureWindowScreenshot).not.toHaveBeenCalled();
-    expect(capturedWindowsCaptionMenu.openSubmit).toHaveBeenCalledWith(
-      expect.objectContaining({
-        type: "bug",
-        includeLogs: true,
-        screenshots: [],
-      }),
-    );
-    expect(capturedWindowsCaptionMenu.openFeatureRequest).toHaveBeenCalledTimes(1);
     expect(capturedWindowsCaptionMenu.openExternal).toHaveBeenCalledWith("https://zcode.z.ai/docs");
-    expect(capturedWindowsCaptionMenu.exportLogs).toHaveBeenCalledTimes(1);
+    expect(capturedWindowsCaptionMenu.exportLogs).toHaveBeenCalledOnce();
+    expect(capturedWindowsCaptionMenu.captureWindowScreenshot).not.toHaveBeenCalled();
   });
 
   it("keeps the menu surface clear of the native Windows caption buttons", async () => {

@@ -7,8 +7,8 @@
 
 import type { ProcessResourceRole } from "@zcode/shared";
 import type { AppResourceTotals } from "./processResourceAppTotals.js";
-import type { DeviceResourceSample } from "./processResourceSystemWindowAggregator.js";
-import type { ProcessRoleSample } from "./processResourceWindowAggregator.js";
+import type { DeviceResourceSample } from "./processResourceSample.js";
+import type { ProcessRoleSample } from "./processResourceSample.js";
 
 export interface ProcessResourceSampleContext {
   /** 本次 tick 的墙钟时间，来源共用同一个读数，避免同 tick 内时间漂移。 */

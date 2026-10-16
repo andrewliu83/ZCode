@@ -60,7 +60,7 @@ vi.mock("electron", () => ({
   },
 }));
 
-describe("Web Remote Control IPC telemetry", () => {
+describe("Web Remote Control IPC", () => {
   beforeEach(() => {
     h.handlers.clear();
     h.fromWebContents.mockReset();
@@ -69,13 +69,11 @@ describe("Web Remote Control IPC telemetry", () => {
     h.showMessageBox.mockResolvedValue({ response: 1 });
   });
 
-  it("显式启动成功后上报本地 workspace 终态", async () => {
-    const reportRemoteUsageEvent = vi.fn();
+  it("显式启动保留本地 workspace 目标与返回结果", async () => {
     const start = vi.fn(async () => ({ status: "running" }));
     const { registerWebRemoteControlIpcHandlers } =
       await import("../src/main/desktopWebRemoteControlIpc.js");
     registerWebRemoteControlIpcHandlers({
-      reportRemoteUsageEvent,
       webRemoteControlManager: withStartAuthorization({
         start,
         resetPairing: vi.fn(),
@@ -92,27 +90,15 @@ describe("Web Remote Control IPC telemetry", () => {
 
     expect(result).toEqual({ status: "running" });
     expect(start).toHaveBeenCalledWith(17, context);
-    expect(reportRemoteUsageEvent).toHaveBeenCalledWith(73, {
-      elementName: "web_remote_control_start_result",
-      eventRegion: "web_remote_control",
-      eventType: "result",
-      eventExtraDetail: {
-        result: "success",
-        workspace_kind: "local",
-        remote_kind: "",
-        error_category: "",
-      },
-    });
+
     expect(h.showMessageBox).not.toHaveBeenCalled();
   });
 
-  it("重新配对成功后上报远程 workspace 类型", async () => {
-    const reportRemoteUsageEvent = vi.fn();
+  it("重新配对保留远程 workspace identity", async () => {
     const resetPairing = vi.fn(async () => ({ status: "running" }));
     const { registerWebRemoteControlIpcHandlers } =
       await import("../src/main/desktopWebRemoteControlIpc.js");
     registerWebRemoteControlIpcHandlers({
-      reportRemoteUsageEvent,
       webRemoteControlManager: withStartAuthorization({
         start: vi.fn(),
         resetPairing,
@@ -133,29 +119,18 @@ describe("Web Remote Control IPC telemetry", () => {
 
     expect(result).toEqual({ status: "running" });
     expect(resetPairing).toHaveBeenCalledWith(17, context);
-    expect(reportRemoteUsageEvent).toHaveBeenCalledWith(74, {
-      elementName: "web_remote_control_start_result",
-      eventRegion: "web_remote_control",
-      eventType: "result",
-      eventExtraDetail: {
-        result: "success",
-        workspace_kind: "remote",
-        remote_kind: "wsl",
-        error_category: "",
-      },
-    });
+
     expect(h.showMessageBox).not.toHaveBeenCalled();
   });
 
-  it("启动失败时只上报低基数错误分类并保留原错误", async () => {
+  it("启动失败时保留原始异常", async () => {
     const error = Object.assign(new Error("relay websocket closed"), {
       code: "RELAY_CLOSED",
     });
-    const reportRemoteUsageEvent = vi.fn();
+
     const { registerWebRemoteControlIpcHandlers } =
       await import("../src/main/desktopWebRemoteControlIpc.js");
     registerWebRemoteControlIpcHandlers({
-      reportRemoteUsageEvent,
       webRemoteControlManager: withStartAuthorization({
         start: vi.fn(async () => {
           throw error;
@@ -172,41 +147,6 @@ describe("Web Remote Control IPC telemetry", () => {
     );
 
     await expect(operation).rejects.toBe(error);
-    expect(reportRemoteUsageEvent).toHaveBeenCalledWith(75, {
-      elementName: "web_remote_control_start_result",
-      eventRegion: "web_remote_control",
-      eventType: "result",
-      eventExtraDetail: {
-        result: "failure",
-        workspace_kind: "local",
-        remote_kind: "",
-        error_category: "relay",
-      },
-    });
-  });
-
-  it("埋点 reporter 抛错时不改写已经成功的启动结果", async () => {
-    const loggerFailure = new Error("telemetry reporter unavailable");
-    const { registerWebRemoteControlIpcHandlers } =
-      await import("../src/main/desktopWebRemoteControlIpc.js");
-    registerWebRemoteControlIpcHandlers({
-      reportRemoteUsageEvent: vi.fn(() => {
-        throw loggerFailure;
-      }),
-      webRemoteControlManager: withStartAuthorization({
-        start: vi.fn(async () => ({ status: "running" })),
-        resetPairing: vi.fn(),
-        stop: vi.fn(),
-        getStatus: vi.fn(),
-      }),
-    });
-
-    const operation = h.handlers.get(PlatformChannels.StartWebRemoteControl)?.(
-      { sender: { id: 76 } },
-      { workspacePath: "/workspace/local" },
-    );
-
-    await expect(operation).resolves.toEqual({ status: "running" });
   });
 
   it("内部票据只在 manager 提供的目标绑定接口中使用一次", async () => {
@@ -221,7 +161,6 @@ describe("Web Remote Control IPC telemetry", () => {
     const { registerWebRemoteControlIpcHandlers } =
       await import("../src/main/desktopWebRemoteControlIpc.js");
     registerWebRemoteControlIpcHandlers({
-      reportRemoteUsageEvent: vi.fn(),
       webRemoteControlManager: {
         startAuthorized,
         authorizeStart,

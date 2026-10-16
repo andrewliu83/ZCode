@@ -1,10 +1,7 @@
 import { useState } from "react";
 import { Smartphone } from "lucide-react";
 import type { WebRemoteControlStatus } from "@zcode/shared";
-import {
-  buildWebRemoteControlEntryViewTelemetry,
-  parseRemoteWorkspaceIdentity,
-} from "@zcode/shared";
+
 import { Button } from "@/components/ui/button.js";
 import { cn } from "@/components/lib/utils.js";
 import { ControlHintTooltip } from "@/ControlHintTooltip.js";
@@ -13,7 +10,7 @@ import { useOptionalPlatform } from "@/hooks/usePlatform.js";
 import { useWebRemoteControlStatus } from "@/hooks/useWebRemoteControlStatus.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { logger } from "@/logger.js";
-import { reportAppTelemetryEvent } from "@/lib/appTelemetry.js";
+
 import { WebRemoteControlDialog } from "@/WebRemoteControlDialog.js";
 import { useWebRemoteControlFeatureEnabled } from "@/WebRemoteControlFeatureProvider.js";
 
@@ -154,17 +151,6 @@ function WorkspaceWebRemoteControlTriggerContent({
           variant="ghost"
           onClick={() => {
             if (platform) {
-              void reportAppTelemetryEvent(
-                platform,
-                buildWebRemoteControlEntryViewTelemetry({
-                  workspaceKind:
-                    workspaceIdentity?.trim() || currentRemoteSessionId ? "remote" : "local",
-                  remoteKind: workspaceIdentity
-                    ? parseRemoteWorkspaceIdentity(workspaceIdentity)?.kind
-                    : undefined,
-                }),
-                "web-remote-control-entry",
-              );
             }
             logger.info("[WorkspaceWebRemoteControlTrigger] 打开 Web 远程控制弹层", {
               workspacePath,

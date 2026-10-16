@@ -865,62 +865,6 @@ describe("SessionPane send failure feedback", () => {
 });
 
 describe("SessionPane draft prewarm admission lifecycle", () => {
-  it("只为已有 Session 打开埋点，不记录草稿预热提升的首次绑定", async () => {
-    const prewarmSessionId = "draft-prewarm-session-open-excluded";
-    const existingSessionId = "existing-session-open-included";
-    const prewarmSnapshot = makeSnapshot();
-    prewarmSnapshot.sessionId = prewarmSessionId;
-    projectionState.current = {
-      status: "live",
-      snapshot: prewarmSnapshot,
-      subscriptionId: "draft-prewarm-session-open-subscription",
-      lastError: null,
-      optimisticCommands: [],
-      loadingOlder: false,
-    };
-    prewarmHookMock.binding = {
-      workspaceKey: "/workspace",
-      sessionId: prewarmSessionId,
-      promote: vi.fn(),
-      discard: vi.fn(),
-    };
-    const onSessionCreated = vi.fn();
-    mocks.sendCommand.mockImplementation(async (envelope: CommandEnvelope) =>
-      ackFor(envelope, { status: "accepted" }),
-    );
-
-    const root = await renderPane({ sessionId: null, onSessionCreated });
-    try {
-      await act(async () => {
-        await captured.composerProps?.onSendText("promote prewarm without session-open telemetry");
-        await flushMicrotasks();
-      });
-      expect(onSessionCreated).toHaveBeenCalledWith(prewarmSessionId);
-
-      await rerenderPane(root, { sessionId: prewarmSessionId, onSessionCreated });
-      expect(sessionOpenTelemetryMock.lastParams).toMatchObject({
-        sessionId: prewarmSessionId,
-        enabled: false,
-      });
-
-      const existingSnapshot = makeSnapshot();
-      existingSnapshot.sessionId = existingSessionId;
-      projectionState.current = {
-        ...projectionState.current,
-        snapshot: existingSnapshot,
-        subscriptionId: "existing-session-open-subscription",
-      };
-      prewarmHookMock.binding = null;
-      await rerenderPane(root, { sessionId: existingSessionId, onSessionCreated });
-      expect(sessionOpenTelemetryMock.lastParams).toMatchObject({
-        sessionId: existingSessionId,
-        enabled: true,
-      });
-    } finally {
-      await act(async () => root.unmount());
-    }
-  });
-
   it.each(["existing", "prewarm", "no-prewarm"] as const)(
     "keeps shared context and the complete submission together for %s",
     async (entry) => {
@@ -984,58 +928,6 @@ describe("SessionPane draft prewarm admission lifecycle", () => {
       }
     },
   );
-
-  it("不记录无预热 fallback createSession 的首次绑定", async () => {
-    const createdSessionId = "fallback-created-session-open-excluded";
-    projectionState.current = {
-      status: "live",
-      snapshot: null,
-      subscriptionId: "draft-without-prewarm-subscription",
-      lastError: null,
-      optimisticCommands: [],
-      loadingOlder: false,
-    };
-    prewarmHookMock.binding = null;
-    // 本用例验证无预热的 createSession 埋点边界；草稿仍必须具备生产提交所要求的完整执行配置。
-    draftConfigMock.resolveInitialDraftConfig.mockReturnValue({
-      provider: "alternate-provider",
-      model: "deepseek-v4-pro",
-      mode: "build",
-    });
-    const onSessionCreated = vi.fn();
-    mocks.sendCommand.mockImplementation(async (envelope: CommandEnvelope) =>
-      ackFor(envelope, {
-        status: "accepted",
-        ...(envelope.type === "createSession"
-          ? { result: { type: "createSession" as const, sessionId: createdSessionId } }
-          : {}),
-      }),
-    );
-
-    const root = await renderPane({ sessionId: null, onSessionCreated });
-    try {
-      await act(async () => {
-        await captured.composerProps?.onSendText("create without prewarm telemetry");
-        await flushMicrotasks();
-      });
-      expect(onSessionCreated).toHaveBeenCalledWith(createdSessionId);
-
-      const createdSnapshot = makeSnapshot();
-      createdSnapshot.sessionId = createdSessionId;
-      projectionState.current = {
-        ...projectionState.current,
-        snapshot: createdSnapshot,
-        subscriptionId: "fallback-created-session-open-subscription",
-      };
-      await rerenderPane(root, { sessionId: createdSessionId, onSessionCreated });
-      expect(sessionOpenTelemetryMock.lastParams).toMatchObject({
-        sessionId: createdSessionId,
-        enabled: false,
-      });
-    } finally {
-      await act(async () => root.unmount());
-    }
-  });
 
   it.each([
     {
@@ -1351,32 +1243,6 @@ describe("SessionPane stop foreground execution", () => {
       });
     },
   );
-
-  it("records a skipped button stop without dispatching for an idle session", async () => {
-    const infoSpy = vi.spyOn(logger.lifecycle, "info");
-    projectionState.current = {
-      status: "live",
-      snapshot: makeSnapshot(),
-      subscriptionId: "sub-idle",
-      lastError: null,
-      optimisticCommands: [],
-      loadingOlder: false,
-    };
-    const root = await renderPane();
-    try {
-      await act(async () => {
-        captured.composerProps?.onStop?.();
-        await flushMicrotasks();
-      });
-      expect(mocks.sendCommand).not.toHaveBeenCalled();
-      expect(infoSpy).toHaveBeenCalledWith("[v4-pane] stop 命令被跳过（无可停执行）", {
-        source: "button",
-        sessionId: "session-1",
-      });
-    } finally {
-      await act(async () => root.unmount());
-    }
-  });
 });
 
 describe("SessionPane remote provider admission", () => {

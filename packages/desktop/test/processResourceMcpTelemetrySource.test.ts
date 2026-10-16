@@ -7,7 +7,7 @@ import {
   collectExternalAppResourceTotals,
   resetExternalAppResourceSamples,
 } from "@desktop/main/processResourceExternalAppSamples";
-import type { ProcessRoleSample } from "@desktop/main/processResourceWindowAggregator";
+import type { ProcessRoleSample } from "@desktop/main/processResourceSample";
 import type { ZCodeMcpResourceSample } from "@zcode/shared";
 
 const debug = vi.hoisted(() => vi.fn());

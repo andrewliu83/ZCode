@@ -96,10 +96,9 @@ export function createOnboardingRecordService(
         const record: OnboardingRecordEntry = {
           userId,
           ...entry,
-          uploadState: "pending",
         };
         // 每 userId（含 null）至多一条：同一用户重复完成引导（debug 重置后再答等）覆盖旧条目，
-        // 而不是追加——覆盖后的新答案重新置 pending，等待上传。
+        // 而不是追加——最新答案只保存到本地记录。
         const previousIndex = file.entries.findIndex((item) => item.userId === userId);
         const validated = onboardingRecordEntrySchema.parse(record);
         if (previousIndex >= 0) file.entries[previousIndex] = validated;

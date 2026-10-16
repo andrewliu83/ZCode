@@ -76,10 +76,7 @@ import {
 } from "@/hooks/useUsageEntitlement.js";
 import { useToolbarConfigOptions } from "@/hooks/useZCodeConfig.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
-import {
-  createCodingPlanFunnelContext,
-  resolveCodingPlanEntryPlanState,
-} from "@/lib/codingPlanFunnelTelemetry.js";
+
 import { useShortcutCommandLabel } from "@/shortcuts/useShortcutBindings.js";
 import { logger } from "@/logger.js";
 import { useCodingPlanUpgradeDialog } from "@/settings/CodingPlanUpgradeDialogProvider.js";
@@ -517,17 +514,6 @@ function V4ComposerModelControlsImpl({
     (providerId: string) => {
       openCodingPlanUpgrade({
         providerId,
-        funnelContext: createCodingPlanFunnelContext({
-          providerId,
-          upgradeSource: "session_token_usage",
-          eventRegion: "app.session",
-          eventText: intl.formatMessage({ id: "chat.quota.action.upgrade" }),
-          entryPlanState: resolveCodingPlanEntryPlanState({
-            providerId,
-            displayStatus: "purchased",
-            planLevel: "start",
-          }),
-        }),
       });
     },
     [intl, openCodingPlanUpgrade],

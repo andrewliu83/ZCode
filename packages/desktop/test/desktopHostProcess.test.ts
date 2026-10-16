@@ -392,17 +392,8 @@ describe("desktopHostProcess MCP 资源样本", () => {
   });
 });
 
-it("PRT-010: main 的真实 Host 消息分发即时报告 Bash 完成事实，拒绝非法属性", async () => {
-  const { default: armsRum } = await import("@arms/rum-electron");
-  const sendCustom = vi.spyOn(armsRum, "sendCustom").mockImplementation(() => {});
-  const { configureDesktopResourceTelemetry } =
-    await import("../src/main/desktopResourceTelemetry.js");
-  configureDesktopResourceTelemetry({
-    deviceMid: "device",
-    appVersion: "1.0",
-    armsEnv: "prod",
-    platform: "darwin",
-  });
+it("PRT-010: main 的真实 Host 消息分发仅本地记录 Bash 完成事实，拒绝非法属性", async () => {
+  const logger = { info: vi.fn(), warn: vi.fn() };
   const child = new MockUtilityProcess();
   electronMock.fork.mockReturnValue(child);
   const win = { id: 7, webContents: { id: 11, postMessage: vi.fn() } };
@@ -412,12 +403,13 @@ it("PRT-010: main 的真实 Host 消息分发即时报告 Bash 完成事实，�
     { type: HostMessageTypes.InitLocal, workspacePath: "/repo" },
     {
       hostProcessLocalEnv: {},
-      logger: { info: vi.fn(), warn: vi.fn() },
+      logger,
       broadcastHub: { register: vi.fn(), unregister: vi.fn() } as never,
       windowHostProcessMap: new Map(),
       hostRunningTaskCountMap: new Map(),
     },
   );
+  logger.info.mockClear();
   const sample = {
     platform: "win32",
     toolName: "bash",
@@ -433,21 +425,13 @@ it("PRT-010: main 的真实 Host 消息分发即时报告 Bash 完成事实，�
       runtimeSurface: "local",
       sample: { ...sample, command: "secret" },
     });
-    expect(sendCustom).not.toHaveBeenCalled();
+    expect(logger.info).not.toHaveBeenCalled();
     child.emit("message", { type: "tool-exec-resource", runtimeSurface: "local", sample });
-    expect(sendCustom).toHaveBeenCalledExactlyOnceWith(
-      expect.objectContaining({
-        name: "perf_tool_exec_resource",
-        value: 40000,
-        properties: expect.objectContaining({
-          runtime_surface: "local",
-          platform: "windows",
-          tool_name: "bash",
-        }),
-      }),
-    );
+    expect(logger.info).toHaveBeenCalledExactlyOnceWith("[resource] tool execution completed", {
+      runtimeSurface: "local",
+      sample,
+    });
   } finally {
     child.emit("exit", 0);
-    sendCustom.mockRestore();
   }
 });

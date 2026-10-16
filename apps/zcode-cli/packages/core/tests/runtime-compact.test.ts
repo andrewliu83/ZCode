@@ -2616,7 +2616,10 @@ describe("AgentRuntime manual compact", () => {
     const runtime = createTestAgentRuntime(
       sessionId,
       // 本场景固定截断预算；目录补齐另由 agent-listing-persistence 覆盖。
-      { systemPrompt: "You are a compact prompt-too-long test agent.", subagents: { enabled: false } },
+      {
+        systemPrompt: "You are a compact prompt-too-long test agent.",
+        subagents: { enabled: false },
+      },
       {
         eventStore,
         modelFactory: createTestModelFactory(
@@ -3857,7 +3860,6 @@ describe("AgentRuntime manual compact", () => {
         },
         contextWindow: 128_000,
         modelSelection: createTestModelSelection(modelSelection),
-        modelContextBudgetStrategy: "legacy",
       },
       {
         eventStore: createTestSessionEventStore(),
@@ -3877,12 +3879,12 @@ describe("AgentRuntime manual compact", () => {
     expect(mainRequestMaxOutputTokens).toBe(64_000);
     expect(autoCompactLog).toMatchObject({
       maxOutputTokens: 64_000,
-      modelContextBudgetStrategy: "legacy",
-      outputReserveTokens: 64_000,
-      threshold: 51_000,
+      modelContextBudgetStrategy: "preflight-v1",
+      outputReserveTokens: 21_000,
+      threshold: 94_000,
     });
     expect(microcompactLog).toMatchObject({
-      thresholdTokens: 45_900,
+      thresholdTokens: 84_600,
     });
   });
 

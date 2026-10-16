@@ -41,10 +41,7 @@ import {
   waitForV4AssistantMessageContaining,
   waitForV4ConversationState,
 } from "../helpers/v4-conversation.js";
-import {
-  beginConversationTelemetryCapture,
-  waitForConversationReportInventory,
-} from "../helpers/conversation-telemetry-parity-capture.js";
+
 import {
   isMainRendererUrl,
   isResourceManagerUrl,
@@ -125,7 +122,6 @@ describe(`${CASE_MARKER}: SSH remote workspace P0`, () => {
     await prepareV4ConversationE2E({ skipProvider: true });
     const initialHosts = await readHostProcesses();
     expect(initialHosts).toHaveLength(1);
-    const telemetryCapture = await beginConversationTelemetryCapture();
 
     replayTunnel = await createReplayTunnel(config);
     const previousReplayBaseURL = process.env.E2E_PROVIDER_RUNTIME_BASE_URL;
@@ -180,43 +176,6 @@ describe(`${CASE_MARKER}: SSH remote workspace P0`, () => {
     await assertTaskRow(taskA, { active: false, running: false });
     await assertTaskRow(taskB, { active: true, running: false });
     expect(await readHostProcesses()).toEqual(initialHosts);
-
-    const reports = await waitForConversationReportInventory(telemetryCapture, {
-      agent_step: 4,
-      message_completion: 4,
-    });
-    for (const task of [taskA, taskB]) {
-      const taskReports = reports.filter((report) => report.talk_id === task.taskId);
-      expect(taskReports.filter((report) => report.element_name === "agent_step")).toHaveLength(2);
-      expect(
-        taskReports.filter((report) => report.element_name === "message_completion"),
-      ).toHaveLength(2);
-      for (const report of taskReports.filter(
-        (candidate) =>
-          candidate.element_name === "agent_step" ||
-          candidate.element_name === "message_completion",
-      )) {
-        expect(report.event_extra_detail).toMatchObject({
-          workspace_kind: "remote",
-          remote_kind: "ssh",
-        });
-      }
-    }
-    process.stdout.write(
-      `[${CASE_MARKER}] telemetry ${JSON.stringify(
-        [taskA, taskB].map((task) => {
-          const taskReports = reports.filter((report) => report.talk_id === task.taskId);
-          return {
-            agentStepCount: taskReports.filter((report) => report.element_name === "agent_step")
-              .length,
-            completionCount: taskReports.filter(
-              (report) => report.element_name === "message_completion",
-            ).length,
-            taskId: task.taskId,
-          };
-        }),
-      )}\n`,
-    );
   });
 });
 
@@ -880,9 +839,7 @@ function readRemoteTabSnapshot(expectedIdentity: string): Promise<RemoteTabSnaps
   }, expectedIdentity);
 }
 
-async function readHostProcesses(): Promise<
-  Array<{ name: string; pid: number }>
-> {
+async function readHostProcesses(): Promise<Array<{ name: string; pid: number }>> {
   await openResourceManager();
   await switchToElectronRendererTarget(isResourceManagerUrl);
   await waitForResourceManagerReady();

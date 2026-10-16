@@ -1,3 +1,4 @@
+import { hasCodingPlanEntitlement } from "@/lib/codingPlanEligibility.js";
 import { useCodingPlanEntryGate } from "@/settings/CodingPlanEntryButton.js";
 /* New task 页闲时任务入口（Figma ⚫️ Z.ai - Zcode / node 5488-3978；spec §5「模板」/ D30-4 第二入口）。
    引导横幅「Use free run Idle-time task」+ Client Scenes 模板卡（预填创建表单，Customize=空白）。
@@ -21,10 +22,7 @@ import { useOffPeakEligibility } from "@/hooks/useOffPeakEligibility.js";
 import { useServices } from "@/hooks/useServices.js";
 import { useSettings } from "@/hooks/useSettingService.js";
 import { logger } from "@/logger.js";
-import {
-  createIdleTimeCodingPlanFunnelContext,
-  resolveCodingPlanEntryPlanStateFromProviderSettings,
-} from "@/lib/codingPlanFunnelTelemetry.js";
+
 import {
   appendLocalCustomizeTemplate,
   materializeOffPeakTemplateDraft,
@@ -64,12 +62,11 @@ export function OffPeakNewTaskEntry({ onOpenAutomations }: OffPeakNewTaskEntryPr
   // 灰度未命中 / 用户已关闭 → 不渲染（D31 曝光门控 + D28 可关闭）。
   if (grayConfig?.enabled !== true || dismissed) return null;
 
-  const entryPlanState = resolveCodingPlanEntryPlanStateFromProviderSettings(providerSettingsView);
   const codingPlanUnavailable =
     grayConfig.codingPlanActive === false ||
     (grayConfig.codingPlanActive === undefined &&
       providerSettingsView !== null &&
-      entryPlanState.entryPlanStatus !== "coding_plan");
+      !hasCodingPlanEntitlement(providerSettingsView));
 
   const showCodingPlanRequiredToast = () => {
     toast(entryGate.label ?? intl.formatMessage({ id: "offPeak.create.codingPlanToast" }), {
@@ -91,19 +88,9 @@ export function OffPeakNewTaskEntry({ onOpenAutomations }: OffPeakNewTaskEntryPr
                 sharedSettings?.providerFamilyDomain === "bigmodel"
                   ? BUILTIN_MODEL_PROVIDER_IDS.bigmodelIndividualCodingPlan
                   : BUILTIN_MODEL_PROVIDER_IDS.zaiIndividualCodingPlan;
-              const eventText = intl.formatMessage({
-                id: "settings.modelProvider.codingPlan.upgrade",
-              });
-              // 埋点缺失原因：闲时入口此前只传 providerId，购买面板无法建立来源明确的漏斗，
-              // OAuth 前后也没有可延续的归因上下文。点击时冻结一次 context，由全局弹窗跨登录持有。
               codingPlanUpgradeDialog?.openCodingPlanUpgrade({
                 providerId,
                 initialAudience: "personal",
-                funnelContext: createIdleTimeCodingPlanFunnelContext({
-                  providerId,
-                  eventText,
-                  entryPlanState,
-                }),
               });
             },
       dismissible: true,
@@ -126,10 +113,6 @@ export function OffPeakNewTaskEntry({ onOpenAutomations }: OffPeakNewTaskEntryPr
     const materialized = materializeOffPeakTemplateDraft(template, locale);
     const draft: OffPeakCreateDraft = {
       ...(template.customize ? {} : { title: materialized.title, prompt: materialized.prompt }),
-      telemetrySource: {
-        eventRegion: "app.session",
-        templateId: template.id,
-      },
     };
     setPendingCreateDraft(draft);
     onOpenAutomations?.();

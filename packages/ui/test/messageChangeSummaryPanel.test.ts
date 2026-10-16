@@ -70,7 +70,7 @@ const mockPlatform = {
   listDockerContainers: async () => [],
   listSSHConfigAliases: async () => [],
   openExternal: () => {},
-  openFeedback: async () => {},
+
   openCommunity: async () => {},
   canOpenCommunity: async () => false,
   openInFileManager: async () => ({ success: true }),
@@ -79,7 +79,7 @@ const mockPlatform = {
   onOAuthCallback: () => () => {},
   notifyRendererReady: () => {},
   showTaskNotification: () => {},
-  reportTelemetryEvent: async () => {},
+
   syncWindowTabs: () => {},
   syncWindowUnreadCount: () => {},
   onFocusTab: () => () => {},

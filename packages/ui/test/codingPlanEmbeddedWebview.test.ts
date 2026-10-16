@@ -12,7 +12,6 @@ import {
 import { CodingPlanWebviewChannels, type CodingPlanPurchaseCompletePayload } from "@zcode/shared";
 import {
   buildCodingPlanEmbeddedWebviewUrl,
-  buildCodingPlanEmbeddedReportContext,
   createCodingPlanAuthInjectionScript,
   createCodingPlanCredentialClearScript,
   createCodingPlanScrollbarHideScript,
@@ -113,77 +112,6 @@ describe("coding plan embedded webview bridge", () => {
     [BUILTIN_MODEL_PROVIDER_IDS.bigmodelTeamCodingPlan, "bigmodel"],
   ] as const)("maps Team Provider %s to website family %s", (providerId, family) => {
     expect(resolveCodingPlanWebsiteProvider(providerId)).toBe(family);
-  });
-
-  it("builds the report context that website telemetry reads from the bridge", () => {
-    expect(
-      buildCodingPlanEmbeddedReportContext({
-        deviceMid: "device-mid-test",
-        userId: "user-1",
-        appVersion: "9.8.7",
-        funnelContext: {
-          purchaseFunnelId: "funnel-app",
-          upgradeSource: "session_quota_alert",
-          eventRegion: "app.session",
-          eventText: "upgrade",
-          entryPlanStatus: "start_plan",
-          entryPlanLevel: "start",
-          entryPlanList: "start_plan__weekend-plan",
-          purchaseAudience: "team",
-          providerFamily: "bigmodel",
-          channel: "MaaS",
-        },
-      }),
-    ).toMatchObject({
-      purchase_funnel_id: "funnel-app",
-      purchase_entry_reporter: "app",
-      upgrade_source: "session_quota_alert",
-      event_region: "app.session",
-      event_text: "upgrade",
-      entry_plan_status: "start_plan",
-      entry_plan_level: "start",
-      purchase_audience: "team",
-      provider_family: "bigmodel",
-      channel: "MaaS",
-      device_mid: "device-mid-test",
-      user_id: "user-1",
-      app_version: "9.8.7",
-    });
-  });
-
-  it("does not claim app entry reporting without a funnel", () => {
-    expect(buildCodingPlanEmbeddedReportContext({})).not.toHaveProperty("purchase_entry_reporter");
-  });
-
-  it("preserves entry ownership in window, storage and ready events on reinjection", () => {
-    const ready = vi.fn();
-    window.addEventListener("zcode-coding-plan-auth-ready", ready);
-    try {
-      const reportContext = {
-        purchase_funnel_id: "funnel-app",
-        purchase_entry_reporter: "app" as const,
-      };
-      const script = createCodingPlanAuthInjectionScript({
-        provider: "bigmodel",
-        credentials: {},
-        reportContext,
-      });
-      window.eval(script);
-      window.eval(script);
-      expect(
-        (window as unknown as { __zcodeReportContext__: unknown }).__zcodeReportContext__,
-      ).toEqual(reportContext);
-      expect(JSON.parse(localStorage.getItem("zcode:coding-plan:report-context") || "{}")).toEqual(
-        reportContext,
-      );
-      expect(ready).toHaveBeenCalledTimes(2);
-      for (const [event] of ready.mock.calls) {
-        expect((event as CustomEvent).detail.reportContext).toEqual(reportContext);
-      }
-    } finally {
-      window.removeEventListener("zcode-coding-plan-auth-ready", ready);
-      window.eval(createCodingPlanCredentialClearScript());
-    }
   });
 
   it("uses localhost in local development and endpoint origin otherwise", () => {
@@ -289,12 +217,6 @@ describe("coding plan embedded webview bridge", () => {
         zaiAccessToken: "zai-business-token",
         zcodeJwtToken: "zcode-jwt",
       },
-      reportContext: {
-        purchase_funnel_id: "funnel-app",
-        device_mid: "device-mid-test",
-        user_id: "user-1",
-        app_version: "9.8.7",
-      },
     });
 
     expect(script).toContain('localStorage.setItem("oauth:zai:access_token"');
@@ -303,11 +225,11 @@ describe("coding plan embedded webview bridge", () => {
     expect(script).toContain('"provider":"zai"');
     expect(script).toContain("window.__zcodeReportContext__");
     expect(script).toContain("zcode:coding-plan:report-context");
-    expect(script).toContain('"purchase_funnel_id":"funnel-app"');
-    expect(script).toContain('"device_mid":"device-mid-test"');
-    expect(script).toContain('"user_id":"user-1"');
-    expect(script).toContain('"app_version":"9.8.7"');
-    expect(script).toContain("reportContext: zcodeReportContext");
+    expect(script).not.toContain("purchase_funnel_id");
+    expect(script).not.toContain("device_mid");
+    expect(script).not.toContain("user_id");
+    expect(script).not.toContain("app_version");
+    expect(script).not.toContain("reportContext: zcodeReportContext");
     expect(script).toContain('document.documentElement.classList.toggle("dark"');
     expect(script).toContain('localStorage.setItem("zcode-theme", zcodeTheme)');
     expect(script).toContain('localStorage.removeItem("oauth:bigmodel:access_token")');
@@ -332,10 +254,7 @@ describe("coding plan embedded webview bridge", () => {
   });
 
   it("loads the zcode JWT credential key for both website providers", () => {
-    expect(getCodingPlanCredentialKeys("zai")).toEqual([
-      "oauth:zai:access_token",
-      "zcodejwttoken",
-    ]);
+    expect(getCodingPlanCredentialKeys("zai")).toEqual(["oauth:zai:access_token", "zcodejwttoken"]);
     expect(getCodingPlanCredentialKeys("bigmodel")).toEqual([
       "oauth:bigmodel:access_token",
       "zcodejwttoken",
@@ -409,7 +328,9 @@ describe("coding plan embedded webview bridge", () => {
     expect(source).not.toContain("useCodingPlanBillingDiscount");
     expect(source).toContain("<EmbeddedWebsiteHeader");
     expect(source).toContain("onClose={() => onOpenChange(false)}");
-    expect(readFileSync(resolve("packages/ui/src/components/EmbeddedWebsiteHeader.tsx"), "utf8")).toContain("common.close");
+    expect(
+      readFileSync(resolve("packages/ui/src/components/EmbeddedWebsiteHeader.tsx"), "utf8"),
+    ).toContain("common.close");
     expect(source).toContain("webviewCleanupRef");
     expect(source).toContain("injectAuthRef");
     expect(source).toContain("createCodingPlanCredentialClearScript");
@@ -437,7 +358,10 @@ describe("coding plan embedded webview bridge", () => {
     expect(source).toContain('addEventListener("did-stop-loading"');
     expect(source).toContain('addEventListener("did-navigate"');
     expect(source).toContain('addEventListener("did-navigate-in-page"');
-    const header = readFileSync(resolve("packages/ui/src/components/EmbeddedWebsiteHeader.tsx"), "utf8");
+    const header = readFileSync(
+      resolve("packages/ui/src/components/EmbeddedWebsiteHeader.tsx"),
+      "utf8",
+    );
     expect(source).toContain("onBack={handleGoBack}");
     expect(source).toContain("onForward={handleGoForward}");
     expect(source).toContain("onReload={handleReloadWebview}");
@@ -519,23 +443,10 @@ describe("coding plan embedded webview bridge", () => {
     expect(source).toContain('addEventListener("ipc-message"');
     expect(source).toContain("CodingPlanWebviewChannels.PurchaseComplete");
     expect(source).toContain("CodingPlanPurchaseCompletePayload");
-    expect(source).toContain("buildCodingPlanEmbeddedReportContext");
-    expect(source).toContain("platform.getDeviceId()");
+
     // provider payload 校验：只接受 zai / bigmodel
     expect(source).toContain('raw?.provider !== "zai"');
     expect(source).toContain('raw?.provider !== "bigmodel"');
-  });
-
-  it("exposes getReportContext on the coding plan webview preload bridge", () => {
-    const source = readFileSync(
-      resolve("packages/desktop/src/preload/codingPlanWebview.ts"),
-      "utf8",
-    );
-
-    expect(source).toContain("getReportContext()");
-    expect(source).toContain("__zcodeReportContext__");
-    expect(source).toContain("REPORT_CONTEXT_VAR");
-    expect(source).toContain("return value as CodingPlanReportContext");
   });
 
   it("exposes webview i18n keys in both locales", () => {

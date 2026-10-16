@@ -33,22 +33,8 @@ const { attachmentState, chatPromptEditorProps, dialogOpenStates, inputClear, ed
     inputClear: vi.fn(),
   }));
 
-function expectedTelemetrySendOptions() {
-  return expect.objectContaining({
-    telemetrySeed: {
-      sendTime: expect.any(Number),
-      extraDetail: {
-        ask_mode: "",
-        model_name: "",
-        model_provider: "glm",
-        agent: "glm",
-        plan_status: "unknown",
-        plan_product_id: "",
-        message_source: "chat",
-        task_trigger: "",
-      },
-    },
-  });
+function expectedSendOptions() {
+  return expect.objectContaining({});
 }
 
 vi.mock("@/components/ui/dialog.js", async () => {
@@ -496,7 +482,7 @@ describe("ConversationComposer prompt history", () => {
     await act(async () => root.unmount());
   });
 
-  it("prewarm snapshot 未到时仍用冻结草稿 config 建立 send telemetry seed", async () => {
+  it("prewarm snapshot 未到时仍可提交草稿且不包含埋点参数", async () => {
     const onSendText = vi.fn(async () => {});
     const { root } = renderComposer(onSendText, {
       mode: "build",
@@ -510,18 +496,11 @@ describe("ConversationComposer prompt history", () => {
       await flushAsyncWork();
     });
 
-    expect(onSendText).toHaveBeenCalledWith(
-      "立即发送草稿",
-      expect.objectContaining({
-        telemetrySeed: expect.objectContaining({
-          extraDetail: expect.objectContaining({
-            ask_mode: "build",
-            model_name: "custom:e2e-deepseek:deepseek-v4-flash",
-            model_provider: "e2e-deepseek",
-          }),
-        }),
-      }),
-    );
+    expect(onSendText).toHaveBeenCalledWith("立即发送草稿", expect.objectContaining({}));
+
+    expect(
+      (onSendText.mock.calls as unknown as Array<[string, unknown]>)[0]?.[1],
+    ).not.toHaveProperty("telemetrySeed");
 
     await act(async () => root.unmount());
   });
@@ -863,7 +842,7 @@ describe("ConversationComposer prompt history", () => {
       await flushAsyncWork();
     });
 
-    expect(onSendText).toHaveBeenCalledWith("你回答 1", expectedTelemetrySendOptions());
+    expect(onSendText).toHaveBeenCalledWith("你回答 1", expectedSendOptions());
     expect(readPromptHistoryEntries("/workspace")).toEqual(["你回答 1"]);
 
     await act(async () => {
@@ -888,7 +867,7 @@ describe("ConversationComposer prompt history", () => {
       await flushAsyncWork();
     });
 
-    expect(onSendText).toHaveBeenCalledWith("失败的消息", expectedTelemetrySendOptions());
+    expect(onSendText).toHaveBeenCalledWith("失败的消息", expectedSendOptions());
     expect(readPromptHistoryEntries("/workspace")).toEqual(["上一条"]);
 
     await act(async () => {
@@ -906,7 +885,7 @@ describe("ConversationComposer prompt history", () => {
       await flushAsyncWork();
     });
 
-    expect(onSendText).toHaveBeenCalledWith("/goal 保留这段输入", expectedTelemetrySendOptions());
+    expect(onSendText).toHaveBeenCalledWith("/goal 保留这段输入", expectedSendOptions());
     expect(inputClear).toHaveBeenCalledOnce();
     expect(attachmentState.adoptSentAttachments).not.toHaveBeenCalled();
     expect(readPromptHistoryEntries("/workspace")).toEqual([]);
@@ -959,7 +938,7 @@ describe("ConversationComposer prompt history", () => {
       await flushAsyncWork();
     });
 
-    expect(onSendText).toHaveBeenNthCalledWith(2, "重复消息", expectedTelemetrySendOptions());
+    expect(onSendText).toHaveBeenNthCalledWith(2, "重复消息", expectedSendOptions());
     expect(readPromptHistoryEntries("/workspace")).toEqual(["重复消息"]);
     expect(setItem).not.toHaveBeenCalled();
 

@@ -22,18 +22,18 @@ RUN if [ "${INSTALL_CA_CERTIFICATES}" = "true" ]; then \
   fi
 RUN corepack enable
 
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
-COPY packages/adapters/package.json packages/adapters/package.json
-COPY packages/bootstrap/package.json packages/bootstrap/package.json
-COPY packages/cli/package.json packages/cli/package.json
-COPY packages/contracts/package.json packages/contracts/package.json
-COPY packages/core/package.json packages/core/package.json
-COPY packages/debug/package.json packages/debug/package.json
-COPY packages/i18n/package.json packages/i18n/package.json
-COPY packages/shared-types/package.json packages/shared-types/package.json
-COPY packages/swift-bridge/package.json packages/swift-bridge/package.json
-COPY packages/tui/package.json packages/tui/package.json
-COPY tools/typescript/package.json tools/typescript/package.json
+# 构建上下文必须为仓库根目录；CLI 复用唯一根锁，不能恢复旧嵌套锁。
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig*.json ./
+COPY apps/zcode-cli apps/zcode-cli
+COPY packages/shared packages/shared
+COPY packages/model-option-map packages/model-option-map
+COPY packages/provider packages/provider
+COPY packages/provider-node packages/provider-node
+COPY packages/zcode-cua packages/zcode-cua
+COPY packages/formal-proof packages/formal-proof
+COPY packages/thinkrail packages/thinkrail
+COPY config/provider config/provider
+COPY scripts scripts
 
 RUN --mount=type=cache,id=zcode-pnpm-store,target=/pnpm/store \
   pnpm config set store-dir /pnpm/store && \
@@ -41,9 +41,9 @@ RUN --mount=type=cache,id=zcode-pnpm-store,target=/pnpm/store \
   pnpm config set fetch-retries 5 && \
   pnpm config set fetch-retry-maxtimeout 120000 && \
   pnpm config set fetch-timeout 300000 && \
-  pnpm install --frozen-lockfile
+  HUSKY=0 pnpm install --frozen-lockfile --filter @zcode/cli... --filter @zcode/thinkrail
 
-COPY . .
-RUN pnpm build
+RUN pnpm --filter @zcode/thinkrail build && pnpm --filter @zcode/cli... build
+WORKDIR /repo/apps/zcode-cli
 
 ENTRYPOINT ["node", "e2e/compact-microcompact/run.mjs"]

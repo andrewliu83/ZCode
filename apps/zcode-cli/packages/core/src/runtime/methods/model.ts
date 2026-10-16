@@ -1,3 +1,4 @@
+import { runtimeModelActorKind } from "../helpers/model-actor-kind.js";
 import { beginLocalTurnPreparation } from "@zcode/contracts";
 import { runWithModelInvocationContext, traceContextToLogContext } from "../deps.js";
 import type { ModelReasoningContentBlock, ModelToolCall, ModelUsage, ToolCallId } from "../deps.js";
@@ -86,7 +87,7 @@ export async function runModelTextRequest(
       // 普通 Agent Step 以前只靠 metadata.querySource 在 Adapter 中反推
       // operation/actor；元数据一旦改名或缺失，就会误记为 tool_internal_model_call。
       // Runtime 已经拥有原始执行语义，应在请求边界直接声明，旧映射只作兼容兜底。
-      actorKind: this.agentTelemetry.actorKind,
+      actorKind: runtimeModelActorKind(this.config.taskType),
       operation: "agent_step" as const,
       operationId: projectedOptions.traceContext.spanId,
       ...(projectedOptions.streamRecovery

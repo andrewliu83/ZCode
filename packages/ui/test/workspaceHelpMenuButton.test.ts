@@ -115,7 +115,7 @@ describe("WorkspaceHelpMenuButton", () => {
     return renderToStaticMarkup(createElement(WorkspaceHelpMenuButton, { isDesktop }));
   }
 
-  it("桌面和 Web 的漏洞入口紧跟问题上报，打开配置地址；缺失时隐藏", async () => {
+  it("桌面和 Web 的漏洞入口紧跟社区入口，打开外部配置地址；缺失时隐藏", async () => {
     for (const desktop of [true, false]) {
       captured.zsrcUrl = "https://security.example.test/report";
       captured.openExternal.mockClear();
@@ -125,7 +125,7 @@ describe("WorkspaceHelpMenuButton", () => {
           (item) => item.label === "workspaceHeader.help.reportVulnerability",
         );
         expect(index).toBeGreaterThan(0);
-        expect(captured.menuItems[index - 1]?.label).toBe("workspaceHeader.help.issueReport");
+        expect(captured.menuItems[index - 1]?.label).toBe("workspaceHeader.help.community");
         await captured.menuItems[index]?.onSelect?.();
         expect(captured.openExternal).toHaveBeenCalledExactlyOnceWith(captured.zsrcUrl);
       } finally {
@@ -256,8 +256,7 @@ describe("WorkspaceHelpMenuButton", () => {
       expect(captured.menuItems.map((item) => item.label)).toEqual([
         "workspaceHeader.help.docs",
         "workspaceHeader.help.community",
-        "workspaceHeader.help.issueReport",
-        "workspaceHeader.help.productRequest",
+
         ...(desktop
           ? [
               "titleBar.menu.help.exportLogs",
@@ -274,12 +273,7 @@ describe("WorkspaceHelpMenuButton", () => {
   it("桌面端与 Web 端都保留原有帮助项", async () => {
     for (const isDesktop of [true, false]) {
       const html = await render(isDesktop);
-      for (const id of [
-        "workspaceHeader.help.issueReport",
-        "workspaceHeader.help.productRequest",
-        "workspaceHeader.help.community",
-        "workspaceHeader.help.docs",
-      ]) {
+      for (const id of ["workspaceHeader.help.community", "workspaceHeader.help.docs"]) {
         expect(html).toContain(id);
       }
     }

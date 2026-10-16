@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ConversationSnapshot } from "@zcode/shared/zcode-protocol-v4";
 import { ZCodeIntlProvider } from "@/i18n/IntlProvider.js";
 import { useZCodeSessionStore } from "@/store/zcodeSessionStore.js";
-import { pendingCommandRegistry, type PendingCommandEntry } from "@/v4/pendingCommandRegistry.js";
+import { type PendingCommandEntry } from "@/v4/pendingCommandRegistry.js";
 import { SessionPane } from "@/v4/SessionPane.js";
 import { useModelSelectionServiceView } from "@/hooks/useModelSelectionView.js";
 
@@ -29,11 +29,6 @@ vi.mock("@/v4/PendingCommandRecoveryBanner.js", () => ({
     recoveryCapture.onResend = props.onResend ?? null;
     return null;
   },
-}));
-
-const sessionCreateCapture = vi.hoisted(() => ({ report: vi.fn(async () => {}) }));
-vi.mock("@/lib/sessionCreateTelemetry.js", () => ({
-  reportSessionCreate: sessionCreateCapture.report,
 }));
 
 const projectionState = vi.hoisted(() => ({
@@ -527,7 +522,6 @@ function renderPane(root: Root, sessionId: string | null): void {
 }
 
 beforeEach(() => {
-  sessionCreateCapture.report.mockClear();
   recoveryCapture.entries = [];
   recoveryCapture.onResend = null;
   prewarmHookInputs.binding = null;
@@ -567,46 +561,8 @@ afterEach(() => {
 });
 
 describe("SessionPane composer continuity", () => {
-  it.each(["group", "project", "session"] as const)(
-    "%s 首发只在 accepted 后报告，打开和后续发送不报告",
-    async (source) => {
-      const store = useZCodeSessionStore.getState();
-      store.startDraft("/workspace", undefined, undefined, { createSource: source });
-      const root = createRoot(installMinimalDom());
-      mountedRoots.push(root);
-      renderPane(root, null);
-      expect(sessionCreateCapture.report).not.toHaveBeenCalled();
-      conversationMock.sendCommand.mockImplementationOnce(async (envelope) => ({
-        commandId: envelope.commandId,
-        revisionAtDecision: 1,
-        status: "accepted" as const,
-        result: { type: "createSession", sessionId: `created-${source}` },
-      }));
-      await act(async () => {
-        await scrollFocus.composerProps?.onSendText("create session");
-      });
-      // Highspeed 统一了首发链路：无附件首发也走「空 createSession + sendText」两段式，
-      // 好让抽卡 admission 拿到真实 sessionId，因此首发 message_id 是 sendText 的 commandId
-      // （calls[1]），不是空创建的 commandId（calls[0]）。埋点不变量仍成立：accepted 后只报一次。
-      const firstSendCalls = conversationMock.sendCommand.mock.calls;
-      expect(firstSendCalls).toHaveLength(2);
-      expect(sessionCreateCapture.report).toHaveBeenCalledExactlyOnceWith(
-        null,
-        expect.objectContaining({
-          sessionId: `created-${source}`,
-          messageId: firstSendCalls[1]![0].commandId,
-          source,
-        }),
-      );
-      renderPane(root, `created-${source}`);
-      await act(async () => {
-        await scrollFocus.composerProps?.onSendText("follow up");
-      });
-      expect(sessionCreateCapture.report).toHaveBeenCalledTimes(1);
-    },
-  );
-
-  it.each(["accepted", "rejected"] as const)("Goal 首发 %s 时只按 ACK 统计", async (status) => {
+  it("无预热首发先创建再发送，后续发送复用原会话", async () => {
+    useZCodeSessionStore.getState().startDraft("/workspace");
     const root = createRoot(installMinimalDom());
     mountedRoots.push(root);
     renderPane(root, null);
@@ -614,116 +570,67 @@ describe("SessionPane composer continuity", () => {
       commandId: envelope.commandId,
       revisionAtDecision: 1,
       status: "accepted" as const,
-      result: { type: "createSession", sessionId: "goal-created" },
+      result: { type: "createSession", sessionId: "created-session" },
     }));
-    conversationMock.sendCommand.mockResolvedValueOnce({
-      commandId: "goal-command",
-      revisionAtDecision: 1,
-      status,
-    } as never);
     await act(async () => {
-      await scrollFocus.composerProps?.onSendText("/goal explain the test");
+      await scrollFocus.composerProps?.onSendText("create session");
     });
-    expect(sessionCreateCapture.report).toHaveBeenCalledTimes(status === "accepted" ? 1 : 0);
-    if (status === "accepted")
-      expect(sessionCreateCapture.report).toHaveBeenCalledWith(
-        null,
-        expect.objectContaining({ messageId: "goal-command" }),
-      );
+    expect(conversationMock.sendCommand.mock.calls.map((call) => call[0].type)).toEqual([
+      "createSession",
+      "sendText",
+    ]);
+    renderPane(root, "created-session");
+    await act(async () => {
+      await scrollFocus.composerProps?.onSendText("follow up");
+    });
+    expect(conversationMock.sendCommand.mock.calls.map((call) => call[0].type)).toEqual([
+      "createSession",
+      "sendText",
+      "sendText",
+    ]);
   });
 
-  it.each(["hello", "/goal explain"])("预热首发 %s 携带实际输入 commandId", async (text) => {
-    prewarmHookInputs.binding = {
-      sessionId: "prewarmed",
-      beginPromotion: () => true,
-      promote: vi.fn(),
-    };
+  it.each(["accepted", "rejected"] as const)(
+    "Goal 首发按 %s ACK 结束实际命令，不创建上报任务",
+    async (status) => {
+      const root = createRoot(installMinimalDom());
+      mountedRoots.push(root);
+      renderPane(root, null);
+      conversationMock.sendCommand.mockImplementationOnce(async (envelope) => ({
+        commandId: envelope.commandId,
+        revisionAtDecision: 1,
+        status: "accepted" as const,
+        result: { type: "createSession", sessionId: "goal-created" },
+      }));
+      conversationMock.sendCommand.mockResolvedValueOnce({
+        commandId: "goal-command",
+        revisionAtDecision: 1,
+        status,
+      } as never);
+      await act(async () => {
+        await scrollFocus.composerProps?.onSendText("/goal explain the test");
+      });
+      expect(conversationMock.sendCommand.mock.calls.map((call) => call[0].type)).toEqual([
+        "createSession",
+        "sendGoalCommand",
+      ]);
+    },
+  );
+
+  it.each(["hello", "/goal explain"])("预热首发 %s 复用会话并只发送一次实际输入", async (text) => {
+    const promote = vi.fn();
+    prewarmHookInputs.binding = { sessionId: "prewarmed", beginPromotion: () => true, promote };
     const root = createRoot(installMinimalDom());
     mountedRoots.push(root);
     renderPane(root, null);
     await act(async () => {
       await scrollFocus.composerProps?.onSendText(text);
     });
-    const commandId = conversationMock.sendCommand.mock.calls[0]![0].commandId;
-    expect(sessionCreateCapture.report).toHaveBeenCalledExactlyOnceWith(
-      null,
-      expect.objectContaining({ sessionId: "prewarmed", messageId: commandId }),
+    expect(conversationMock.sendCommand).toHaveBeenCalledOnce();
+    expect(conversationMock.sendCommand.mock.calls[0]![0].type).toBe(
+      text.startsWith("/goal") ? "sendGoalCommand" : "sendText",
     );
-  });
-
-  it("先空创建再首发使用 sendText ID，不用空创建 ID", async () => {
-    const root = createRoot(installMinimalDom());
-    mountedRoots.push(root);
-    renderPane(root, null);
-    conversationMock.sendCommand.mockImplementationOnce(async (envelope) => ({
-      commandId: envelope.commandId,
-      revisionAtDecision: 1,
-      status: "accepted" as const,
-      result: { type: "createSession", sessionId: "two-phase" },
-    }));
-    await act(async () => {
-      await scrollFocus.composerProps?.onSendText("context", {
-        sharedContextRefs: [{ kind: "shared_context_import", context_id: "context-1" }],
-      });
-    });
-    const calls = conversationMock.sendCommand.mock.calls;
-    expect(calls).toHaveLength(2);
-    expect(calls[0]![0].commandId).not.toBe(calls[1]![0].commandId);
-    expect(sessionCreateCapture.report).toHaveBeenCalledWith(
-      null,
-      expect.objectContaining({ messageId: calls[1]![0].commandId }),
-    );
-  });
-
-  it("用户确认恢复重发使用新 accepted ID，不用旧命令 ID", async () => {
-    recoveryCapture.entries = [
-      {
-        commandId: "old-command",
-        sessionId: null,
-        replay: { kind: "input" },
-      } as PendingCommandEntry,
-    ];
-    const replay = vi.spyOn(pendingCommandRegistry, "consumeReplay").mockReturnValueOnce({
-      type: "createSession",
-      sessionId: null,
-      payload: { workspaceId: "/workspace", firstInput: { text: "retry" } },
-      clientContext: { workspace: { workspacePath: "/workspace" }, sessionCreateSource: "project" },
-    });
-    try {
-      const root = createRoot(installMinimalDom());
-      mountedRoots.push(root);
-      renderPane(root, null);
-      conversationMock.sendCommand.mockImplementationOnce(async (envelope) => ({
-        commandId: envelope.commandId,
-        revisionAtDecision: 1,
-        status: "accepted" as const,
-        result: { type: "createSession", sessionId: "recovered" },
-      }));
-      await act(async () => {
-        recoveryCapture.onResend?.();
-      });
-      const newId = conversationMock.sendCommand.mock.calls[0]![0].commandId;
-      expect(newId).not.toBe("old-command");
-      expect(sessionCreateCapture.report).toHaveBeenCalledWith(
-        null,
-        expect.objectContaining({ sessionId: "recovered", messageId: newId }),
-      );
-    } finally {
-      replay.mockRestore();
-    }
-  });
-
-  it("首发传输失败不产生 session_create", async () => {
-    const root = createRoot(installMinimalDom());
-    mountedRoots.push(root);
-    renderPane(root, null);
-    conversationMock.sendCommand.mockRejectedValueOnce(new Error("transport offline"));
-    await act(async () => {
-      await expect(scrollFocus.composerProps?.onSendText("create session")).rejects.toThrow(
-        "transport offline",
-      );
-    });
-    expect(sessionCreateCapture.report).not.toHaveBeenCalled();
+    expect(promote).toHaveBeenCalledOnce();
   });
 
   it("/goal 沿用点击发送时冻结的 Submission，不在异步准备后回读草稿", async () => {

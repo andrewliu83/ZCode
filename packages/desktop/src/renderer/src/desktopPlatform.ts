@@ -1,4 +1,4 @@
-import { recordArmsCustomEventForE2E } from "@zcode/ui";
+import {} from "@zcode/ui";
 import { DesktopCommandIds, buildLocalMediaPreviewUrl, type IPlatformService } from "@zcode/shared";
 
 import { desktopBrowserPlatformBridge } from "./desktopBrowserPlatformBridge.js";
@@ -46,7 +46,7 @@ export function createDesktopPlatform(options: {
     saveMcpToUserDirectory: (payload) => window.zcode.saveMcpToUserDirectory(payload),
     migrateLegacyCommonMcp: (payload) => window.zcode.migrateLegacyCommonMcp(payload),
     openExternal: (url) => window.zcode.openExternal(url),
-    openFeedback: () => window.zcode.executeDesktopCommand(DesktopCommandIds.OpenFeedback),
+
     openCommunity: () => window.zcode.executeDesktopCommand(DesktopCommandIds.OpenCommunity),
     canOpenCommunity: (locale) => window.zcode.canOpenCommunity(locale),
     openInFileManager: (path) => window.zcode.openInFileManager(path),
@@ -69,21 +69,7 @@ export function createDesktopPlatform(options: {
     onPaymentCallback: (callback) => window.zcode.onPaymentCallback(callback),
     onShareImport: (callback) => window.zcode.onShareImport?.(callback) ?? (() => {}),
     notifyRendererReady: () => window.zcode.notifyRendererReady(),
-    reportTelemetryEvent: (payload) => window.zcode.reportTelemetryEvent(payload),
-    reportArmsCustomEvent: (payload) => {
-      recordArmsCustomEventForE2E(payload);
-      return window.zcode.reportArmsCustomEvent(payload);
-    },
-    getRendererActionTraceConfig: window.zcode.getRendererActionTraceConfig
-      ? () => window.zcode.getRendererActionTraceConfig!()
-      : undefined,
-    onRendererActionTraceConfigChanged: window.zcode.onRendererActionTraceConfigChanged
-      ? (callback) => window.zcode.onRendererActionTraceConfigChanged!(callback)
-      : undefined,
-    reportLocalTtftBatch: (batch) => window.zcode.reportLocalTtftBatch(batch),
-    reportRendererActionTraceBatch: window.zcode.reportRendererActionTraceBatch
-      ? (batch) => window.zcode.reportRendererActionTraceBatch!(batch)
-      : undefined,
+
     reportRendererHeapSample: window.zcode.reportRendererHeapSample
       ? (sample) => window.zcode.reportRendererHeapSample!(sample)
       : undefined,
@@ -134,8 +120,7 @@ export function createDesktopPlatform(options: {
       return window.zcode.onOpenWorkspace?.(handler) ?? (() => {});
     },
     onOpenWorkspacePath: (handler) => window.zcode.onOpenWorkspacePath?.(handler) ?? (() => {}),
-    onOpenFeedbackDialog: (handler) => window.zcode.onOpenFeedbackDialog?.(handler) ?? (() => {}),
-    onOpenTicketsPanel: (handler) => window.zcode.onOpenTicketsPanel?.(handler) ?? (() => {}),
+
     onWindowFullscreenChanged: (handler) => window.zcode.onWindowFullscreenChanged(handler),
     getDesktopWindowChromeState: window.zcode.getDesktopWindowChromeState
       ? () => window.zcode.getDesktopWindowChromeState!()

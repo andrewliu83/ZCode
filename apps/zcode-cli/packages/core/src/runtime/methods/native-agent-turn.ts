@@ -1,3 +1,4 @@
+import { runtimeModelActorKind } from "../helpers/model-actor-kind.js";
 import { refreshContextPolicy } from "./context-policy.js";
 import { createTurnModel } from "./turn-model.js";
 import {
@@ -148,7 +149,7 @@ export async function executeNativeAgentTurn(
       modelInvocationContext: {
         traceContext: trace,
         modelCall: {
-          actorKind: runtime.agentTelemetry.actorKind,
+          actorKind: runtimeModelActorKind(runtime.config.taskType),
           operation: "agent_step",
           operationId: trace.spanId,
         },

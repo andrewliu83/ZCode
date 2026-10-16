@@ -102,11 +102,13 @@ describe("帮助配置 client/configs", () => {
     });
     await command("openCommunity");
     await expectExternal(fixture.remote.community_urls!["zh-CN"]!);
-    expect(server.requests).toHaveLength(1);
-    const query = new URL(server.requests[0]!.url, server.origin).searchParams;
+    // endpoint 切换也会触发 Node API 的配置刷新；这里只统计 Main 帮助解析器的直连请求。
+    const helpRequests = server.requests.filter((request) => !request.headers["x-request-id"]);
+    expect(helpRequests).toHaveLength(1);
+    const query = new URL(helpRequests[0]!.url, server.origin).searchParams;
     expect(query.get("app_version")).toBeTruthy();
     expect(query.get("platform")).toBe(`${process.platform}-${process.arch}`);
-    expect(server.requests[0]!.headers.authorization).toBeUndefined();
+    expect(helpRequests[0]!.headers.authorization).toBeUndefined();
   });
 
   it("HC-02: 英文缺失只回退英文内置值", async () => {
@@ -116,32 +118,24 @@ describe("帮助配置 client/configs", () => {
     await expectExternal(fixture.local.community_urls!["en-US"]!);
   });
 
-  it("HC-03: false 覆盖本地 true 并显示弹窗；新 endpoint 的 true 打开表单", async () => {
-    await command("openFeedback");
-    await $('[role="dialog"]').waitForDisplayed({ timeout: 10000 });
-    await expect($('[role="dialog"]')).toHaveText(expect.stringContaining("Submit feedback"));
-    if (process.platform === "linux") {
-      const overlayTop = await browser.execute(() => {
-        const overlay = document.querySelector<HTMLElement>('[data-slot="dialog-overlay"]');
-        if (!overlay) throw new Error("反馈弹窗遮罩不存在");
-        return overlay.getBoundingClientRect().top;
-      });
-      expect(overlayTop).toBe(0);
-    }
-    await expect(external).not.toHaveBeenCalled();
+  it("HC-03: 帮助菜单和 preload 均不再提供反馈上传与事件上报入口", async () => {
+    await $('button[aria-label="Help"]').click();
+    expect(await $$('//*[@role="menuitem" and contains(.,"feedback")]')).toHaveLength(0);
     await browser.keys("Escape");
-    const other = await startHelpConfigFixture({
-      ...fixture.remote,
-      feedback_use_external_form: true,
+    const removed = await browser.execute(() => {
+      const bridge = (window as unknown as { zcode: Record<string, unknown> }).zcode;
+      return [
+        "reportTelemetryEvent",
+        "reportArmsCustomEvent",
+        "syncTelemetryContext",
+        "reportRendererActionTraceBatch",
+        "getRendererActionTraceConfig",
+        "createFeedbackLogArchive",
+        "openFeedbackDialog",
+      ].filter((key) => typeof bridge[key] !== "undefined");
     });
-    try {
-      await seedSettings({ zcodeEndpointOrigin: other.origin });
-      await command("openFeedback");
-      await expectExternal(fixture.remote.feedback_url!);
-      expect(other.requests).toHaveLength(1);
-    } finally {
-      await other.close();
-    }
+    expect(removed).toEqual([]);
+    await expect(external).not.toHaveBeenCalled();
   });
 
   for (const failure of ["http", "business", "json"] as const) {

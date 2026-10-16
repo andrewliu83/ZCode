@@ -44,7 +44,7 @@ describe("resolveWebCommunityUrl", () => {
   });
 });
 
-it("使用部署 endpoint 的新接口并提取反馈地址", async () => {
+it("使用部署 endpoint 提取社区配置，忽略已移除的反馈地址", async () => {
   const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async () =>
     Response.json({
       code: 0,
@@ -58,10 +58,12 @@ it("使用部署 endpoint 的新接口并提取反馈地址", async () => {
       },
     }),
   );
-  expect(
-    (await resolveWebHelpConfig({ fetchImpl, endpointOrigin: "https://test.example.com" }))
-      .feedback_url,
-  ).toBe("https://remote.feedback");
+  const config = await resolveWebHelpConfig({
+    fetchImpl,
+    endpointOrigin: "https://test.example.com",
+  });
+  expect(config).not.toHaveProperty("feedback_url");
+  expect(config.community_urls).toMatchObject({ "zh-CN": "https://remote.community" });
   expect(new URL(String(fetchImpl.mock.calls[0][0])).searchParams.has("platform")).toBe(false);
   expect(fetchImpl.mock.calls[0][0]).toContain("https://test.example.com/api/v1/client/configs?");
   expect(await resolveWebCommunityUrl("zh-CN", { fetchImpl })).toBe("https://remote.community");

@@ -70,6 +70,36 @@ function stream() {
 }
 
 describe("bundled Claude Agent SDK bridge", () => {
+  it("clears inherited exporters and disables SDK reporting even without a skill budget", async () => {
+    const runQuery = vi.fn((_params: Parameters<typeof query>[0]) => stream());
+    const kernel = new ClaudeAgentKernel({
+      query: runQuery as unknown as typeof query,
+      resolveConnection: () => ({ model: "test", apiKey: "test-key" }),
+      env: {
+        OTEL_EXPORTER_OTLP_ENDPOINT: "https://collector.example.invalid",
+        CLAUDE_CODE_ENABLE_TELEMETRY: "1",
+        DISABLE_TELEMETRY: "0",
+        DISABLE_ERROR_REPORTING: "0",
+      },
+    });
+    await kernel.run(request());
+    const options = runQuery.mock.calls[0]![0].options!;
+    expect(options.env).not.toHaveProperty("OTEL_EXPORTER_OTLP_ENDPOINT");
+    expect(options.env).not.toHaveProperty("CLAUDE_CODE_ENABLE_TELEMETRY");
+    expect(options.env).toMatchObject({
+      DISABLE_TELEMETRY: "1",
+      DISABLE_ERROR_REPORTING: "1",
+      OTEL_SDK_DISABLED: "true",
+    });
+    expect(JSON.parse(String(options.settings)).env).toEqual({
+      CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1",
+      CLAUDE_CODE_ENABLE_TELEMETRY: "0",
+      DISABLE_TELEMETRY: "1",
+      DISABLE_ERROR_REPORTING: "1",
+      OTEL_SDK_DISABLED: "true",
+    });
+  });
+
   it("does not close streaming usage when early tool results interleave before final message_delta", async () => {
     const events: NativeAgentEvent[] = [];
     const state = new ClaudeStreamProjection(

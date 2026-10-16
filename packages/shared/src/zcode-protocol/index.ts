@@ -108,7 +108,6 @@ import {
 } from "../zcode-protocol-legacy-types.js";
 import { zcodeTaskModeSchema } from "../zcode-task-mode-schema.js";
 
-export * from "../localTtft.js";
 export {
   hookExecutionProjectionSchema,
   hookInvocationRowSchema,
@@ -4410,7 +4409,7 @@ export const zcodeStoragePathReadySchema = z
   .strict();
 
 // 桌面本地 TTFT 的严格事实合同；检查点不能替代实际内容帧。
-export { localTtftFactsSchema } from "../localTtft.js";
+
 // 群来源由可信 Host 注入，V4 命令与持久化输入使用相同运行时校验。
 export {
   botIdentitySchema,

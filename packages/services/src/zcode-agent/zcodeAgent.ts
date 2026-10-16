@@ -969,9 +969,8 @@ export interface IZCodeAgentService {
     params: ZCodeAgentWorkspaceTarget,
   ): Event<ConversationTopicWireCandidate>;
   /** workspace 级 live telemetry 事实；connection facade 仅向可信 desktop-continuous 下游暴露。 */
-  onDynamicLocalTtftFacts(
-    params: ZCodeAgentWorkspaceTarget,
-  ): Event<import("@zcode/shared").LocalTtftFacts>;
+
+  /** 本地 turn 活性供远端服务判断空闲；不进入分析或上传出口。 */
   onDynamicConversationTelemetryFact(
     params: ZCodeAgentWorkspaceTarget,
   ): Event<ConversationTelemetryFact>;

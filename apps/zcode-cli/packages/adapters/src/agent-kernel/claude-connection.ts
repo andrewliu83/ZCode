@@ -99,7 +99,19 @@ export function createClaudeEnvironment(
     ANTHROPIC_API_KEY: connection.apiKey,
     ANTHROPIC_MODEL: connection.model,
     CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1",
+    DISABLE_TELEMETRY: "1",
+    DISABLE_ERROR_REPORTING: "1",
   };
+  // 用户已移除遥测能力；外部 shell 配置不能让随包 SDK 重新创建 OTLP 或错误上报出口。
+  for (const key of Object.keys(env)) {
+    if (
+      key.startsWith("OTEL_") ||
+      key.startsWith("ZCODE_TELEMETRY_") ||
+      key === "CLAUDE_CODE_ENABLE_TELEMETRY"
+    )
+      delete env[key];
+  }
+  env.OTEL_SDK_DISABLED = "true";
   // 凭据属于 ZCode 的连接配置，不能借用外部 CLI 的登录或其他供应商环境。
   for (const key of [
     "CLAUDE_CODE_OAUTH_TOKEN",

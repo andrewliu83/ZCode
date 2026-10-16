@@ -349,10 +349,7 @@ function scheduleCrashArchive(
   }
 }
 
-export function initializeCrashCapture(
-  logger: CrashCaptureLogger,
-  remoteCrashReporterEnabled: boolean,
-): CrashCapturePaths {
+export function initializeCrashCapture(logger: CrashCaptureLogger): CrashCapturePaths {
   const paths = resolveCrashCapturePaths();
   mkdirSync(paths.rootDir, { recursive: true });
   mkdirSync(paths.stagingDir, { recursive: true });
@@ -368,7 +365,7 @@ export function initializeCrashCapture(
   }
   logArchivedCrashDumpSummaries(logger, startupArchiveResult, "startup");
 
-  if (!remoteCrashReporterEnabled && !hasStartedLocalCrashReporter) {
+  if (!hasStartedLocalCrashReporter) {
     hasStartedLocalCrashReporter = true;
     crashReporter.start({
       companyName: "",
@@ -381,7 +378,7 @@ export function initializeCrashCapture(
   }
 
   logger.info(
-    `[crash-capture] configured remoteCrashReporterEnabled=${String(remoteCrashReporterEnabled)} stagingDir=${paths.stagingDir} archiveDir=${paths.archiveDir}`,
+    `[crash-capture] local-only stagingDir=${paths.stagingDir} archiveDir=${paths.archiveDir}`,
   );
   return paths;
 }

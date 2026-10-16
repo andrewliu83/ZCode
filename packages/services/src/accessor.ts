@@ -43,7 +43,7 @@ import type { IMemoryService } from "./memory/memory.js";
 import type { IOutputStyleService } from "./output-style/outputStyle.js";
 import type { ISpecGraphService } from "./spec-graph/specGraph.js";
 import type { ISettingsSyncService } from "./settings-sync/settingsSync.js";
-import type { IFeedbackService } from "./feedback/feedback.js";
+
 import type { IPromptAttachmentTransferService } from "./prompt-attachment-transfer/promptAttachmentTransfer.js";
 import type { IWindowControllerService } from "./window-controller/windowController.js";
 import type { IOnboardingRecordService } from "./onboarding/onboardingRecord.js";
@@ -108,6 +108,6 @@ export interface IServiceAccessor {
   /** ThinkRail spec 图的只读视图；面板消费（写入只经 agent 的 spec_* 工具）。 */
   readonly specGraphService: ISpecGraphService;
   readonly settingsSyncService: ISettingsSyncService;
-  readonly feedbackService: IFeedbackService;
+
   readonly promptAttachmentTransferService: IPromptAttachmentTransferService;
 }

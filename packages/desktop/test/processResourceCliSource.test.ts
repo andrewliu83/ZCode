@@ -9,7 +9,7 @@ import {
   recordExternalAppResourceSample,
   resetExternalAppResourceSamples,
 } from "@desktop/main/processResourceExternalAppSamples";
-import type { ProcessRoleSample } from "@desktop/main/processResourceWindowAggregator";
+import type { ProcessRoleSample } from "@desktop/main/processResourceSample";
 import { ZCODE_CLI_RESOURCE_SAMPLE_INTERVAL_MS } from "@zcode/shared";
 
 const CLI_PERIOD_MS = ZCODE_CLI_RESOURCE_SAMPLE_INTERVAL_MS;

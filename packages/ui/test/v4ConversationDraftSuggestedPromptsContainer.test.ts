@@ -66,7 +66,7 @@ vi.mock("@/hooks/useSettingService.js", () => {
 });
 
 vi.mock("@/hooks/usePlatform.js", () => ({
-  usePlatform: () => ({ reportTelemetryEvent }),
+  usePlatform: () => ({}),
 }));
 
 vi.mock("@/lib/zcodeDraftSkillInvalidation.js", () => ({
@@ -412,32 +412,6 @@ describe("ConversationDraftSuggestedPromptsContainer", () => {
       useZCodeSessionStore.getState().getWorkspaceState(workspacePath).composerTextInsertRequest,
     ).toBeNull();
     expect(getPluginReferenceCatalog).not.toHaveBeenCalled();
-  });
-
-  it("reports a Desktop template click before plugin resolution", async () => {
-    const workspacePath = "/tmp/suggested-prompt-desktop-telemetry";
-    render(
-      createElement(ConversationDraftSuggestedPromptsContainer, {
-        workspacePath,
-        isDesktop: true,
-      }),
-    );
-
-    fireEvent.click(await screen.findByRole("button", { name: pluginLabel }));
-
-    expect(reportTelemetryEvent).toHaveBeenCalledOnce();
-    expect(reportTelemetryEvent).toHaveBeenCalledWith(
-      expect.objectContaining({
-        elementName: "prompt_template_ck",
-        eventRegion: "app.session",
-        eventType: "ck",
-        eventText: pluginLabel,
-        eventExtraDetail: {
-          template_id: "create-pdf",
-          template_prompt: pluginPrompt,
-        },
-      }),
-    );
   });
 
   it("does not report template clicks on non-Desktop surfaces", async () => {

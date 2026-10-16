@@ -2,24 +2,9 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AppErrorBoundary, ScopedErrorBoundary } from "@/ErrorBoundary.js";
-import type { ArmsCustomEventPayload } from "@zcode/shared";
-import {
-  clearReactErrorArmsReporterForTest,
-  setReactErrorArmsReporter,
-} from "@/lib/reactErrorArmsTelemetry.js";
-
-function makeReporter() {
-  const calls: ArmsCustomEventPayload[] = [];
-  return {
-    calls,
-    reportArmsCustomEvent: vi.fn(async (payload: ArmsCustomEventPayload) => {
-      calls.push(payload);
-    }),
-  };
-}
+import { logger } from "@/logger.js";
 
 afterEach(() => {
-  clearReactErrorArmsReporterForTest();
   vi.restoreAllMocks();
 });
 
@@ -85,42 +70,23 @@ describe("AppErrorBoundary", () => {
     expect(renderToStaticMarkup(boundary.render())).toBe("");
   });
 
-  it("根级边界 componentDidCatch 会把错误上报到 ARMS（boundary_scope=app）", () => {
-    const reporter = makeReporter();
-    setReactErrorArmsReporter(reporter);
-
-    const boundary = new AppErrorBoundary({
-      children: createElement("div", null, "ok"),
-    });
-    // jsdom 下 setState 在脱离 React 树时会走 noop updater，这里只验证上报副作用。
+  it("根级错误只保留本地错误记录", () => {
+    const error = new Error("root boom");
+    const log = vi.spyOn(logger, "error").mockImplementation(() => {});
+    const boundary = new AppErrorBoundary({ children: createElement("div", null, "ok") });
     boundary.setState = vi.fn();
-
-    boundary.componentDidCatch(new Error("root boom"), {
-      componentStack: "\n    at Root",
-    });
-
-    expect(reporter.calls).toHaveLength(1);
-    expect(reporter.calls[0]!.name).toBe("perf_react_error");
-    expect(reporter.calls[0]!.properties?.error_message).toBe("root boom");
-    expect(reporter.calls[0]!.properties?.boundary_scope).toBe("app");
+    boundary.componentDidCatch(error, { componentStack: "\n    at Root" });
+    expect(log).toHaveBeenCalledOnce();
   });
-
-  it("局部边界 componentDidCatch 会带 scope 上报到 ARMS", () => {
-    const reporter = makeReporter();
-    setReactErrorArmsReporter(reporter);
-
+  it("局部错误保留本地诊断及区域恢复", () => {
+    const log = vi.spyOn(logger, "error").mockImplementation(() => {});
     const boundary = new ScopedErrorBoundary({
       children: createElement("div", null, "ok"),
       scope: "workspace-chat",
     });
     boundary.setState = vi.fn();
-
-    boundary.componentDidCatch(new Error("chat boom"), {
-      componentStack: "\n    at ChatView",
-    });
-
-    expect(reporter.calls).toHaveLength(1);
-    expect(reporter.calls[0]!.properties?.boundary_scope).toBe("workspace-chat");
-    expect(reporter.calls[0]!.properties?.component_stack).toContain("ChatView");
+    boundary.componentDidCatch(new Error("chat boom"), { componentStack: "\n    at ChatView" });
+    expect(log).toHaveBeenCalledOnce();
+    expect(boundary.setState).toHaveBeenCalledOnce();
   });
 });

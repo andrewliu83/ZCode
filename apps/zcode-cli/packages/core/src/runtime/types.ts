@@ -5,8 +5,6 @@ import type { RuntimeInputPresentation, TurnExecutionModelFallbackReason } from 
 import { PermissionService, ToolScheduler } from "./deps.js";
 import type {
   JsonSchema,
-  AgentExecutionTelemetryPort,
-  AgentTelemetryCausation,
   BackgroundResultOriginMeta,
   ContextUsageBreakdownItem,
   CoordinatorResponsePort,
@@ -344,9 +342,7 @@ export interface AgentRuntimeDeps {
   /** Host 的进程策略；只在新 turn 或空闲目录边界读取。 */
   readThinkrailEnabled?: () => boolean;
   readMainSystemPrompt?: (kernel?: import("@zcode/shared").AgentKernelId) => string | undefined;
-  agentTelemetry?: AgentExecutionTelemetryPort;
-  agentTelemetryCausation?: AgentTelemetryCausation;
-  agentTelemetryCausationMode?: "child" | "linked_root";
+
   appVersion?: string;
   eventStore: SessionEventStorePort;
   sessionStore?: SessionStorePort;

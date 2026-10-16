@@ -63,7 +63,10 @@ describe("ensureDesktopDeviceMidSync", () => {
     const dir = makeTempDir();
     writeFileSync(
       join(dir, "telemetry-state.json"),
-      JSON.stringify({ lastDailyActiveDate: "2026-06-23", dailyActiveInFlight: { date: "x", startedAt: 1 } }),
+      JSON.stringify({
+        lastDailyActiveDate: "2026-06-23",
+        dailyActiveInFlight: { date: "x", startedAt: 1 },
+      }),
       "utf-8",
     );
 
@@ -75,15 +78,14 @@ describe("ensureDesktopDeviceMidSync", () => {
     expect(state.dailyActiveInFlight).toEqual({ date: "x", startedAt: 1 });
   });
 
-  it("与数仓侧（telemetryCore）读到同一个 device_mid", async () => {
+  it("与 CLI 和远程账号请求复用同一个本地 deviceMid", async () => {
     const dir = makeTempDir();
     const generated = ensureDesktopDeviceMidSync({
       configDir: dir,
       createId: () => "shared-device-uuid",
     });
 
-    // telemetryCore 用 homeDir 定位 state 文件：{homeDir}/.zcode/v2/telemetry-state.json
-    // 让该路径正好等于本测试的 configDir，验证两侧读同一字段。
+    // CLI 和 Desktop 沿用历史文件位置，升级后账号设备身份保持连续。
     const home = makeTempDir();
     const sharedDir = join(home, ".zcode", "v2");
     mkdirSync(sharedDir, { recursive: true });
@@ -93,28 +95,8 @@ describe("ensureDesktopDeviceMidSync", () => {
       "utf-8",
     );
 
-    const { createTelemetryCore } = await import("@zcode/services/node");
-    const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(new Response(null, { status: 204 }));
-    const service = createTelemetryCore({
-      homeDir: home,
-      fetchImpl: fetchMock,
-      randomUUID: () => "unrelated-event-id",
-    }) as {
-      reportAppLaunch(input: {
-        clientTimezone: string;
-        clientLanguage: string;
-        screenResolution: string;
-      }): Promise<void>;
-    };
-
-    await service.reportAppLaunch({
-      clientTimezone: "Asia/Shanghai",
-      clientLanguage: "zh-CN",
-      screenResolution: "3024x1964",
-    });
-
-    const body = JSON.parse(String(fetchMock.mock.calls[0]![1]!.body));
-    expect(body.device_mid).toBe("shared-device-uuid");
+    const { ensureDeviceMid } = await import("@zcode/services/node");
+    await expect(ensureDeviceMid({ homeDir: home })).resolves.toBe("shared-device-uuid");
   });
 
   it("JSON 损坏时视作缺失，生成新 UUID 不抛", () => {

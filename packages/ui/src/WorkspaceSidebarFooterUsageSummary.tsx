@@ -27,11 +27,7 @@ import {
   isMaxCodingPlanSnapshot,
   resolveSidebarCodingPlanUpgradeFallbackProviderId,
 } from "@/lib/sidebarCodingPlanUpgrade.js";
-import {
-  createCodingPlanFunnelContext,
-  resolveCodingPlanEntryPlanState,
-  type CodingPlanFunnelContext,
-} from "@/lib/codingPlanFunnelTelemetry.js";
+
 import { type SidebarUsageCodingPlanProviderId } from "@/lib/sidebarUsageCodingPlanProviderPreference.js";
 import { useEnterpriseCodingPlanProducts } from "@/settings/model-provider-section/useEnterpriseCodingPlanProducts.js";
 import {
@@ -62,10 +58,7 @@ export function WorkspaceSidebarFooterUsageSummary({
 }: {
   enabled: boolean;
   onUsageClick?: () => void;
-  onUpgradeClick?: (
-    providerId: SidebarUsageCodingPlanProviderId,
-    funnelContext: CodingPlanFunnelContext,
-  ) => void;
+  onUpgradeClick?: (providerId: SidebarUsageCodingPlanProviderId) => void;
   workspaceIdentity?: string;
   workspacePath?: string;
 }) {
@@ -169,16 +162,12 @@ export function useWorkspaceSidebarFooterUsageSummaryState({
     // footer badge 和升级入口都需要识别 Team Plan。
     // Team 项目上下文只在企业 pricing/customerInfo 返回，账号级头像徽标也不能被当前连接方式卡住。
     enabled:
-      enabled &&
-      !providerSourcesLoading &&
-      bigmodelFamilyAllowed &&
-      Boolean(bigmodelTeamProvider),
+      enabled && !providerSourcesLoading && bigmodelFamilyAllowed && Boolean(bigmodelTeamProvider),
     authenticated: true,
     family: "bigmodel",
   });
   const zaiEnterpriseProducts = useEnterpriseCodingPlanProducts({
-    enabled:
-      enabled && !providerSourcesLoading && zaiFamilyAllowed && Boolean(zaiTeamProvider),
+    enabled: enabled && !providerSourcesLoading && zaiFamilyAllowed && Boolean(zaiTeamProvider),
     authenticated: true,
     family: "zai",
   });
@@ -426,10 +415,7 @@ export function WorkspaceSidebarFooterUsageSummaryContent({
 }: {
   state: WorkspaceSidebarFooterUsageSummaryState;
   onUsageClick?: () => void;
-  onUpgradeClick?: (
-    providerId: SidebarUsageCodingPlanProviderId,
-    funnelContext: CodingPlanFunnelContext,
-  ) => void;
+  onUpgradeClick?: (providerId: SidebarUsageCodingPlanProviderId) => void;
 }) {
   const { intl } = useZCodeIntl();
   const entryGate = useCodingPlanEntryGate();
@@ -464,18 +450,7 @@ export function WorkspaceSidebarFooterUsageSummaryContent({
             entryGate.retry?.();
             return;
           }
-          onUpgradeClick?.(
-            upgradeTargetProviderId,
-            createCodingPlanFunnelContext({
-              providerId: upgradeTargetProviderId,
-              upgradeSource: "profile_menu",
-              eventRegion: "app.profile",
-              eventText: intl.formatMessage({ id: upgradeActionLabelId }),
-              entryPlanState: resolveCodingPlanEntryPlanState({
-                snapshot: upgradeProviderSnapshot,
-              }),
-            }),
-          );
+          onUpgradeClick?.(upgradeTargetProviderId);
         }}
       >
         <RocketIcon className="size-4" />

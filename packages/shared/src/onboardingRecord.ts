@@ -6,7 +6,7 @@ import { z } from "zod";
  * 设计约束：
  * - 独立本地 JSON（~/.zcode/v2/onboarding-record.json），不混入 AppSettings；
  * - 以 deviceMid 为设备锚点，entries 支持多个 userId（多人登录）与 null（apikey/未登录）；
- * - uploadState 预留后续上传服务器：pending → uploaded；
+ * - 记录仅保留在本地，不包含上传状态或上传任务；
  * - 跳过是显式答案：某页被跳过时该字段记 null，与"明确选择了值"区分。
  */
 
@@ -22,7 +22,6 @@ export const onboardingRecordEntrySchema = z.object({
   memoryEnabled: z.boolean().nullable(),
   proactiveSuggestionsEnabled: z.boolean().nullable(),
   completedAt: z.string().min(1),
-  uploadState: z.literal("pending"),
 });
 
 export const onboardingDecisionSchema = z.object({
@@ -56,6 +55,6 @@ export type OnboardingRecordEntry = z.infer<typeof onboardingRecordEntrySchema>;
 export type OnboardingDecision = z.infer<typeof onboardingDecisionSchema>;
 
 /** appendRecord 的入参：userId 由服务端（host）补全，调用方不传。 */
-export type OnboardingRecordEntryInput = Omit<OnboardingRecordEntry, "userId" | "uploadState">;
+export type OnboardingRecordEntryInput = Omit<OnboardingRecordEntry, "userId">;
 
 export type OnboardingRecordFile = z.infer<typeof onboardingRecordFileSchema>;

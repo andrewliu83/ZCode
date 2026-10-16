@@ -337,18 +337,24 @@ nodes:
         symbol: "DeleteAllArchivedTasksButton"
       - file: "packages/ui/src/WebRemoteControlTaskIndex.tsx"
         symbol: "WebRemoteControlTaskIndex"
-  - id: "capability.help-client-config"
-    kind: "capability"
-    label: "Community and feedback client configuration"
-    aliases: ["用户社群", "帮助配置", "feedbackUrl"]
-    docs: ["docs/ui/settings-community-link-config.md", "docs/testing/help-client-config-e2e.md"]
+  - id: capability.help-client-config
+    kind: capability
+    label: Community client configuration
+    aliases:
+      - 用户社群
+      - 帮助配置
+      - communityUrl
+    docs:
+      - docs/ui/settings-community-link-config.md
+      - docs/testing/help-client-config-e2e.md
     codeSeeds:
-      - file: "packages/shared/src/helpAppConfig.ts"
-        symbol: "createHelpAppConfigReader"
-      - file: "packages/desktop/src/main/desktopHelpConfig.ts"
-        symbol: "createDesktopHelpConfigReader"
-      - file: "packages/web/src/communityUrl.ts"
-        symbol: "resolveWebHelpConfig"
+      - file: packages/shared/src/helpAppConfig.ts
+        symbol: createHelpAppConfigReader
+      - file: packages/desktop/src/main/desktopHelpConfig.ts
+        symbol: createDesktopHelpConfigReader
+      - file: packages/web/src/communityUrl.ts
+        symbol: resolveWebHelpConfig
+
   - id: "capability.subagent-computer-use-boundary"
     kind: "capability"
     label: "Subagent official Computer Use boundary"
@@ -679,98 +685,34 @@ nodes:
       - "docs/usage-stats-app-coding-plan-split.md"
       - "apps/zcode-cli/docs/design/v2/usage-observability.md"
 
-  - id: "capability.data-observability"
-    kind: "capability"
-    label: "Product telemetry, runtime observability, and monitoring"
+  - id: capability.data-observability
+    kind: capability
+    label: Local diagnostics and model usage
     aliases:
-      - "telemetry"
-      - "ARMS"
-      - "monitoring"
-      - "埋点"
-      - "监控"
-      - "可观测性"
+      - local diagnostics
+      - 本地诊断
+      - 用量统计
+      - 遥测移除
     docs:
-      - "docs/product-capability-map.md"
-      - "docs/monitoring/performance-telemetry-catalog.md"
-      - "docs/monitoring/business-monitoring.md"
-      - "docs/monitoring/event-report-delivery-reliability.md"
-      - "docs/monitoring/zcode-cli-resource-telemetry.md"
-      - "docs/monitoring/process-resource-telemetry.md"
-      - "docs/monitoring/process-resource-telemetry-fixes.md"
-      - "docs/monitoring/zcode-data-size-arms-telemetry.md"
-      - "docs/monitoring/mcp-process-arms-telemetry.md"
-      - "docs/monitoring/remote-usage-telemetry-v1.md"
-      - "docs/trace/model-attempt-error-diagnostics.md"
+      - docs/privacy/remove-reporting.md
+      - docs/usage-stats-app-coding-plan-split.md
+      - docs/trace/model-attempt-error-diagnostics.md
     codeSeeds:
-      - symbol: "sanitizeTelemetryError"
-        file: "apps/zcode-cli/packages/telemetry/src/error-sanitizer.ts"
-      - symbol: "TerminalStreamChunkError"
-        file: "apps/zcode-cli/packages/adapters/src/model/runner-retry.ts"
-      - symbol: "createZCodeProcessResourceSampler"
-        file: "apps/zcode-cli/packages/bootstrap/src/process-resource-sampler.ts"
-      - symbol: "createZCodeAgentService"
-        file: "packages/services/src/zcode-agent/zcodeAgentService.ts"
-      - symbol: "ingestCliResourceSample"
-        file: "packages/desktop/src/main/processResourceCliSource.ts"
-      - symbol: "registerHostServiceResourceTelemetry"
-        file: "packages/desktop/src/host/hostServiceResourceTelemetry.ts"
-      - symbol: "createMcpTelemetryTracker"
-        file: "apps/zcode-cli/packages/adapters/src/mcp/telemetry.ts"
-      - symbol: "reportMcpTelemetryToArms"
-        file: "packages/desktop/src/main/desktopMcpTelemetry.ts"
+      - symbol: registerDesktopResourceDiagnostics
+        file: packages/desktop/src/main/desktopResourceDiagnostics.ts
+      - symbol: registerDesktopNetworkDiagnostics
+        file: packages/desktop/src/main/desktopNetworkDiagnostics.ts
+      - symbol: createZCodeAgentService
+        file: packages/services/src/zcode-agent/zcodeAgentService.ts
+      - symbol: ingestCliResourceSample
+        file: packages/desktop/src/main/processResourceCliSource.ts
     invariants:
-      - "Resource telemetry stays outside desktop continuous and mobile replayable task delivery."
-      - "Host runtime environment identity isolates equal-hardware remote samples; identity is never an ARMS property."
-      - "Only a Server advertising processResourceTelemetry receives resource subscriptions; old Server connections remain usable."
-      - "Bash completion tokens are deduplicated at the main resource outlet across Host processes and omitted from ARMS."
+      - Resource diagnostics and model usage stay local and outside task delivery.
+      - No ARMS, business-event, OTLP exporter, or feedback-upload service is registered.
+      - Runtime identity isolates remote diagnostic samples; login device identity is independent from reporting.
 
-  - id: "capability.renderer-user-action-trace"
-    kind: "capability"
-    label: "Desktop Renderer semantic user action trace"
-    aliases:
-      - "renderer action trace"
-      - "ui_action"
-      - "Renderer 用户操作 Trace"
-    docs:
-      - "docs/trace/desktop-renderer-user-action-trace.md"
-    codeSeeds:
-      - symbol: "USER_ACTION_CATALOG"
-        file: "packages/ui/src/lib/userActionTraceCatalog.ts"
-      - symbol: "RendererUserActionTelemetry"
-        file: "packages/ui/src/lib/userActionTelemetry.ts"
-      - symbol: "createRendererActionTraceBroker"
-        file: "packages/desktop/src/main/rendererActionTraceBroker.ts"
-    invariants:
-      - "Only Electron Desktop Renderer creates ui_action spans; Web/mobile remain no-op."
-      - "Host, CLI, RPC and ZCode Protocol receive no trace changes."
-      - "Product /event/report remains unchanged and separate."
 
-  - id: "capability.zcode-data-size-telemetry"
-    kind: "capability"
-    label: "ZCode local data directory size telemetry"
-    aliases:
-      - "ZCode data size"
-      - "disk usage telemetry"
-      - "ZCode 数据目录占用"
-      - "磁盘占用埋点"
-    docs:
-      - "docs/monitoring/zcode-data-size-arms-telemetry.md"
-      - "docs/monitoring/performance-monitoring.md"
-    codeSeeds:
-      - symbol: "createZCodeDataSizeTelemetryScheduler"
-        file: "packages/desktop/src/main/desktopZCodeDataSizeTelemetry.ts"
-      - symbol: "scanZCodeDataDirectory"
-        file: "packages/desktop/src/main/zcodeDataSizeScanner.ts"
-      - symbol: "scanZCodeDataDirectoryInWorker"
-        file: "packages/desktop/src/main/zcodeDataSizeWorkerClient.ts"
-      - symbol: "writeZCodeDataSizeTelemetryState"
-        file: "packages/desktop/src/main/zcodeDataSizeTelemetryState.ts"
-      - symbol: "getZCodeDataRootDir"
-        file: "packages/services/src/paths.ts"
-    invariants:
-      - "Measure only the local getZCodeDataRootDir logical byte size; never report paths, file names, workspace ids or remote targets."
-      - "Directory traversal runs in a Worker and stays outside conversation continuous/replayable delivery."
-      - "A running ZCode task always blocks collection; successful reports are limited to one per device per 24 hours."
+
 
   - id: "capability.resource-manager"
     kind: "capability"
@@ -1477,20 +1419,6 @@ nodes:
       - "docs/automation-edit-status.md"
       - "docs/testing/automation-workspace-selection-boundary.md"
 
-  - id: "capability.off-peak-telemetry"
-    kind: "capability"
-    label: "Off-Peak creation, upgrade, and automatic-turn telemetry"
-    aliases:
-      - "off_peak_task_create_result"
-      - "off_peak_task_id"
-      - "session_idle_time"
-      - "coding_plan_upgrade_ck"
-      - "闲时任务埋点"
-      - "闲时任务升级埋点"
-    docs:
-      - "docs/monitoring/off-peak-task-telemetry-v1.md"
-      - "docs/off-peak-task/spec.md"
-      - "docs/coding-plan-purchase-funnel-telemetry.md"
 
   - id: "capability.off-peak-model-execution"
     kind: "capability"
@@ -3049,28 +2977,7 @@ nodes:
       - symbol: "AutomationEditView"
         file: "packages/ui/src/settings/AutomationEditView.tsx"
 
-  - id: "state.off-peak-turn-attribution"
-    kind: "state-owner"
-    label: "Turn-scoped Off-Peak telemetry attribution"
-    codeSeeds:
-      - symbol: "backgroundSeedFromTurnStarted"
-        file: "packages/ui/src/v4/telemetry/conversationTelemetrySupervisor.ts"
-      - symbol: "turnStartedFactSchema"
-        file: "packages/shared/src/zcode-protocol-v4/telemetry.ts"
 
-  - id: "state.coding-plan-purchase-funnel"
-    kind: "state-owner"
-    label: "Coding Plan purchase funnel context"
-    codeSeeds:
-      - symbol: "createCodingPlanFunnelContext"
-        file: "packages/ui/src/lib/codingPlanFunnelTelemetry.ts"
-      - symbol: "CodingPlanUpgradeDialogProvider"
-        file: "packages/ui/src/settings/CodingPlanUpgradeDialogProvider.tsx"
-      - symbol: "resolveCodingPlanEntryPlanStateFromProviderSettings"
-        file: "packages/ui/src/lib/codingPlanFunnelTelemetry.ts"
-    invariants:
-      - "Individual and Team entitled account Providers are Coding Plan; Start remains separate. Enabled/model readiness does not imply subscription ownership."
-      - "Provider ID compatibility is confined to event builders; actual Registry, selection, auth, and telemetry source facts remain unchanged."
 
   - id: "state.subagent-form-draft"
     kind: "state-owner"
@@ -3321,21 +3228,7 @@ nodes:
       - symbol: "OAuthService"
         file: "packages/services/src/oauth/oauthService.ts"
 
-  - id: "service.telemetry-core"
-    kind: "service"
-    label: "Telemetry core report pipeline"
-    codeSeeds:
-      - symbol: "createTelemetryCore"
-        file: "packages/services/src/telemetry/telemetryCore.ts"
 
-  - id: "service.cli-agent-telemetry"
-    kind: "service"
-    label: "ZCode CLI agent OTLP telemetry"
-    codeSeeds:
-      - symbol: "AgentExecutionTelemetryRuntime"
-        file: "apps/zcode-cli/packages/telemetry/src/agent-trace-runtime.ts"
-      - symbol: "RuntimeTelemetryFacade"
-        file: "apps/zcode-cli/packages/core/src/telemetry/runtime-telemetry.ts"
 
   - id: "service.off-peak-task"
     kind: "service"
@@ -3780,16 +3673,17 @@ nodes:
       - symbol: "OAuthCredentialRepo"
         file: "packages/services/src/oauth/repo/oauthCredentialRepo.ts"
 
-  - id: "persistence.telemetry-device-mid"
-    kind: "persistence"
-    label: "Host telemetry state deviceMid"
+  - id: persistence.device-identity
+    kind: persistence
+    label: Local account request device identity
     codeSeeds:
-      - symbol: "ensureDesktopDeviceMidSync"
-        file: "packages/desktop/src/main/desktopDeviceMid.ts"
-      - symbol: "createTelemetryCore"
-        file: "packages/services/src/telemetry/telemetryCore.ts"
-      - symbol: "ensureCliDeviceMid"
-        file: "apps/zcode-cli/packages/adapters/src/device/cli-device-mid.ts"
+      - symbol: ensureDesktopDeviceMidSync
+        file: packages/desktop/src/main/desktopDeviceMid.ts
+      - symbol: ensureDeviceMid
+        file: packages/services/src/deviceIdentity.ts
+      - symbol: ensureCliDeviceMid
+        file: apps/zcode-cli/packages/adapters/src/device/cli-device-mid.ts
+
 
   - id: "persistence.native-search-shared-deps"
     kind: "persistence"
@@ -5246,11 +5140,6 @@ edges:
     type: "preserves-identity-isolation"
     rank: "invariant-only"
   - from: "capability.referrals-embedded"
-    to: "state.coding-plan-purchase-funnel"
-    type: "shares-presentation-only"
-    rank: "should-inspect"
-    condition: "Shared navigation header must preserve Coding Plan callbacks and purchase behavior."
-  - from: "capability.referrals-embedded"
     to: "boundary.web-remote-replayable"
     type: "must-not-change-recovery-semantics"
     rank: "invariant-only"
@@ -5979,46 +5868,13 @@ edges:
     to: "capability.data-observability"
     type: "must-remain-separate-from"
     rank: "invariant-only"
-    condition: "Shares the main-process Host/Agent pid registry and CLI MCP tracker, but never alters telemetry sampling cadence or ARMS payloads."
+    condition: "Shares the main-process Host/Agent pid registry and CLI MCP tracker, while keeping local diagnostic sampling independent from resource-manager visibility."
   - from: "capability.resource-manager"
     to: "capability.computer-use"
     type: "conditional-attribution-of"
     rank: "conditional"
     condition: "Official computer-use MCP subtree is attributed to built-in plugins; the macOS CUA Helper launched via LaunchServices is not a Host descendant and is not attributed yet."
 
-  - from: "capability.data-observability"
-    to: "service.telemetry-core"
-    type: "reports-product-events-through"
-    rank: "must-inspect"
-    condition: "Product /report, ARMS/RUM, conversation telemetry, logging, and local App Usage remain distinct channels."
-  - from: "capability.data-observability"
-    to: "service.cli-agent-telemetry"
-    type: "reports-agent-runtime-traces-through"
-    rank: "must-inspect"
-    condition: "CLI agent OTLP traces remain distinct from product /report, ARMS/RUM, local logs, and local App Usage."
-  - from: "capability.renderer-user-action-trace"
-    to: "capability.data-observability"
-    type: "specializes-renderer-observability-within"
-    rank: "must-inspect"
-    condition: "Renderer ui_action uses a compiled catalog and bounded Desktop-only export; it does not reuse or mutate /event/report."
-  - from: "capability.data-observability"
-    to: "capability.zcode-data-size-telemetry"
-    type: "contains"
-    rank: "must-inspect"
-    condition: "Desktop main schedules and reports one bounded local data-size snapshot while a Worker owns directory traversal."
-  - from: "capability.zcode-data-size-telemetry"
-    to: "capability.development-storage-isolation"
-    type: "resolves-local-root-through"
-    rank: "must-inspect"
-    condition: "Default and custom data roots use getZCodeDataRootDir after dataBaseDir bootstrap."
-  - from: "capability.zcode-data-size-telemetry"
-    to: "boundary.desktop-continuous"
-    type: "reports-outside-conversation-delivery"
-    rank: "invariant-only"
-  - from: "capability.zcode-data-size-telemetry"
-    to: "boundary.web-remote-replayable"
-    type: "must-not-report-through"
-    rank: "invariant-only"
   - from: "capability.data-observability"
     to: "service.mcp-session-runtime"
     type: "observes-process-lifecycle-and-resource-of"
@@ -6034,16 +5890,6 @@ edges:
     type: "must-not-report-through"
     rank: "invariant-only"
     condition: "Mobile attachments reuse the existing Agent/MCP runtime and never subscribe to, cache or replay MCP telemetry."
-  - from: "capability.workspace-identity"
-    to: "service.telemetry-core"
-    type: "reports-remote-workspace-lifecycle-through"
-    rank: "must-inspect"
-    condition: "Only terminal remote connect outcomes and low-cardinality remote_kind/connect_trigger/error_category are reported; paths, identities, session ids, and remote target details must never enter telemetry."
-  - from: "capability.remote-delivery"
-    to: "service.telemetry-core"
-    type: "reports-adoption-lifecycle-through"
-    rank: "must-inspect"
-    condition: "Desktop reports entry/start/pair/bridge lifecycle events best effort; Web and relay add no reporter or rpc-frame inspection, and desktop-continuous remains isolated from web-remote-replayable."
 
   - from: "capability.engineering-infrastructure"
     to: "capability.build-release-engineering"
@@ -6662,14 +6508,10 @@ edges:
     type: "reads-device-identity-through"
     rank: "must-inspect"
   - from: "service.cli-device-mid"
-    to: "persistence.telemetry-device-mid"
+    to: "persistence.device-identity"
     type: "reads-creates"
     rank: "must-inspect"
-    condition: "The actual local or remote Agent runtime uses its own ZCODE_DATA_BASE_DIR and shares the deviceMid field with Desktop/telemetry when colocated."
-  - from: "service.telemetry-core"
-    to: "persistence.telemetry-device-mid"
-    type: "shares-device-identity-with"
-    rank: "must-inspect"
+    condition: "The actual local or remote Agent runtime uses its own ZCODE_DATA_BASE_DIR and shares the deviceMid field with Desktop/login when colocated."
   - from: "service.anthropic-request-options"
     to: "boundary.desktop-continuous"
     type: "must-not-change-delivery-semantics"
@@ -7228,11 +7070,6 @@ edges:
     to: "persistence.oauth-login-attribution"
     type: "persists-to"
     rank: "must-inspect"
-  - from: "service.telemetry-core"
-    to: "persistence.oauth-login-attribution"
-    type: "reads-best-effort"
-    rank: "should-inspect"
-    condition: "Attribution credential failures must not block telemetry delivery."
 
   - from: "surface.automation-edit"
     to: "state.conversation-projection"
@@ -7240,34 +7077,11 @@ edges:
     rank: "invariant-only"
     condition: "Opening, editing, or cancelling an automation must not change the current workspace or conversation model."
 
-  - from: "capability.off-peak-telemetry"
-    to: "surface.off-peak-creation"
-    type: "renders-in"
-    rank: "must-inspect"
-  - from: "capability.off-peak-telemetry"
-    to: "surface.off-peak-upgrade"
-    type: "renders-in"
-    rank: "must-inspect"
-  - from: "surface.off-peak-upgrade"
-    to: "state.coding-plan-purchase-funnel"
-    type: "starts-funnel-with"
-    rank: "must-inspect"
-    condition: "Both idle-time Upgrade entries use app.session/session_idle_time and one purchase_funnel_id."
-  - from: "state.coding-plan-purchase-funnel"
-    to: "state.oauth-pending-callback"
-    type: "must-survive-auth-rerender"
-    rank: "must-inspect"
-    condition: "OAuth refresh may update credentials and products but must preserve purchase_funnel_id, upgrade_source, and entry plan state."
-  - from: "state.coding-plan-purchase-funnel"
-    to: "service.telemetry-core"
-    type: "reports-through-existing-route"
-    rank: "must-inspect"
-    condition: "Upgrade, product, cycle, pay, and result events reuse the same funnel context."
   - from: "surface.off-peak-creation"
     to: "service.off-peak-task"
     type: "commits-to"
     rank: "must-inspect"
-    condition: "Creation returns a structured business result before best-effort telemetry and never exposes raw errors."
+    condition: "Creation returns a structured business result and never exposes raw errors."
   - from: "service.off-peak-task"
     to: "capability.off-peak-model-execution"
     type: "dispatches"
@@ -7294,11 +7108,6 @@ edges:
     rank: "must-inspect"
     condition: "Each foreground child creates its own Model with the idle selection and request auth; background children fail closed before requesting a model."
   - from: "capability.off-peak-model-execution"
-    to: "state.off-peak-turn-attribution"
-    type: "attributes-actual-model-through"
-    rank: "must-inspect"
-    condition: "Usage, trace, and errors retain the actual idle providerId/modelId while offPeakTaskId and ticket remain execution dimensions."
-  - from: "capability.off-peak-model-execution"
     to: "boundary.desktop-continuous"
     type: "must-not-change-delivery-semantics"
     rank: "invariant-only"
@@ -7307,24 +7116,6 @@ edges:
     type: "must-not-change-recovery-semantics"
     rank: "invariant-only"
     condition: "The narrow execution context is not replayable session state and does not create a mobile Off-Peak product path."
-  - from: "service.off-peak-task"
-    to: "state.off-peak-turn-attribution"
-    type: "dispatches-with-stable-identity"
-    rank: "must-inspect"
-    condition: "Every automatic turn has a distinct message identity while preserving the stable offPeakTaskId across one or more talks."
-  - from: "state.off-peak-turn-attribution"
-    to: "service.telemetry-core"
-    type: "reports-through-existing-route"
-    rank: "must-inspect"
-    condition: "Desktop uses the active ZCode business telemetry route; Web remains no-op and no reliable outbox is introduced."
-  - from: "state.off-peak-turn-attribution"
-    to: "boundary.desktop-continuous"
-    type: "must-not-change-delivery-semantics"
-    rank: "invariant-only"
-  - from: "state.off-peak-turn-attribution"
-    to: "boundary.web-remote-replayable"
-    type: "must-not-change-recovery-semantics"
-    rank: "invariant-only"
   - from: "state.subagent-form-draft"
     to: "state.conversation-projection"
     type: "must-remain-isolated-from"

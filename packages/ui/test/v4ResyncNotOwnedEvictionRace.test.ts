@@ -26,7 +26,7 @@
 //   2. 若 notOwned 命中的是"仍属当前订阅"的 recovery（如错位 unsubscribe 造成的
 //      ownership 分歧），store 携当前水位 fresh subscribe 自愈，不落 error。
 import { Emitter } from "@zcode/rpc";
-import type { LocalTtftFacts } from "@zcode/shared";
+
 import type {
   ConversationTopicFrame,
   ConversationTopicWireFrame,

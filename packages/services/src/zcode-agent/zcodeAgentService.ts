@@ -14,14 +14,10 @@ import { requestPluginReferenceCatalog } from "#src/zcode-agent/pluginReferenceC
 import { requestSkillReferenceCatalog } from "#src/zcode-agent/skillReferenceCatalogRequest.js";
 import { createMainSystemPromptPolicySync } from "./mainSystemPromptPolicy.js";
 import { zcodeSystemPromptReadResultSchema } from "@zcode/shared";
-import {
-  localTtftFactsSchema,
-  sessionDebugSnapshotSchema,
-  type LocalTtftFacts,
-} from "@zcode/shared";
+import { sessionDebugSnapshotSchema } from "@zcode/shared";
 /* oxlint-disable eslint(max-lines) -- ZCode Protocol transport、通知 wiring 和 app-facing session 方法必须共享同一个 client/emitter 上下文。 */
 import { ensureIndependentPlanSupport } from "./independentPlanSupport.js";
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { createTopicResourceBridge } from "./topicResourceBridge.js";
 import { uploadTopicResourceToClient } from "./topicResourceUpload.js";
 import {
@@ -1284,8 +1280,17 @@ export function createZCodeAgentService(
   >();
   // v4 conversation 帧 fan-out：workspace 级 emitter，renderer 侧按 topic 自行路由。
   const conversationFrameEmitters = new Map<string, Emitter<ConversationTopicWireCandidate>>();
-  const localTtftFactsEmitter = new Emitter<{ workspaceKey: string; facts: LocalTtftFacts }>();
+  // 仅保留 turn 开始／终止供本地 Server 活性判断，不能连接统计上传器。
   const conversationTelemetryFactEmitters = new Map<string, Emitter<ConversationTelemetryFact>>();
+  function getConversationTelemetryFactEmitter(workspace: ZCodeAgentWorkspaceTarget) {
+    const key = resolveWorkspaceKey(workspace);
+    const existing = conversationTelemetryFactEmitters.get(key);
+    if (existing) return existing;
+    const created = new Emitter<ConversationTelemetryFact>();
+    conversationTelemetryFactEmitters.set(key, created);
+    return created;
+  }
+
   const cuaPermissionObservationEmitter = new Emitter<ZCodeAgentCuaPermissionObservation>();
   // sessions-index 帧 fan-out：与 conversation 同一 conversationFrame 通知，按 topic 前缀分流到此 emitter。
   const sessionsIndexFrameEmitters = new Map<string, Emitter<SessionsIndexTopicWireCandidate>>();
@@ -1766,15 +1771,6 @@ export function createZCodeAgentService(
     return created;
   }
 
-  function getConversationTelemetryFactEmitter(workspace: ZCodeAgentWorkspaceTarget) {
-    const key = resolveWorkspaceKey(workspace);
-    const existing = conversationTelemetryFactEmitters.get(key);
-    if (existing) return existing;
-    const created = new Emitter<ConversationTelemetryFact>();
-    conversationTelemetryFactEmitters.set(key, created);
-    return created;
-  }
-
   function getSessionsIndexFrameEmitter(workspace: ZCodeAgentWorkspaceTarget) {
     const key = resolveWorkspaceKey(workspace);
     const existing = sessionsIndexFrameEmitters.get(key);
@@ -2216,37 +2212,21 @@ export function createZCodeAgentService(
           return;
         }
 
-        if (message.method === "state.updated") {
-          const parsed = zcodeStateUpdatedNotificationSchema.safeParse(message.params);
-          if (parsed.success) {
-            handleStateUpdated(workspace, parsed.data);
+        if (message.method === V4_NOTIFICATIONS.conversationTelemetryFact) {
+          const parsed = conversationTelemetryFactSchema.safeParse(message.params);
+          if (
+            parsed.success &&
+            (parsed.data.kind === "turn.started" || parsed.data.kind === "turn.terminal")
+          ) {
+            getConversationTelemetryFactEmitter(workspace).fire(parsed.data);
           }
           return;
         }
 
-        if (message.method === V4_NOTIFICATIONS.localTtftFacts) {
-          const parsed = localTtftFactsSchema.safeParse(message.params);
-          if (parsed.success && !workspace.remoteSessionId && !workspace.workspaceIdentity?.trim())
-            localTtftFactsEmitter.fire({
-              workspaceKey: resolveWorkspaceKey(workspace),
-              facts: parsed.data,
-            });
-          return;
-        }
-        if (message.method === V4_NOTIFICATIONS.conversationTelemetryFact) {
-          const parsed = conversationTelemetryFactSchema.safeParse(message.params);
+        if (message.method === "state.updated") {
+          const parsed = zcodeStateUpdatedNotificationSchema.safeParse(message.params);
           if (parsed.success) {
-            getConversationTelemetryFactEmitter(workspace).fire(parsed.data);
-          } else {
-            // 严格丢弃未知字段，避免 CLI runtime 新字段未经审计穿透到 renderer reporter。
-            logger.warn(undefined, "丢弃无效 v4 conversation telemetry fact", {
-              issues: parsed.error.issues.map((issue) => ({
-                code: issue.code,
-                message: issue.message,
-                path: issue.path.join("."),
-              })),
-              workspaceKey: resolveWorkspaceKey(workspace),
-            });
+            handleStateUpdated(workspace, parsed.data);
           }
           return;
         }
@@ -3549,7 +3529,7 @@ export function createZCodeAgentService(
       emitter.dispose();
     }
     conversationTelemetryFactEmitters.clear();
-    localTtftFactsEmitter.dispose();
+
     cuaPermissionObservationEmitter.dispose();
     for (const emitter of workspaceConfigFrameEmitters.values()) {
       emitter.dispose();
@@ -6087,15 +6067,6 @@ export function createZCodeAgentService(
         });
       }
       let envelope = await buildConversationCommandEnvelope(params);
-      // TTFT 首版只允许可信桌面本地 continuous，手机/远端透传不能开启本地观测。
-      if (
-        commandClientMode !== "desktop-continuous" ||
-        params.workspaceIdentity?.trim() ||
-        params.remoteSessionId
-      ) {
-        const { ttft: _ttft, ...withoutTtft } = envelope;
-        envelope = withoutTtft;
-      }
       if (envelope.type === "sendText" && envelope.sessionId) {
         const sessionId = envelope.sessionId;
         const payload = {
@@ -6498,16 +6469,9 @@ export function createZCodeAgentService(
       return getConversationFrameEmitter(params).event;
     },
 
-    onDynamicLocalTtftFacts(params: ZCodeAgentWorkspaceTarget) {
-      return (listener: (facts: LocalTtftFacts) => void) =>
-        localTtftFactsEmitter.event((event) => {
-          if (event.workspaceKey === resolveWorkspaceKey(params)) listener(event.facts);
-        });
-    },
     onDynamicConversationTelemetryFact(params: ZCodeAgentWorkspaceTarget) {
       return getConversationTelemetryFactEmitter(params).event;
     },
-
     onDynamicCuaPermissionObservation() {
       return cuaPermissionObservationEmitter.event;
     },

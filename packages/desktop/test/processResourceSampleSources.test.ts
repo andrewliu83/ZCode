@@ -5,9 +5,9 @@ import {
   resetProcessResourceSampleSources,
   type ProcessResourceSampleSource,
 } from "@desktop/main/processResourceSampleSources";
-import type { DeviceResourceSample } from "@desktop/main/processResourceSystemWindowAggregator";
+import type { DeviceResourceSample } from "@desktop/main/processResourceSample";
 import { PROCESS_RESOURCE_SAMPLE_SOURCES } from "@desktop/main/processResourceSampleSourceRegistry";
-import type { ProcessRoleSample } from "@desktop/main/processResourceWindowAggregator";
+import type { ProcessRoleSample } from "@desktop/main/processResourceSample";
 
 function fixedSource(id: string, role: ProcessRoleSample["role"]): ProcessResourceSampleSource {
   return {

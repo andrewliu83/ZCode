@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createNodeFileSystemAdapter } from "@zcode/adapters/fs";
 import { createInMemorySessionEventStore, createSqliteSessionStore } from "@zcode/adapters/storage";
 import { type AgentRuntime, PermissionService, defaultPermissionConfig } from "@zcode/core";
-import { createModelTelemetry } from "@zcode/telemetry";
+
 import {
   createRootTraceContext,
   createSessionId,
@@ -106,7 +106,6 @@ describe("script workflow child runtime — actor transcript 直播通道", () =
 
   function makeDeps(): ScriptWorkflowAgentRuntimeDeps {
     return {
-      agentTelemetry: createModelTelemetry().agentExecution,
       appOptions: { env: process.env },
       appVersion: "0.0.0-test",
       configResult: {
@@ -356,7 +355,6 @@ describe("script workflow child runtime — 与父会话共享 model factory", (
 
   function baseDeps(parentRuntime: AgentRuntime): ScriptWorkflowAgentRuntimeDeps {
     return {
-      agentTelemetry: createModelTelemetry().agentExecution,
       appOptions: { env: {} },
       appVersion: "0.0.0-test",
       configResult: {
@@ -428,11 +426,13 @@ describe("script workflow child runtime — 与父会话共享 model factory", (
       {
         eventStore: createInMemorySessionEventStore(),
         fileSystemPort: createNodeFileSystemAdapter(),
-        modelFactory: parentModelFactory as unknown as ScriptWorkflowAgentRuntimeDeps["modelFactory"],
+        modelFactory:
+          parentModelFactory as unknown as ScriptWorkflowAgentRuntimeDeps["modelFactory"],
       },
     );
     const deps = baseDeps(parentRuntime);
-    deps.modelFactory = parentModelFactory as unknown as ScriptWorkflowAgentRuntimeDeps["modelFactory"];
+    deps.modelFactory =
+      parentModelFactory as unknown as ScriptWorkflowAgentRuntimeDeps["modelFactory"];
 
     const actorRuntime = createScriptWorkflowAgentRuntime({
       childSessionId: createSessionId("dwf-actor-model-wiring"),
@@ -506,30 +506,26 @@ describe("script workflow child runtime — 对外交互端口由父 runtime 铸
     tempRoot = await mkdtemp(join(tmpdir(), "zcode-actor-routing-"));
     refreshes = [];
     permissionRequests = [];
-    parentRuntime = createTestAgentRuntime(
-      parentSessionId,
-      { workingDirectory: tempRoot },
-      {
-        eventStore: createInMemorySessionEventStore(),
-        fileSystemPort: createNodeFileSystemAdapter(),
-        // 主 runtime 的端口：每次调用报自己的 sessionId；child 拿到的是父 runtime 派生的实例，
-        // 派生层把 sessionId 改写成父会话（core 的 child-client-ports.ts）。
-        providerRuntimeHeadersPort: {
-          shouldRefreshBeforeModelRequest: () => true,
-          async refreshBeforeModelRequest(input) {
-            refreshes.push({ providerId: input.providerId, routedSessionId: input.sessionId });
-            return { headersApplied: true };
-          },
+    parentRuntime = createTestAgentRuntime(parentSessionId, { workingDirectory: tempRoot }, {
+      eventStore: createInMemorySessionEventStore(),
+      fileSystemPort: createNodeFileSystemAdapter(),
+      // 主 runtime 的端口：每次调用报自己的 sessionId；child 拿到的是父 runtime 派生的实例，
+      // 派生层把 sessionId 改写成父会话（core 的 child-client-ports.ts）。
+      providerRuntimeHeadersPort: {
+        shouldRefreshBeforeModelRequest: () => true,
+        async refreshBeforeModelRequest(input) {
+          refreshes.push({ providerId: input.providerId, routedSessionId: input.sessionId });
+          return { headersApplied: true };
         },
-        modelFactory: routingModelFactory,
-        permissionBroker: {
-          async requestPermission(request) {
-            permissionRequests.push({ sessionId: request.sessionId, origin: request.origin });
-            return { decision: "allow" };
-          },
+      },
+      modelFactory: routingModelFactory,
+      permissionBroker: {
+        async requestPermission(request) {
+          permissionRequests.push({ sessionId: request.sessionId, origin: request.origin });
+          return { decision: "allow" };
         },
-      } as never,
-    );
+      },
+    } as never);
   });
 
   afterEach(async () => {
@@ -552,7 +548,6 @@ describe("script workflow child runtime — 对外交互端口由父 runtime 铸
 
   function makeActorRuntime(): AgentRuntime {
     const deps = {
-      agentTelemetry: createModelTelemetry().agentExecution,
       appOptions: { env: process.env },
       appVersion: "0.0.0-test",
       configResult: {
@@ -708,7 +703,6 @@ describe("script workflow child runtime — 子代理经父 broker 请求权限�
     subagentPermissionMode: WorkflowSubagentPermissionMode | undefined,
   ): AgentRuntime {
     const deps = {
-      agentTelemetry: createModelTelemetry().agentExecution,
       appOptions: { env: process.env, executionPort: { run: execute } },
       appVersion: "0.0.0-test",
       configResult: {
@@ -1024,7 +1018,6 @@ describe("script workflow child runtime — 子代理的 Browser Use", () => {
     >[0]["browserControlPort"],
   ): AgentRuntime {
     const deps = {
-      agentTelemetry: createModelTelemetry().agentExecution,
       appOptions: { env: process.env },
       appVersion: "0.0.0-test",
       configResult: {

@@ -19,7 +19,6 @@ export function TaskListItemContextMenu({
   onMarkTaskAsUnread,
   onOpenInSplitPane,
   openInSplitPaneDisabled,
-  onOpenTaskFeedback,
   onOpenTaskPathInFileManager,
   onCopyWorkspacePath,
   onCopyTaskPath,
@@ -31,10 +30,7 @@ export function TaskListItemContextMenu({
   disabledReason,
 }: {
   intl: {
-    formatMessage: (
-      desc: { id: string },
-      values?: Record<string, string>,
-    ) => string;
+    formatMessage: (desc: { id: string }, values?: Record<string, string>) => string;
   };
   isPinned: boolean;
   fileManagerLabel: string;
@@ -54,7 +50,6 @@ export function TaskListItemContextMenu({
   onOpenInSplitPane?: () => void;
   /** 叶子数达上限且该 session 未在任何 pane 时禁用。 */
   openInSplitPaneDisabled?: boolean;
-  onOpenTaskFeedback: () => void;
   onOpenTaskPathInFileManager: () => void;
   onCopyWorkspacePath: () => void;
   onCopyTaskPath: () => void;
@@ -83,7 +78,6 @@ export function TaskListItemContextMenu({
         onMarkTaskAsUnread={onMarkTaskAsUnread}
         onOpenInSplitPane={onOpenInSplitPane}
         openInSplitPaneDisabled={openInSplitPaneDisabled}
-        onOpenTaskFeedback={onOpenTaskFeedback}
         onOpenTaskPathInFileManager={onOpenTaskPathInFileManager}
         onCopyWorkspacePath={onCopyWorkspacePath}
         onCopyTaskPath={onCopyTaskPath}

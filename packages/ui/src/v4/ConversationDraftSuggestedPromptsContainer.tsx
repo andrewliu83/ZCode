@@ -10,7 +10,15 @@ import {
   unregisterRecommendedPromptPane,
 } from "@/v4/featureSuggestedPromptRotation.js";
 /* oxlint-disable eslint(max-lines) -- 推荐 Prompt 同时收口 latest-wins、取消、可信解析、操作反馈和 Composer 收尾，拆分会打散这条状态机。 */
-import { useCallback, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { ZCODE_OFFICIAL_PLUGIN_MARKETPLACE_ID } from "@zcode/shared";
 import { cn } from "@/components/lib/utils.js";
 import { toast } from "@/components/ui/toast.js";
@@ -19,7 +27,7 @@ import { useWorkspaceServicesResolution } from "@/hooks/useWorkspaceServices.js"
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
 import { logger } from "@/logger.js";
 import type { AutomationsNavigationTab } from "@/lib/taskNavigationHistory.js";
-import { reportPromptTemplateClick } from "@/lib/promptTemplateTelemetry.js";
+
 import { invalidateDeferredDraftSessionForSkillChange } from "@/lib/zcodeDraftSkillInvalidation.js";
 import { useZCodeSessionStore } from "@/store/zcodeSessionStore.js";
 import {
@@ -524,16 +532,7 @@ export function ConversationDraftSuggestedPromptsContainer({
     async (item: DraftSuggestedPromptItem) => {
       const requestVersion = requestVersionRef.current + 1;
       requestVersionRef.current = requestVersion;
-      const templateName = resolveDraftSuggestedPromptText(item.label, locale);
       const prompt = resolveDraftSuggestedPromptText(item.prompt, locale);
-      if (isDesktop) {
-        // 埋点是旁路观测，必须早于导航或异步插件解析，且不能阻塞既有交互。
-        void reportPromptTemplateClick(platform, {
-          templateId: item.id,
-          templateName,
-          templatePrompt: prompt,
-        });
-      }
       if (
         onOpenAutomations &&
         item.actions?.includes(DRAFT_SUGGESTED_PROMPT_NAVIGATE_AUTOMATIONS_OFFPEAK)

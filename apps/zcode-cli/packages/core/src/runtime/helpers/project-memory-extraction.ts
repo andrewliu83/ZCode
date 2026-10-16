@@ -114,16 +114,7 @@ async function executeProjectMemoryExtraction(
     snapshot: ProjectMemoryExtractionSnapshot;
   },
 ) {
-  const telemetry = runtime.agentTelemetry.detached({
-    causation: input.snapshot.causation,
-    executionKind: "background",
-    operation: "project_memory_extract",
-    targetKind: "project_memory",
-    traceContext: input.snapshot.traceContext,
-    trigger: "scheduler",
-  });
-
-  return telemetry.run(async () => {
+  return (async () => {
     try {
       const manifest = await scanMemoryManifest({
         fileSystem: runtime.fileSystemPort!,
@@ -131,7 +122,6 @@ async function executeProjectMemoryExtraction(
         signal: input.abortSignal,
       });
       if (input.abortSignal.aborted) {
-        telemetry.finishCancelled("abort_signal");
         return "aborted" as const;
       }
       const prompt = buildMemoryExtractionPrompt({
@@ -160,17 +150,16 @@ async function executeProjectMemoryExtraction(
         workingDirectory: input.snapshot.workingDirectory,
         workspaceRoot: input.snapshot.workspaceRoot,
       });
-      telemetry.finishCompleted();
+
       return "success" as const;
     } catch (error) {
       if (input.abortSignal.aborted || isAbortError(error)) {
-        telemetry.finishCancelled("abort_signal");
         return "aborted" as const;
       }
-      telemetry.finishFailed("execute", "internal", error);
+
       return "error" as const;
     }
-  });
+  })();
 }
 
 function isAbortError(error: unknown): boolean {

@@ -36,8 +36,7 @@ import {
 } from "@/quickpick/taskFindNavigationState.js";
 import { createQuickPickCommands } from "@/quickpick/quickPickCommands.js";
 import { CommandCenterDialog } from "@/command-center/CommandCenterDialog.js";
-import { FeedbackHost } from "@/feedback/FeedbackHost.js";
-import { useFeedbackStore } from "@/feedback/feedbackStore.js";
+
 import {
   resolveQuickPickConversationNavigation,
   selectQuickPickConversationTaskIds,
@@ -95,7 +94,7 @@ const EMPTY_REMOTE_WORKSPACE_SESSIONS: NonNullable<AppProps["remoteWorkspaceSess
 
 export function App({
   services,
-  baseFeedbackService,
+
   onConnectRemote,
   onSelectRemoteProject,
   onCancelRemoteProject,
@@ -683,27 +682,9 @@ export function App({
   const handleOpenQuickPick = useCallback(() => {
     setIsQuickPickOpen((open) => !open);
   }, []);
-  const openFeedbackSubmit = useFeedbackStore((state) => state.openSubmit);
-  const openFeedbackTickets = useFeedbackStore((state) => state.openTickets);
-  const isLoggedIn = Boolean(user);
-  const handleOpenFeedback = useCallback(() => {
-    void platform.openFeedback();
-  }, [platform]);
 
-  useEffect(() => {
-    // 内置反馈中心合并了"提交反馈 / 我的反馈"两个 Tab，
-    // 老的 OpenTicketsPanel IPC 仍然兼容（直接打开列表），未来如果还需要单独入口可以复用。
-    const disposeFeedbackDialog = platform.onOpenFeedbackDialog?.(() => {
-      openFeedbackSubmit();
-    });
-    const disposeTicketsPanel = platform.onOpenTicketsPanel?.(() => {
-      openFeedbackTickets();
-    });
-    return () => {
-      disposeFeedbackDialog?.();
-      disposeTicketsPanel?.();
-    };
-  }, [openFeedbackSubmit, openFeedbackTickets, platform]);
+  const isLoggedIn = Boolean(user);
+
   const handleOpenCommunity = useCallback(() => platform.openCommunity(), [platform]);
   const handleOpenProductDocs = useCallback(() => {
     platform.openExternal(ZCODE_PRODUCT_DOCS_URL);
@@ -1092,7 +1073,7 @@ export function App({
             openSettingsTab();
           },
           switchTheme: handleSwitchTheme,
-          openFeedback: handleOpenFeedback,
+
           openCommunity: handleOpenCommunity,
           openProductDocs: handleOpenProductDocs,
           login: onLogin,
@@ -1110,7 +1091,7 @@ export function App({
       isOfficeMode,
       canOpenCommunityFromQuickPick,
       handleOpenCommunity,
-      handleOpenFeedback,
+
       handleOpenProductDocs,
       handleOpenSettingsSection,
       handleSwitchTheme,
@@ -1188,9 +1169,6 @@ export function App({
         onSearchResultHighlightRequest={handleSearchResultHighlightRequest}
         onOpenCodeViewer={handleOpenCodeViewerIfWritable}
       />
-      {/* Bugfix: 反馈是应用级能力，必须固定走本机 base host；SSH session 连接中或断开时，
-          workspace-scoped services 会切成断连代理，不能让反馈提交跟随远程 session 失效。 */}
-      <FeedbackHost feedbackService={baseFeedbackService} platform={platform} />
       <PluginUiWorkspaceProvider onOpenSidePane={handleOpenPluginUi}>
         <WorkspaceShellLayout
           services={services}

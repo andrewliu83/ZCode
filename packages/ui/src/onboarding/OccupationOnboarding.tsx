@@ -1,4 +1,3 @@
-import { useOnboardingTelemetry } from "@/onboarding/useOnboardingTelemetry.js";
 import { OnboardingHeader } from "@/onboarding/OnboardingHeader.js";
 import { OccupationOnboardingVisual } from "@/onboarding/OccupationOnboardingVisual.js";
 import { occupations, type OccupationValue } from "@/onboarding/occupationOptions.js";
@@ -82,22 +81,10 @@ export function OccupationOnboarding({
     update,
   });
   const onboardingVisible = requested || (needsOnboarding === true && !dismissed);
-  const captureEnd = useOnboardingTelemetry({
-    platform,
-    visible:
-      Boolean(settings) &&
-      onboardingVisible &&
-      (requested || needsOnboarding !== null || Boolean(settings?.onboardingOccupation)),
-    step,
-    occupation,
-    mode,
-    memory,
-    suggestions,
-    migration,
-  });
+
   const closeOnboarding = useCallback(() => {
     if (savingRef.current) return;
-    captureEnd("close", intl.formatMessage({ id: "occupationOnboarding.close" }))();
+
     setStep(0);
     setDismissed(true);
     setRequested(false);
@@ -106,7 +93,7 @@ export function OccupationOnboarding({
         logger.warn("[occupation-onboarding] 写入关闭决策失败", { error: String(cause) });
       });
     }
-  }, [captureEnd, intl, onboardingRecord, platform, setRequested]);
+  }, [intl, onboardingRecord, platform, setRequested]);
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (
@@ -220,7 +207,7 @@ export function OccupationOnboarding({
   const save = async (skip = false) => {
     if (savingRef.current) return;
     savingRef.current = true;
-    const reportEnd = captureEnd(skip ? "skip" : "start", t(skip ? "skip" : "start"));
+
     setSaving(true);
     setError(false);
     try {
@@ -233,8 +220,8 @@ export function OccupationOnboarding({
         memoryEnabled: skip ? false : memory,
         proactiveSuggestionsEnabled: !skip && mode === "office" && suggestions,
       });
-      reportEnd();
-      // 保存成功就是本次引导的终点；本地记录失败不应留下可再次上报的引导页面。
+
+      // 保存成功就是本次引导的终点；本地记录失败不应让引导页面反复出现。
       setStep(0);
       setDismissed(true);
       setRequested(false);
@@ -242,7 +229,7 @@ export function OccupationOnboarding({
       logger.info("[occupation-onboarding] 偏好保存完成", { interfaceMode: mode });
       if (onboardingRecord) {
         try {
-          // 追加本地引导记录（userId 由 host 按登录态补全），后续上传服务器。
+          // 追加本地引导记录，后续仅用于本机引导恢复。
           // appendRecord 走 RPC，channel 缺失时会挂起导致保存按钮永远转圈，加超时保护。
           // 跳过是显式答案：该页被跳过时记 null（occupation 在第 1 步跳过时已是 null，
           // mode 在第 2 步跳过时置 null，偏好页整体跳过时两个布尔记 null）。

@@ -7,7 +7,6 @@ import {
 import { XIcon } from "lucide-react";
 import { Button } from "@/components/ui/button.js";
 import { useZCodeIntl } from "@/i18n/IntlProvider.js";
-import { runUserAction } from "@/lib/userActionTelemetry.js";
 
 /** 跨 workspace pane 的归属徽标（未来跨 workspace session 的多路径徽标在此扩展）。 */
 export interface PaneWorkspaceBadge {
@@ -36,21 +35,13 @@ export interface ConversationHeaderProps {
  * pane chrome：不占布局高度，只在右上角悬浮拆分/关闭入口。
  * 保留 title data 节点，供 E2E 读取投影但不恢复旧横条。
  */
-function ConversationHeaderImpl({
-  title,
-  onClosePane,
-  workspaceBadge,
-}: ConversationHeaderProps) {
+function ConversationHeaderImpl({ title, onClosePane, workspaceBadge }: ConversationHeaderProps) {
   const { intl } = useZCodeIntl();
   const hasFloatingActions = Boolean(workspaceBadge) || Boolean(onClosePane);
 
   return (
     <>
-      <span
-        data-testid={TID_V4_SESSION_TITLE}
-        data-title={title}
-        className="sr-only"
-      />
+      <span data-testid={TID_V4_SESSION_TITLE} data-title={title} className="sr-only" />
       {hasFloatingActions ? (
         <div
           data-v4-pane-actions="floating"
@@ -65,9 +56,7 @@ function ConversationHeaderImpl({
             >
               <span className="truncate">{workspaceBadge.label}</span>
               {workspaceBadge.remote ? (
-                <span className="shrink-0">
-                  {intl.formatMessage({ id: "v4Pane.remote" })}
-                </span>
+                <span className="shrink-0">{intl.formatMessage({ id: "v4Pane.remote" })}</span>
               ) : null}
             </span>
           ) : null}
@@ -106,14 +95,7 @@ function ConversationHeaderImpl({
               variant="outline"
               size="icon-md"
               data-testid={TID_V4_SPLIT_CLOSE}
-              onClick={() =>
-                runUserAction({
-                  input: { featureId: "task.layout", action: "close_pane", trigger: "button" },
-                  operation: onClosePane,
-                  completed: { resultSource: "local_commit" },
-                  failureStage: "pane_close",
-                })
-              }
+              onClick={() => onClosePane()}
               title={intl.formatMessage({ id: "v4Pane.closePaneTitle" })}
               aria-label={intl.formatMessage({ id: "v4Pane.closePane" })}
               className="pointer-events-auto bg-[var(--color-popover)] shadow-md"

@@ -72,9 +72,7 @@ describe("onboardingRecordService", () => {
     expect(await service.getRecords()).toMatchObject({
       version: 2,
       entries: [],
-      decisions: [
-        { userId: "u1", status: "existing_local_user", reason: "existing_local_task" },
-      ],
+      decisions: [{ userId: "u1", status: "existing_local_user", reason: "existing_local_task" }],
     });
   });
 
@@ -145,7 +143,7 @@ describe("onboardingRecordService", () => {
     );
   });
 
-  it("append 由服务补全 userId 并默认 uploadState=pending", async () => {
+  it("append 补全 userId 且仅保存本地记录", async () => {
     const home = mkdtempSync(join(tmpdir(), "zcode-onboarding-home-"));
     tempHomes.push(home);
     const service = await createServiceInHome(home, "u1");
@@ -153,7 +151,7 @@ describe("onboardingRecordService", () => {
 
     const file = JSON.parse(readFileSync(recordFilePath(home), "utf-8"));
     expect(file.entries[0].userId).toBe("u1");
-    expect(file.entries[0].uploadState).toBe("pending");
+    expect(file.entries[0]).not.toHaveProperty("uploadState");
   });
 
   it("当前用户已有记录时不再触发；其他用户的记录不满足当前用户", async () => {

@@ -61,7 +61,7 @@ export const MAX_NETWORK_INTERFACE_BUCKETS_PER_TRANSPORT = 128;
 const NETWORK_ERROR_KINDS = new Set<string>(NETWORK_ERROR_KIND_ORDER);
 
 /**
- * 只有仓内已知、低基数的 API 路由段可以进入 ARMS；其他段统一视为动态标识。
+ * 本地诊断也只保留已知、低基数的 API 路由段；其他段统一视为动态标识。
  * 新增静态接口时必须显式登记，避免把用户 slug、邮箱或路径片段误当作安全路由。
  */
 const STATIC_HTTP_PATH_SEGMENTS = new Set([
@@ -255,7 +255,7 @@ function normalizeHttpPathSegment(segment: string): string {
   if (!decoded || STATIC_HTTP_PATH_SEGMENTS.has(decoded)) {
     return decoded;
   }
-  // Bug 根因：旧实现默认保留未命中规则的 segment，邮箱和短用户 slug 会直接进入 ARMS。
+  // Bug 根因：保留未知 segment 会使邮箱或用户 slug 进入本地诊断，必须归一化。
   return ":id";
 }
 

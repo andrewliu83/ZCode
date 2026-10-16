@@ -73,13 +73,19 @@ export class ClaudeAgentKernel implements NativeAgentKernelPort {
     if (request.skillListingPolicy)
       env.SLASH_COMMAND_TOOL_CHAR_BUDGET = String(request.skillListingPolicy.characterBudget);
     const nativeOptions: Options = {
-      ...(request.skillListingPolicy
-        ? {
-            settings: JSON.stringify({
-              skillListingMaxDescChars: request.skillListingPolicy.maxDescriptionChars,
-            }),
-          }
-        : {}),
+      // 应用策略优先于项目设置；旧项目环境也不能重新开启 SDK 的上报。
+      settings: JSON.stringify({
+        ...(request.skillListingPolicy
+          ? { skillListingMaxDescChars: request.skillListingPolicy.maxDescriptionChars }
+          : {}),
+        env: {
+          CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1",
+          CLAUDE_CODE_ENABLE_TELEMETRY: "0",
+          DISABLE_TELEMETRY: "1",
+          DISABLE_ERROR_REPORTING: "1",
+          OTEL_SDK_DISABLED: "true",
+        },
+      }),
       cwd: request.cwd,
       model: connection.model,
       env,

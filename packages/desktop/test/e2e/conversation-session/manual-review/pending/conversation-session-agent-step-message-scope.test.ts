@@ -216,9 +216,7 @@ async function prepareArmsCapture(): Promise<FinalArmsCaptureMode> {
           clear(): Promise<void>;
           configure(request: { suppressedEventNames: string[] }): Promise<void>;
         };
-        zcode?: {
-          reportArmsCustomEvent?: (payload: ArmsCustomEventPayload) => Promise<unknown>;
-        };
+        zcode?: {};
       };
       const host = window as DebugWindow;
       host.__zcodeArmsCustomEventsE2E = [];

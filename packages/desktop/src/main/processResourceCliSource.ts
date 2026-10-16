@@ -3,7 +3,7 @@
  *
  * 每个 CLI 进程每 60 秒自采一次，经协议通知交给 services（在那里按所属进程管理器打上 lane），
  * 再由 Host 转发到 main。这里按「角色 × runtime_surface × 进程实例」保留每个进程最近一次读数，
- * 每 60 秒把当前存活进程的合计交给窗口聚合器：
+ * 每 60 秒把当前存活进程的合计交给本地诊断：
  *
  * - 为什么不是每个 10 秒 tick 交一次：CLI 是 60 秒口径，按 tick 交会把同一份读数重复计入统计量，
  *   `sample_count` 也会从预期的 5 变成 30。
@@ -16,7 +16,7 @@
  * - 正常退出走 `flushPending`：把已经收到、还没赶上 60 秒交付点的读数补交给窗口
  *   （只搬已有事实，不做新采样）。
  *
- * 隐私边界：`instanceToken` 只在本模块内存里用于区分进程，不进任何 ARMS 属性；样本不含 pid。
+ * 隐私边界：`instanceToken` 只在本模块内存里用于区分进程，不写入日志；样本不含 pid。
  */
 
 import {
@@ -36,7 +36,7 @@ import {
   processResourceHardwareKey,
   type ProcessResourceHardwareOverride,
   type ProcessRoleSample,
-} from "./processResourceWindowAggregator.js";
+} from "./processResourceSample.js";
 import { roundMetric } from "./resourceMetricsStats.js";
 
 /**

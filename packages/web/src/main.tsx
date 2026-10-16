@@ -1,4 +1,3 @@
-import { sessionCreateTelemetrySchema, type RendererTelemetryEventPayload } from "@zcode/shared";
 /* eslint-disable max-lines -- Web 远程控制启动、错误页和 web 平台桥接暂时集中在入口编排。 */
 import { createRoot } from "react-dom/client";
 import {
@@ -30,7 +29,7 @@ import { WebLoginPage } from "./auth/WebLoginPage.js";
 import { createWebAuthService } from "./auth/webAuthService.js";
 import { WEB_ZAI_OAUTH_CONFIG, resolveWebAuthDevReturnTo } from "./auth/webZaiOAuthConfig.js";
 import { parseOAuthState, resolveSafeAppReturnTo } from "./auth/oauthStateCodec.js";
-import { resolveWebCommunityUrl, resolveWebHelpConfig } from "./communityUrl.js";
+import { resolveWebCommunityUrl } from "./communityUrl.js";
 import {
   ConversationShareLandingLoader,
   ConversationShareLandingStatus,
@@ -215,10 +214,6 @@ function resolveWebThemePreference(defaultTheme: Theme = WEB_REMOTE_CONTROL_DEFA
   document.documentElement.classList.toggle("theme-zai-dark", appliedTheme === "zai-dark");
 }
 
-async function resolveFeedbackUrl(): Promise<string | undefined> {
-  return (await resolveWebHelpConfig()).feedback_url;
-}
-
 // 浏览器标签页 / 手机切后台时禁用 CSS 动画，避免 DocumentTimeline 持有已卸载的 DOM 子树。
 installDocumentHiddenMotionPause();
 const root = createRoot(document.getElementById("root")!);
@@ -243,7 +238,6 @@ interface WebRemoteControlProxyOptions {
 }
 
 interface WebRemoteControlPlatformProxy {
-  reportTelemetryEvent?: (event: RendererTelemetryEventPayload) => void;
   requestPlatformMethod<K extends WebRemoteControlPlatformMethod>(
     method: K,
     args?: WebRemoteControlPlatformMethodArgsMap[K],
@@ -648,7 +642,6 @@ function createWebPlatform(options?: {
       _context?: {
         workspacePath: string;
         workspaceIdentity?: string;
-        connectTrigger?: import("@zcode/shared").RemoteWorkspaceConnectTrigger;
       },
     ) {
       if (webRemoteControlProxy || platformProxy) {
@@ -743,13 +736,7 @@ function createWebPlatform(options?: {
     openExternal: (url) => {
       window.open(url, "_blank", "noopener,noreferrer");
     },
-    openFeedback: async () => {
-      const feedbackUrl = await resolveFeedbackUrl();
-      if (!feedbackUrl) {
-        return;
-      }
-      window.open(feedbackUrl, "_blank", "noopener,noreferrer");
-    },
+
     openCommunity: async () => {
       const locale = document.documentElement.lang === "en-US" ? "en-US" : "zh-CN";
       const communityUrl = await resolveWebCommunityUrl(locale);
@@ -770,12 +757,7 @@ function createWebPlatform(options?: {
     onPaymentCallback: () => () => {},
     onShareImport: () => () => {},
     notifyRendererReady: () => {},
-    reportTelemetryEvent: async (event) => {
-      // 手机只开放 session_create；不能把原有 Desktop conversation 事件一并启用。
-      const parsed = sessionCreateTelemetrySchema.safeParse(event);
-      if (parsed.success) platformProxy?.reportTelemetryEvent?.(parsed.data);
-    },
-    reportArmsCustomEvent: () => Promise.resolve(),
+
     showTaskNotification: (payload) => {
       if (document.hasFocus()) {
         return;
@@ -1328,13 +1310,11 @@ export function createHomeOnlyWebRemoteControlServices(): RootServices {
     }),
     // ThinkRail spec 图：手机远控首页在 bridge 就绪前没有工作区可读；明确报不可用，
     // 而不是返回一份空快照（那会被面板显示成「这个仓库没有 spec」）。
-    specGraphService: createUnsupportedHomeOnlyService<RootServices["specGraphService"]>(
-      "specGraphService",
-    ),
-    // Bugfix: feedbackService 成为统一服务接口后，Web 远控首页 fallback 也必须补齐。
+    specGraphService:
+      createUnsupportedHomeOnlyService<RootServices["specGraphService"]>("specGraphService"),
+    // 远控首页未绑定 workspace 时也需要完整的本地服务契约。
     // 断开 bridge 时这里明确报不可用，避免类型通过但运行时误以为空反馈数据。
-    feedbackService:
-      createUnsupportedHomeOnlyService<RootServices["feedbackService"]>("feedbackService"),
+
     settingsSyncService:
       createUnsupportedHomeOnlyService<RootServices["settingsSyncService"]>("settingsSyncService"),
   };
@@ -2059,11 +2039,6 @@ async function bootstrapExternalRelayWebRemoteControl(params: URLSearchParams): 
             platform={createWebPlatform({
               externalWebRemoteControlProxy: {
                 requestPlatformMethod,
-                reportTelemetryEvent: (event) => {
-                  const parsed = sessionCreateTelemetrySchema.safeParse(event);
-                  if (parsed.success)
-                    transport.sendPayload({ zcode_type: "telemetry-report", event: parsed.data });
-                },
               },
             })}
             // Bug 原因：手机复用 Desktop Host 中已持久化的 Assistant row，但 Root 默认关闭
@@ -2132,11 +2107,6 @@ async function bootstrapExternalRelayWebRemoteControl(params: URLSearchParams): 
             platform={createWebPlatform({
               externalWebRemoteControlProxy: {
                 requestPlatformMethod,
-                reportTelemetryEvent: (event) => {
-                  const parsed = sessionCreateTelemetrySchema.safeParse(event);
-                  if (parsed.success)
-                    transport.sendPayload({ zcode_type: "telemetry-report", event: parsed.data });
-                },
               },
             })}
             initialWorkspaceAbsPath={workspaceKey}

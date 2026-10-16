@@ -1,8 +1,14 @@
-import { LOCAL_TTFT_MAX_PENDING, localTtftNow, type LocalTtftDetail } from "@zcode/shared";
-
 type PreparationStage =
-  | Exclude<LocalTtftDetail["stage"], "attempt" | "retry_wait" | "user_confirmation">
+  | "context"
+  | "hooks"
+  | "persistence"
+  | "compaction"
+  | "mcp"
+  | "tools"
+  | "request_assembly"
   | "execution";
+const MAX_PREPARATION_OBSERVERS = 128;
+const preparationNow = () => performance.timeOrigin + performance.now();
 export interface LocalTurnPreparationFact {
   sessionId: string;
   turnId: string;
@@ -20,7 +26,7 @@ export function observeLocalTurnPreparation(
   inputId: string,
   publish: Subscription["publish"],
 ): () => void {
-  if (subscriptions.size >= LOCAL_TTFT_MAX_PENDING || subscriptions.has(inputId)) return noop;
+  if (subscriptions.size >= MAX_PREPARATION_OBSERVERS || subscriptions.has(inputId)) return noop;
   const subscription = { publish, sequence: 0 };
   subscriptions.set(inputId, subscription);
   return () => {
@@ -38,7 +44,7 @@ export function beginLocalTurnPreparation(
     turnId: trace.turnId,
     id: `prepare:${subscription.sequence++}`,
     stage,
-    start: localTtftNow(),
+    start: preparationNow(),
   };
   const publish = (value: LocalTurnPreparationFact) => {
     // 观测回调失败不得改变 Core 的返回值或异常；首输出解绑后不再补采工具循环。
@@ -46,7 +52,7 @@ export function beginLocalTurnPreparation(
     try {
       subscription.publish(value);
     } catch {
-      /* 遥测不参与业务裁决。 */
+      /* 本地诊断观察者不参与业务裁决。 */
     }
   };
   publish(fact);
@@ -54,6 +60,6 @@ export function beginLocalTurnPreparation(
   return (outcome = "completed") => {
     if (ended) return;
     ended = true;
-    publish({ ...fact, end: localTtftNow(), outcome });
+    publish({ ...fact, end: preparationNow(), outcome });
   };
 }

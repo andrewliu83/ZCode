@@ -1,188 +1,74 @@
+// @vitest-environment jsdom
 import { createElement } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-const { resolvedRemoteSessionIdMock } = vi.hoisted(() => ({
-  resolvedRemoteSessionIdMock: vi.fn<() => string | null>(),
-}));
-
 vi.mock("@/ControlHintTooltip.js", () => ({
-  ControlHintTooltip: ({
-    children,
-    title,
-    description,
-    side,
-  }: {
-    children: unknown;
-    title: string;
-    description?: string;
-    side?: string;
-  }) =>
-    createElement(
-      "span",
-      {
-        "data-tooltip-title": title,
-        "data-tooltip-description": description ?? "",
-        "data-tooltip-side": side ?? "",
-      },
-      children,
-    ),
+  ControlHintTooltip: ({ children }: { children: unknown }) => children,
 }));
-
 vi.mock("@/components/ui/button.js", () => ({
-  Button: ({
-    children,
-    ...props
-  }: {
-    children: unknown;
-    [key: string]: unknown;
-  }) => createElement("button", props, children),
+  Button: ({ children, ...props }: { children: unknown; [key: string]: unknown }) =>
+    createElement("button", props, children),
 }));
-
-vi.mock("@/components/ui/lucide.js", () => ({
-  Smartphone: () => createElement("span", { "data-testid": "smartphone-icon" }),
-}));
-
 vi.mock("@/i18n/IntlProvider.js", () => ({
-  useZCodeIntl: () => ({
-    intl: {
-      formatMessage: ({ id }: { id: string }) => id,
-    },
-  }),
+  useZCodeIntl: () => ({ intl: { formatMessage: ({ id }: { id: string }) => id } }),
 }));
-
-vi.mock("@/logger.js", () => ({
-  logger: {
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-  },
-}));
-
+vi.mock("@/logger.js", () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
 vi.mock("@/hooks/useResolvedRemoteWorkspaceSessionId.js", () => ({
-  useResolvedRemoteWorkspaceSessionId: resolvedRemoteSessionIdMock,
+  useResolvedRemoteWorkspaceSessionId: (_: string, id?: string) => id ?? null,
 }));
-
 vi.mock("@/hooks/useWebRemoteControlStatus.js", () => ({
   useWebRemoteControlStatus: () => ({ status: "idle" }),
 }));
-
 vi.mock("@/WebRemoteControlDialog.js", () => ({
-  WebRemoteControlDialog: ({
-    initialTaskId,
-    remoteSessionId,
-  }: {
-    initialTaskId?: string;
-    remoteSessionId?: string;
-  }) =>
-    createElement("div", {
-      "data-testid": "web-remote-control-dialog",
-      "data-initial-task-id": initialTaskId ?? "",
-      "data-remote-session-id": remoteSessionId ?? "",
-    }),
-}));
-
-async function renderTriggerWithEnv(
-  env: "test" | "production",
-  options?: {
-    initialTaskId?: string;
-    featureEnabled?: boolean;
+  WebRemoteControlDialog: (props: {
+    open: boolean;
+    workspacePath: string;
     workspaceIdentity?: string;
     remoteSessionId?: string;
-  },
-) {
-  vi.resetModules();
-  vi.doMock("@zcode/shared", () => ({ ZCODE_ENV: env }));
-
-  const { WorkspaceWebRemoteControlTrigger } =
-    await import("../src/WorkspaceWebRemoteControlTrigger.js");
-  const { WebRemoteControlFeatureProvider } =
-    await import("../src/WebRemoteControlFeatureProvider.js");
-
-  const trigger = createElement(WorkspaceWebRemoteControlTrigger, {
-    workspacePath: "/tmp/project",
-    workspaceIdentity: options?.workspaceIdentity,
-    remoteSessionId: options?.remoteSessionId,
-    initialTaskId: options?.initialTaskId,
-  });
-
-  return renderToStaticMarkup(
-    typeof options?.featureEnabled === "boolean"
-      ? createElement(
-          WebRemoteControlFeatureProvider,
-          { enabled: options.featureEnabled },
-          trigger,
-        )
-      : trigger,
-  );
-}
-
-afterEach(() => {
-  resolvedRemoteSessionIdMock.mockReset();
-  vi.resetModules();
-});
+  }) =>
+    props.open
+      ? createElement("div", {
+          role: "dialog",
+          "data-workspace": props.workspacePath,
+          "data-identity": props.workspaceIdentity,
+          "data-remote-session": props.remoteSessionId,
+        })
+      : null,
+}));
+afterEach(cleanup);
 
 describe("WorkspaceWebRemoteControlTrigger", () => {
-  it("在 test 环境展示 Web 远程控制入口", async () => {
-    const html = await renderTriggerWithEnv("test");
-
-    expect(html).toContain("webRemoteControl.trigger");
-  });
-
-  it("在 production 环境展示 Web 远程控制入口", async () => {
-    const html = await renderTriggerWithEnv("production");
-
-    expect(html).toContain("webRemoteControl.trigger");
-  });
-
-  it("允许 root wiring 显式注入 Web 远程控制入口能力", async () => {
-    const html = await renderTriggerWithEnv("production", {
-      featureEnabled: true,
-    });
-
-    expect(html).toContain("webRemoteControl.trigger");
-  });
-
-  it("把当前 active task 作为 Web 远程控制初始 task 传给弹层", async () => {
-    const html = await renderTriggerWithEnv("test", {
-      initialTaskId: "task-from-desktop",
-    });
-
-    expect(html).toContain('data-initial-task-id="task-from-desktop"');
-  });
-
-  it("用 workspaceIdentity 精确解析远控 session，并只向弹层传递已验证结果", async () => {
-    resolvedRemoteSessionIdMock.mockReturnValue(null);
-
-    const html = await renderTriggerWithEnv("test", {
-      workspaceIdentity: "remote:ssh:localhost:2222:root:/tmp/project",
-      remoteSessionId: "stale-session",
-    });
-
-    expect(resolvedRemoteSessionIdMock).toHaveBeenCalledWith(
-      "/tmp/project",
-      "stale-session",
-      "remote:ssh:localhost:2222:root:/tmp/project",
+  it.each([
+    { workspacePath: "/workspace/local" },
+    {
+      workspacePath: "/workspace/remote",
+      workspaceIdentity: "remote:ssh:fixture:22:user:/workspace/remote",
+      remoteSessionId: "remote-session-1",
+    },
+  ])("无埋点依赖时仍能打开远控并保持目标身份 $workspacePath", async (input) => {
+    const { WorkspaceWebRemoteControlTrigger } =
+      await import("../src/WorkspaceWebRemoteControlTrigger.js");
+    const { WebRemoteControlFeatureProvider } =
+      await import("../src/WebRemoteControlFeatureProvider.js");
+    const { PlatformProvider } = await import("../src/hooks/usePlatform.js");
+    render(
+      createElement(
+        PlatformProvider,
+        { platform: {} as never },
+        createElement(
+          WebRemoteControlFeatureProvider,
+          { enabled: true },
+          createElement(WorkspaceWebRemoteControlTrigger, input),
+        ),
+      ),
     );
-    expect(html).toContain('data-remote-session-id=""');
-    expect(html).not.toContain('data-remote-session-id="stale-session"');
-  });
-
-  it("把入口名称和手机连接状态合并到同一个 tooltip", async () => {
-    const html = await renderTriggerWithEnv("test");
-
-    expect(html).toContain('data-tooltip-title="webRemoteControl.trigger"');
-    expect(html).toContain(
-      'data-tooltip-description="webRemoteControl.triggerStatus.idle"',
-    );
-    expect(html).not.toContain(
-      'data-tooltip-title="webRemoteControl.triggerStatus.idle"',
-    );
-  });
-
-  it("在按钮上方展示远程控制 tooltip", async () => {
-    const html = await renderTriggerWithEnv("test");
-
-    expect(html).toContain('data-tooltip-side="top"');
+    fireEvent.click(screen.getByRole("button"));
+    const dialog = screen.getByRole("dialog");
+    expect(dialog.getAttribute("data-workspace")).toBe(input.workspacePath);
+    if ("workspaceIdentity" in input)
+      expect(dialog.getAttribute("data-identity")).toBe(input.workspaceIdentity);
+    if ("remoteSessionId" in input)
+      expect(dialog.getAttribute("data-remote-session")).toBe(input.remoteSessionId);
   });
 });

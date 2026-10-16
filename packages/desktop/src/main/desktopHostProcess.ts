@@ -1,4 +1,4 @@
-import { ingestToolExecResource } from "./desktopResourceTelemetry.js";
+import {} from "./desktopResourceDiagnostics.js";
 import { ingestMcpResourceSamples } from "./processResourceMcpTelemetrySource.js";
 /* eslint-disable max-lines -- host process 统一处理 main↔host 生命周期、日志、ZCode Agent，拆分前先保持跨进程消息收口。 */
 import {
@@ -9,7 +9,6 @@ import {
   type HostAgentProcessSpawnedResponse,
   type HostCuaOperationStateResponse,
   type HostMcpTelemetryResponse,
-  type HostSessionCreateTelemetryResponse,
   type RemoteTarget,
   type TaskRealtimeHostDeliveryKind,
   type WorkspacePurpose,
@@ -40,7 +39,7 @@ import { join } from "node:path";
 import { BroadcastHub } from "./broadcastHub.js";
 import { bindDatabaseStartupRelay } from "./databaseStartupRelay.js";
 import { getMainLaunchPartialMarks } from "./desktopLaunchMarks.js";
-import { ingestHostNetworkObservations } from "./desktopNetworkTelemetry.js";
+import { ingestHostNetworkObservations } from "./desktopNetworkDiagnostics.js";
 import {
   buildHostProcessEnv,
   hostModulePath,
@@ -48,7 +47,7 @@ import {
 } from "./desktopRuntimeEnv.js";
 import { ingestHostNetworkCapture } from "./resourceManagerNetwork.js";
 import { buildHostE2ECoverageEnv } from "./e2eCoverage.js";
-import { createFeedbackLogArchiveFromExportLogs } from "./exportLogs.js";
+import {} from "./exportLogs.js";
 import { createHostLogRelay } from "./hostLogRelay.js";
 import { ingestCliResourceSample } from "./processResourceCliSource.js";
 import { ingestHostSelfResourceSample } from "./processResourceSelfHeapSource.js";
@@ -77,7 +76,6 @@ export interface HostInitMessage {
   databaseStartupId?: string;
   deliveryKind?: TaskRealtimeHostDeliveryKind;
   deviceMid?: string;
-  feedbackApiBase?: string;
   workspacePath?: string;
   workspaceIdentity?: string;
   agentWarmupTargets?: Array<{
@@ -184,7 +182,7 @@ export function spawnHostProcess(
     onAgentProcessReady?: (event: HostAgentProcessReadyResponse) => void;
     onAgentProcessSpawned?: (event: HostAgentProcessSpawnedResponse) => void;
     onMcpTelemetry?: (event: HostMcpTelemetryResponse) => void;
-    onSessionCreateTelemetry?: (event: HostSessionCreateTelemetryResponse) => void;
+
     onCuaOperationStateChanged?: (
       source: ElectronUtilityProcess,
       event: HostCuaOperationStateResponse,
@@ -358,7 +356,10 @@ export function spawnHostProcess(
     }
 
     if (result.data.type === HostResponseTypes.ToolExecResource) {
-      ingestToolExecResource(result.data.sample, result.data.runtimeSurface);
+      dependencies.logger.info("[resource] tool execution completed", {
+        runtimeSurface: result.data.runtimeSurface,
+        sample: result.data.sample,
+      });
       return;
     }
 
@@ -373,11 +374,6 @@ export function spawnHostProcess(
 
     if (result.data.type === HostResponseTypes.McpTelemetry) {
       dependencies.onMcpTelemetry?.(result.data);
-      return;
-    }
-
-    if (result.data.type === HostResponseTypes.SessionCreateTelemetry) {
-      dependencies.onSessionCreateTelemetry?.(result.data);
       return;
     }
 
@@ -442,29 +438,6 @@ export function spawnHostProcess(
     if (result.data.type === HostResponseTypes.CuaOperationState) {
       // Main 只投影 Host 已经判定的 turn 状态，不在这里重复解析 session/tool 业务事件。
       dependencies.onCuaOperationStateChanged?.(child, result.data);
-      return;
-    }
-
-    if (result.data.type === HostResponseTypes.FeedbackLogArchiveRequest) {
-      const request = result.data;
-      void createFeedbackLogArchiveFromExportLogs(request.sourceDir)
-        .then((archive) => {
-          child.postMessage({
-            type: HostMessageTypes.FeedbackLogArchiveResult,
-            requestId: request.requestId,
-            ok: true,
-            path: archive.path,
-            size: archive.size,
-          });
-        })
-        .catch((error) => {
-          child.postMessage({
-            type: HostMessageTypes.FeedbackLogArchiveResult,
-            requestId: request.requestId,
-            ok: false,
-            error: error instanceof Error ? error.message : String(error),
-          });
-        });
       return;
     }
 

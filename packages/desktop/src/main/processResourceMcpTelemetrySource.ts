@@ -1,4 +1,4 @@
-/** MCP 每个上报窗口只交一份合计；瞬时读数不进入会话、队列或持久化。 */
+/** MCP 每个本地采样窗口只交一份合计；瞬时读数不进入会话、队列或持久化。 */
 import {
   zcodeMcpResourceSamplesSchema,
   ZCODE_MCP_RESOURCE_SAMPLE_INTERVAL_MS,
@@ -11,10 +11,7 @@ import type {
   ProcessResourceSampleContext,
   ProcessResourceSampleSource,
 } from "./processResourceSampleSources.js";
-import {
-  processResourceHardwareKey,
-  type ProcessRoleSample,
-} from "./processResourceWindowAggregator.js";
+import { processResourceHardwareKey, type ProcessRoleSample } from "./processResourceSample.js";
 
 const MAX_MCP_GROUPS_PER_WINDOW = 32;
 const MAX_MCP_INSTANCE_SAMPLES = 256;

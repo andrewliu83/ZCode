@@ -20,9 +20,7 @@ const useBootstrapWithRemoteBuild = process.env.ZCODE_BOOTSTRAP_WITH_REMOTE === 
 const pnpmRunEnv = {
   ...process.env,
   ZCODE_ENV: await resolveBuiltinProviderBuildEnvironment({ root: repoRoot }),
-  // pnpm 11 的 verify-deps-before-run 会在 apps/zcode-cli 子 workspace
-  // 执行每个 run 前触发 pnpm install；子 workspace 运行时依赖根仓库 @zcode/shared，
-  // 自动 install 无法解析根 workspace 包，导致 dev:desktop:test 和 E2E onPrepare 失败。
+  // 构建不隐式修改依赖；安装由仓库根 workspace 与唯一锁文件负责。
   PNPM_CONFIG_VERIFY_DEPS_BEFORE_RUN: "false",
 };
 // Bug 根因：filesystem plugin seed 若缺少 Sharp closure，会一直到 screenshot/zoom 才报错。
@@ -34,8 +32,7 @@ const cuaPluginRuntimeStagingEnv = {
   ZCODE_CUA_DEV_MODE: "1",
 };
 // 修复原因：桌面 Agent 构建有普通 pnpm 和 bootstrap:with-remote 直跑 tsc 两条路径。
-// 过去两条路径分别维护依赖顺序，新增 @zcode/telemetry 后只更新了 bootstrap 依赖，
-// 干净 CI 中 telemetry/dist 尚不存在，bootstrap 会因无法解析类型入口而失败。
+// 两条路径曾分别维护构建顺序，干净 CI 会缺少先决包产物而无法解析类型入口。
 // 两条路径统一从这一份有序清单派生，避免后续新增 workspace 依赖时再次漂移。
 const cliWorkspaceBuilds = [
   { packageName: "@zcode/shared-types", packageDir: "shared-types" },
@@ -53,7 +50,7 @@ const cliWorkspaceBuilds = [
   { packageName: "@zcode/core", packageDir: "core" },
   { packageName: "@zcode/adapters", packageDir: "adapters" },
   { packageName: "@zcode/i18n", packageDir: "i18n" },
-  { packageName: "@zcode/telemetry", packageDir: "telemetry" },
+
   { packageName: "@zcode/bootstrap", packageDir: "bootstrap" },
 ];
 // 官方插件 manifest 可以在 server.js 缺失时被 filesystem seed，直到 session
@@ -159,8 +156,7 @@ if (useBootstrapWithRemoteBuild) {
 if (!useTurboBuild) {
   // Linux 容器 demo 里没有仓库级 turbo 根，`turbo --cwd apps/zcode-cli`
   // 会把 apps/zcode-cli 当根目录，并拒绝 turbo.json 中指向 ../../packages/shared 的 inputs。
-  // 同时 agent 子 workspace 不包含根 packages/shared，但 agent 包依赖 @zcode/shared。
-  // 因此默认改用仓库根 workspace 的明确 pnpm 包顺序构建，避免 WDIO 前置构建卡在子 workspace 解析。
+  // Agent 与共享包统一由根 workspace 管理，使用明确包顺序构建并校验先决产物。
   for (const filter of defaultBuildFilters) {
     runCommand("pnpm", ["--filter", filter, "build"], {
       env: pnpmRunEnv,

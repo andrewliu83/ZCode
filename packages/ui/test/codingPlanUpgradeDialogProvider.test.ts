@@ -1,263 +1,119 @@
 // @vitest-environment jsdom
 import { createElement } from "react";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { CodingPlanFunnelContext } from "@/lib/codingPlanFunnelTelemetry.js";
 
 const h = vi.hoisted(() => ({
-  entryPlanList: "coding_plan__personal_lite,start_plan__start",
   status: "ready" as "ready" | "loading" | "error",
   retry: vi.fn(),
-  reportTelemetryEvent: vi.fn().mockResolvedValue(undefined),
-  renderedTargets: [] as Array<
-    | {
-        providerId: string;
-        initialAudience?: "personal" | "team";
-        funnelContext?: CodingPlanFunnelContext;
-      }
-    | undefined
-  >,
+  targets: [] as Array<{ providerId: string; initialAudience?: "personal" | "team" } | undefined>,
   onOpenResult: undefined as undefined | ((opened: boolean) => void),
 }));
-
 vi.mock("@/hooks/useCodingPlanEntryPlanList.js", () => ({
   useCodingPlanEntryPlanList: () => ({
-    entryPlanList: h.entryPlanList,
+    entryPlanList: "coding_plan__personal_lite",
     status: h.status,
     retry: h.retry,
   }),
 }));
-
-vi.mock("@/hooks/usePlatform.js", () => ({
-  usePlatform: () => ({ reportTelemetryEvent: h.reportTelemetryEvent }),
-}));
-
+vi.mock("@/hooks/usePlatform.js", () => ({ usePlatform: () => ({}) }));
 vi.mock("@/settings/CodingPlanUpgradeDialog.js", () => ({
   CodingPlanUpgradeDialog: ({
     target,
     onOpenResult,
   }: {
+    target?: { providerId: string; initialAudience?: "personal" | "team" };
     onOpenResult?: (opened: boolean) => void;
-    target?: {
-      providerId: string;
-      initialAudience?: "personal" | "team";
-      funnelContext?: CodingPlanFunnelContext;
-    };
   }) => {
-    h.renderedTargets.push(target);
+    h.targets.push(target);
     h.onOpenResult = onOpenResult;
     return null;
   },
 }));
-
 import {
   CodingPlanUpgradeDialogProvider,
   useCodingPlanUpgradeDialog,
 } from "@/settings/CodingPlanUpgradeDialogProvider.js";
 
-const funnelContext: CodingPlanFunnelContext = {
-  purchaseFunnelId: "idle-funnel-login",
-  upgradeSource: "session_idle_time",
-  eventRegion: "app.session",
-  eventText: "Upgrade",
-  entryPlanStatus: "no_plan",
-  entryPlanLevel: "",
-  entryPlanList: "",
-  purchaseAudience: "personal",
-  providerFamily: "zai",
-  channel: "Z_AI",
-};
-
-function Launcher({ loginVersion }: { loginVersion: number }) {
+afterEach(() => {
+  cleanup();
+  h.status = "ready";
+  h.targets.length = 0;
+  h.onOpenResult = undefined;
+  vi.clearAllMocks();
+});
+function Launcher({
+  version = 0,
+  observation,
+}: {
+  version?: number;
+  observation?: { signal: AbortSignal; onResult: (opened: boolean) => void };
+}) {
   const { openCodingPlanUpgrade } = useCodingPlanUpgradeDialog();
   return createElement(
     "button",
     {
-      type: "button",
-      "data-login-version": loginVersion,
+      "data-version": version,
       onClick: () =>
-        openCodingPlanUpgrade({
-          providerId: "zai-coding-plan",
-          initialAudience: "personal",
-          funnelContext,
-        }),
+        openCodingPlanUpgrade(
+          { providerId: "zai-coding-plan", initialAudience: "personal" },
+          observation,
+        ),
     },
     "Upgrade",
   );
 }
+function app(props: Parameters<typeof Launcher>[0] = {}) {
+  return createElement(CodingPlanUpgradeDialogProvider, null, createElement(Launcher, props));
+}
 
-afterEach(() => {
-  cleanup();
-  h.status = "ready";
-  h.reportTelemetryEvent.mockClear();
-  h.renderedTargets.length = 0;
-});
-
-describe("CodingPlanUpgradeDialogProvider", () => {
-  it.each([true, false])("observes opening result %s once", (opened) => {
+describe("CodingPlanUpgradeDialogProvider without reporting", () => {
+  it.each([true, false])("settles an observed opening %s only once", (opened) => {
     const result = vi.fn();
-    function ObservedLauncher() {
-      const { openCodingPlanUpgrade } = useCodingPlanUpgradeDialog();
-      return createElement(
-        "button",
-        {
-          onClick: () =>
-            openCodingPlanUpgrade(
-              { providerId: "builtin:bigmodel-coding-plan" },
-              { signal: new AbortController().signal, onResult: result },
-            ),
-        },
-        "Observed",
-      );
-    }
-    render(createElement(CodingPlanUpgradeDialogProvider, null, createElement(ObservedLauncher)));
-    fireEvent.click(screen.getByText("Observed"));
-    expect(result).not.toHaveBeenCalled();
-    h.onOpenResult?.(opened);
-    h.onOpenResult?.(opened);
+    render(app({ observation: { signal: new AbortController().signal, onResult: result } }));
+    fireEvent.click(screen.getByRole("button", { name: "Upgrade" }));
+    const finish = h.onOpenResult!;
+    act(() => {
+      finish(opened);
+      finish(!opened);
+    });
     expect(result).toHaveBeenCalledExactlyOnceWith(opened);
   });
-  it("aborts an observed opening and ignores late ready", () => {
-    const signal = new AbortController();
+  it("aborts an observed opening and ignores a late ready event", () => {
+    const controller = new AbortController();
     const result = vi.fn();
-    function ObservedLauncher() {
-      const { openCodingPlanUpgrade } = useCodingPlanUpgradeDialog();
-      return createElement(
-        "button",
-        {
-          onClick: () =>
-            openCodingPlanUpgrade(
-              { providerId: "builtin:bigmodel-coding-plan" },
-              { signal: signal.signal, onResult: result },
-            ),
-        },
-        "Observed",
-      );
-    }
-    render(createElement(CodingPlanUpgradeDialogProvider, null, createElement(ObservedLauncher)));
-    fireEvent.click(screen.getByText("Observed"));
-    signal.abort();
-    h.onOpenResult?.(true);
+    render(app({ observation: { signal: controller.signal, onResult: result } }));
+    fireEvent.click(screen.getByRole("button", { name: "Upgrade" }));
+    const late = h.onOpenResult!;
+    act(() => controller.abort());
+    act(() => late(true));
     expect(result).toHaveBeenCalledExactlyOnceWith(false);
+    expect(h.targets.at(-1)).toBeUndefined();
   });
-  it.each(["loading", "error"] as const)("blocks direct calls while inventory is %s", (status) => {
-    h.status = status;
-    const view = render(
-      createElement(
-        CodingPlanUpgradeDialogProvider,
-        null,
-        createElement(Launcher, { loginVersion: 0 }),
-      ),
-    );
+  it.each(["loading", "error"] as const)(
+    "blocks %s inventory without replaying the click after readiness",
+    (status) => {
+      h.status = status;
+      const view = render(app());
+      fireEvent.click(screen.getByRole("button", { name: "Upgrade" }));
+      expect(h.targets.at(-1)).toBeUndefined();
+      h.status = "ready";
+      view.rerender(app({ version: 1 }));
+      expect(h.targets.at(-1)).toBeUndefined();
+      fireEvent.click(screen.getByRole("button", { name: "Upgrade" }));
+      expect(h.targets.at(-1)).toEqual({
+        providerId: "zai-coding-plan",
+        initialAudience: "personal",
+      });
+    },
+  );
+  it("preserves the selected purchase target across OAuth-driven rerenders without a tracking context", () => {
+    const view = render(app());
     fireEvent.click(screen.getByRole("button", { name: "Upgrade" }));
-    expect(h.renderedTargets.at(-1)).toBeUndefined();
-    expect(h.reportTelemetryEvent).not.toHaveBeenCalled();
-    h.status = "ready";
-    view.rerender(
-      createElement(
-        CodingPlanUpgradeDialogProvider,
-        null,
-        createElement(Launcher, { loginVersion: 1 }),
-      ),
-    );
-    expect(h.reportTelemetryEvent).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "Upgrade" }));
-    expect(h.reportTelemetryEvent).toHaveBeenCalledTimes(1);
-  });
-
-  it("opens the dialog even when the telemetry request fails", async () => {
-    h.reportTelemetryEvent.mockRejectedValueOnce(new Error("offline"));
-    render(
-      createElement(
-        CodingPlanUpgradeDialogProvider,
-        null,
-        createElement(Launcher, { loginVersion: 0 }),
-      ),
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Upgrade" }));
-    expect(h.renderedTargets.at(-1)?.funnelContext).toEqual({
-      ...funnelContext,
-      entryPlanList: h.entryPlanList,
-    });
-    await waitFor(() => expect(h.reportTelemetryEvent).toHaveBeenCalledTimes(1));
-  });
-
-  it("freezes the owned list until the next explicit click", () => {
-    const initialList = h.entryPlanList;
-    const view = render(
-      createElement(
-        CodingPlanUpgradeDialogProvider,
-        null,
-        createElement(Launcher, { loginVersion: 0 }),
-      ),
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Upgrade" }));
-    h.entryPlanList = "coding_plan__personal_pro";
-    view.rerender(
-      createElement(
-        CodingPlanUpgradeDialogProvider,
-        null,
-        createElement(Launcher, { loginVersion: 1 }),
-      ),
-    );
-    expect(h.renderedTargets.at(-1)?.funnelContext?.entryPlanList).toBe(initialList);
-    expect(h.reportTelemetryEvent).toHaveBeenCalledTimes(1);
-    fireEvent.click(screen.getByRole("button", { name: "Upgrade" }));
-    expect(h.renderedTargets.at(-1)?.funnelContext?.entryPlanList).toBe(h.entryPlanList);
-    expect(funnelContext.entryPlanList).toBe("");
-    h.entryPlanList = initialList;
-  });
-
-  it("keeps the idle-time funnel target when OAuth login rerenders the app", () => {
-    const view = render(
-      createElement(
-        CodingPlanUpgradeDialogProvider,
-        null,
-        createElement(Launcher, { loginVersion: 0 }),
-      ),
-    );
-
-    fireEvent.click(screen.getByRole("button", { name: "Upgrade" }));
-    expect(h.renderedTargets.at(-1)?.funnelContext).toEqual({
-      ...funnelContext,
-      entryPlanList: h.entryPlanList,
-    });
-    expect(h.reportTelemetryEvent).toHaveBeenCalledExactlyOnceWith({
-      context: expect.any(Object),
-      elementName: "coding_plan_upgrade_ck",
-      eventType: "ck",
-      eventRegion: "app.session",
-      eventText: "Upgrade",
-      eventExtraDetail: {
-        purchase_funnel_id: "idle-funnel-login",
-        upgrade_source: "session_idle_time",
-        entry_plan_status: "no_plan",
-        entry_plan_level: "",
-        entry_plan_list: h.entryPlanList,
-        purchase_audience: "personal",
-        provider_family: "zai",
-        channel: "Z_AI",
-      },
-    });
-
-    // OAuth callback 会刷新用户与购买凭据并触发 Root 重渲染，但不应重建 provider。
-    view.rerender(
-      createElement(
-        CodingPlanUpgradeDialogProvider,
-        null,
-        createElement(Launcher, { loginVersion: 1 }),
-      ),
-    );
-
-    expect(h.renderedTargets.at(-1)).toEqual({
-      providerId: "zai-coding-plan",
-      initialAudience: "personal",
-      funnelContext: { ...funnelContext, entryPlanList: h.entryPlanList },
-    });
-    expect(h.renderedTargets.at(-1)?.funnelContext?.purchaseFunnelId).toBe("idle-funnel-login");
-    expect(h.renderedTargets.at(-1)?.funnelContext?.upgradeSource).toBe("session_idle_time");
-    expect(h.reportTelemetryEvent).toHaveBeenCalledTimes(1);
-    fireEvent.click(screen.getByRole("button", { name: "Upgrade" }));
-    expect(h.reportTelemetryEvent).toHaveBeenCalledTimes(2);
+    const target = h.targets.at(-1);
+    expect(target).toEqual({ providerId: "zai-coding-plan", initialAudience: "personal" });
+    view.rerender(app({ version: 1 }));
+    expect(h.targets.at(-1)).toBe(target);
+    expect(h.targets.at(-1)).not.toHaveProperty("funnelContext");
   });
 });
