@@ -35,7 +35,36 @@ Var appExe
 Var launchLink
 Var newStartMenuLink
 Var newDesktopLink
-Var keepShortcuts
+!ifndef ZCODE_INSTALL_SECTION
+  Var keepShortcuts
+!else
+  Var installMode
+  Var isTryToKeepShortcuts
+  !define APP_EXECUTABLE_FILENAME "ZCode.exe"
+  !define INSTALL_REGISTRY_KEY "Software\ZCodeFixture"
+  !define isForceRun `1 == 0`
+  !macro CHECK_APP_RUNNING
+  !macroend
+  !macro setLinkVars
+  !macroend
+  !macro setIsTryToKeepShortcuts
+    StrCpy $isTryToKeepShortcuts "false"
+  !macroend
+  !macro uninstallOldVersion ROOT
+  !macroend
+  !macro handleUninstallResult ROOT
+  !macroend
+  !macro installApplicationFiles
+  !macroend
+  !macro registryAddInstallInfo
+  !macroend
+  !macro addStartMenuLink KEEP
+  !macroend
+  !macro addDesktopLink KEEP
+  !macroend
+  !macro StartApp
+  !macroend
+!endif
 
 !include "${ZCODE_INSTALLER_NSH}"
 ; 回归原因：electron-builder 异步生成 header 时，自定义 include 可能先于插件目录注册。
@@ -48,6 +77,8 @@ Var keepShortcuts
     !error "customHeader must enable shortcut preservation for manual overwrite"
   !endif
   !insertmacro customPageAfterChangeDir
+  !insertmacro MUI_PAGE_INSTFILES
+  !insertmacro MUI_LANGUAGE "English"
 
   Function .onInit
     !insertmacro preInit
@@ -61,7 +92,11 @@ Section
   StrCpy $launchLink "$INSTDIR\stale-target.exe"
   StrCpy $newStartMenuLink "$INSTDIR\start-menu.lnk"
   StrCpy $newDesktopLink "$INSTDIR\desktop.lnk"
-  StrCpy $keepShortcuts "true"
+  !ifndef ZCODE_INSTALL_SECTION
+    StrCpy $keepShortcuts "true"
+  !else
+    StrCpy $installMode "current"
+  !endif
 
   !ifdef PRECREATE_SHORTCUTS
     !ifdef STALE_SHORTCUTS
@@ -85,15 +120,18 @@ Section
   !ifndef BUILD_UNINSTALLER
     SetDetailsPrint none
     !insertmacro customInit
-    ; The real electron-builder template invokes these hooks at the same points.
-    !insertmacro customInstallSectionStarted
-    !insertmacro customInstallCleanupStarted
-    !insertmacro customInstallCleanupCompleted
-    !insertmacro customInstallExtractStarted
-    !insertmacro customInstallExtractCompleted
-    !insertmacro customInstallShortcutsStarted
-    !insertmacro customInstallShortcutsCompleted
-    !insertmacro customInstall
+    !ifdef ZCODE_INSTALL_SECTION
+      !include "${ZCODE_INSTALL_SECTION}"
+    !else
+      !insertmacro customInstallSectionStarted
+      !insertmacro customInstallCleanupStarted
+      !insertmacro customInstallCleanupCompleted
+      !insertmacro customInstallExtractStarted
+      !insertmacro customInstallExtractCompleted
+      !insertmacro customInstallShortcutsStarted
+      !insertmacro customInstallShortcutsCompleted
+      !insertmacro customInstall
+    !endif
   !endif
 
   FileOpen $0 "$INSTDIR\launch-link.txt" w

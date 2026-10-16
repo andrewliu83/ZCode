@@ -29,6 +29,7 @@ title: ZCode Community 独立发行与 GitHub 自动更新
 9. 每个平台在封装前用随包 Electron Node 执行 Agent `--version`，使用临时数据目录且不发送模型请求，60 秒内不能成功启动就停止发行。汇总要求每个平台有启动验证记录，不能只验证安装包文件存在。
 10. Gen UI 清单覆盖的固定运行资源、vendor 与许可按仓库原始字节 checkout，Windows 的 `core.autocrlf` 不得改写；构建继续使用原始 SHA256 校验，不在校验前归一化内容或重写摘要。
 11. 安装包名称使用已解析的目标架构 `x64` / `arm64`，不使用宿主架构，也不由 electron-builder 的格式宏改为 `x86_64` / `amd64`。builder、更新清单、单平台验证与汇总使用同一规范名称；DEB/RPM 包内部的架构元数据仍由各格式的原生打包器负责。
+12. Windows NSIS 阶段补丁由 `artifactBuildStarted` 在 `nsis` / `nsis-web` 编译前应用，覆盖普通构建和独立 `--prepackaged` 进程；不得依赖只在应用目录打包时运行的 `beforePack`。同进程重复事件幂等，进程退出恢复上游模板原字节，安装器与卸载器均保留 warnings-as-errors。
 
 # macOS 安装边界
 
@@ -77,6 +78,7 @@ sequenceDiagram
 | CR-13 | 固定资源字节  | core.autocrlf=true checkout 后运行资源与许可仍匹配原始 SHA256                               | temporary Git checkout / asset copy |
 | CR-14 | 下载源隔离    | 继承镜像变量不覆盖 DMG 工具下载源；两次封装共用隔离环境，runtime 保持官方地址               | release plan / real URL resolver    |
 | CR-15 | 规范产物名    | 真实 builder 按三种 Linux 格式展开后仍使用目标 x64/arm64，与严格校验一致                    | builder macro / artifact validation |
+| CR-16 | NSIS 最终封装 | 跳过 beforePack 后仍在 target 编译前应用阶段补丁；双侧 -WX 编译通过，退出恢复模板原字节     | artifact hook / real NSIS compiler  |
 
 # 影响说明（Impact Brief）
 
@@ -111,10 +113,17 @@ sequenceDiagram
 - 本机 Node 24.14.0、pnpm 10.33.2、macOS arm64 执行完整 `pnpm release:desktop -- --os mac --arch arm64`，输出隔离在 `packages/desktop/dist/verification-community-release-portability/`。DMG、ZIP、blockmap、更新清单和 SHA512 全部生成，ad hoc 严格签名、运行时依赖与随包 Agent 0.16.9 启动验证通过；修正后的 DMG 工具官方地址 HTTP 200。
 - 本轮未在 Windows/Linux 原生系统执行打包，未运行 UI E2E，未触发 GitHub Actions、提交、推送或发布。契约回归不代替这两个平台的原生发行结果。
 
+## Windows 最终 NSIS 封装修复验证（2026-10-16）
+
+- Actions run `38865371294`（`community-v0.1.1` / `ec44bdfc`）的 macOS arm64 和 Linux x64 已完成原生构建、随包 Agent 启动验证和资产上传；此前镜像与文件名问题均已消除。Windows 应用目录和 Agent 启动也通过，最终 NSIS 安装器因 `ZCodeResetUninstallerLog` 未引用的 6010 警告停止，汇总发布被跳过。
+- `--prepackaged` 跳过原 `beforePack` 补丁入口；补丁已移至真实 NSIS target 编译前的 `artifactBuildStarted`，保留 `-WX`、同进程幂等与退出恢复，不改安装、卸载及所有权清理行为。
+- 真实 NSIS 编译回归先复现同一条 6010，再验证 `nsis` / `nsis-web` hook、安装器/卸载器严格编译、上游模板隔离与恢复。发布脚本 17 项及桌面相关 19 项通过；2 项仅 Windows 可执行的安装行为测试在 macOS 跳过。根 typecheck、lint（65 个既有警告、0 错误）、架构、格式与 diff 空白检查通过。
+- macOS arm64 用隔离的小型 PE 载荷调用真实 electron-builder `prepackaged` 流程，安装器/卸载器均编译成功并生成 EXE、blockmap 与更新清单；进程退出后上游模板 SHA256 与运行前完全相同。该验证不是完整产品发行包，也未执行 Windows 安装器。本轮未重新推送、移动标签或触发发布。
+
 # 使用方式
 
 - 在对应原生系统执行：macOS `pnpm release:desktop -- --os mac --arch arm64`；Windows `pnpm release:desktop -- --os win --arch x64`；Linux `pnpm release:desktop -- --os linux --arch x64`。输出分别在 `packages/desktop/dist/community/macos-arm64/`、`windows-x64/`、`linux-x64/`；添加 `--plan` 仅查看配置，不要求当前主机匹配目标。实际构建在清理目录前验证 host/arch，拒绝跨平台错配。
-- 当前发行版本为 `0.1.1`：提交并推送源码后，创建指向该提交的 `community-v0.1.1` 标签。Actions 自动构建并发布；在 GitHub Actions 中手动运行则只上传 artifacts。重跑旧标签仍构建其原始提交，修复后递增根版本并创建新的 `community-v…` 标签，不移动旧标签；也可使用 `pnpm release patch`／`minor`。
+- 当前发行版本为 `0.1.2`：提交并推送源码后，创建指向该提交的 `community-v0.1.2` 标签。Actions 自动构建并发布；在 GitHub Actions 中手动运行则只上传 artifacts。重跑旧标签仍构建其原始提交，修复后递增根版本并创建新的 `community-v…` 标签，不移动旧标签；也可使用 `pnpm release patch`／`minor`。
 - 工作流的矩阵从 `scripts/community-release-targets.mjs` 读取：macOS 使用 `macos-15`（arm64），Windows 使用 `windows-2022`（x64），Linux 使用 `ubuntu-22.04`（x64）。Linux 安装 rpm、libfuse2、patchelf；Windows 启用长路径。所有 runner 只使用根冻结锁。
 - macOS 无 Apple 凭据时无需配置 Secrets，走 ad hoc。正式签名需同时配置 `MACOS_CERTIFICATE_P12_BASE64`、`APPLE_SIGNING_IDENTITY`（Developer ID Application 完整名称）、`APPLE_ID`、`APPLE_APP_SPECIFIC_PASSWORD`、`APPLE_TEAM_ID`；加密 P12 另设 `MACOS_CERTIFICATE_PASSWORD`。进入正式签名后保持签名身份稳定。凭据不完整时失败。
 - 下载构建 artifacts 时保留每个平台目录，由 `scripts/collect-community-release.mjs` 校验并汇总为一份 SHA512SUMS、构建记录和发行说明。三个平台全部成功才上传 draft，全部资产上传后才公开；已发布版本不覆盖，修改内容必须递增版本。Windows 当前未做 Authenticode 签名；DEB/RPM 更新沿用系统授权安装。

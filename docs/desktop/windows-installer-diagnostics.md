@@ -68,7 +68,8 @@ NSIS .onInit
 ## 验收
 
 - 编译顺序：`installer.nsh` 加载时只声明依赖扩展插件的日志初始化宏；electron-builder 注册插件目录后，由 `customHeader` 展开函数，`.onInit` 的 `preInit` 仍调用同一函数。不得依赖异步生成 header 时 `!addplugindir` 与自定义 include 的完成顺序。
-- 编译回归必须在自定义 include 之后注册 NSIS 扩展插件目录，使用真实 `UAC_IsInnerInstance`，同时覆盖安装器与卸载器；普通 smoke 不再把外层判断替换为恒假，只有提权内层隔离场景保留显式模拟。
+- 编译回归必须在自定义 include 之后注册 NSIS 扩展插件目录，使用真实 `UAC_IsInnerInstance`，安装器与卸载器均开启 `-WX`；普通 smoke 不再把外层判断替换为恒假，只有提权内层隔离场景保留显式模拟。
+- 安装阶段的模板补丁在 NSIS `artifactBuildStarted` 应用，与 `beforePack` 无关；独立 `--prepackaged` 进程也必须得到同一阶段序列。回归消费真实 `installSection.nsh` 的隔离副本，不能仅靠夹具手工展开阶段宏证明补丁已接线；构建进程退出恢复上游模板原字节。
 - Windows NSIS smoke fixture 能编译并运行交互/静默安装。
 - 日志包含上述阶段且 PID 为正整数；`/LOG` 覆盖默认路径。
 - 提权内层测试证明调用方提供的日志路径不会被修改。

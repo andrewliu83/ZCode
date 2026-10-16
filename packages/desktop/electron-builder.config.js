@@ -601,11 +601,14 @@ export default {
     // 整个目标目录必须 unpack；其他平台目录已由 files 规则裁剪。
     `node_modules/node-pty/prebuilds/${targetPlatform.key}/**`,
   ],
-  beforePack: async (context) => {
+  beforePack: async () => {
     runTimedSync("beforePack:restoreTargetNodePtyPrebuild", () =>
       restoreTargetNodePtyPrebuild({ desktopPackageRoot, targetPlatform }),
     );
-    if (context.electronPlatformName !== "win32" || nsisInstallSectionPatched) {
+  },
+  artifactBuildStarted: async (event) => {
+    // --prepackaged 跳过 beforePack；必须在真实 NSIS target 编译前补齐阶段调用。
+    if (!["nsis", "nsis-web"].includes(event.targetPresentableName) || nsisInstallSectionPatched) {
       return;
     }
 
@@ -615,7 +618,7 @@ export default {
       "nsis",
       "installSection.nsh",
     );
-    const patchResult = await runTimedAsync("beforePack:patchNsisInstallSection", () =>
+    const patchResult = await runTimedAsync("artifactBuildStarted:patchNsisInstallSection", () =>
       patchNsisInstallSectionFile(nsisInstallSectionPath),
     );
     nsisInstallSectionPatched = true;
