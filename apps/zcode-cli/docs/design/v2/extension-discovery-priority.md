@@ -27,6 +27,10 @@ Within the same directory level, `.zcode` has higher priority than `.agents`. `.
 
 Same-name skills from different paths remain discoverable because path is the install identity. When loading by skill name, the first discovered skill wins, so user-level skills shadow project-level skills with the same name.
 
+Native kernel plugin projection follows the same first-match rule within each plugin/name slot. It copies only the selected skill, including its resources, without merging lower-priority directories. Identical names in different plugins remain separate. A user-imported symlink at the skill root is resolved before copying so the cached root is a real directory; nested symlinks retain their existing behavior. Directory exclusions apply below that root, not to its canonical ancestors. Source skill directories and import links remain read-only.
+
+The native projection cache uses a versioned digest of the selected skill names, original paths, and SKILL.md contents. Cache format changes do not reuse earlier link-based entries. A staging directory is published by atomic rename only after all copies and the plugin marker are complete; failed or competing builds clean up their own staging directory.
+
 ## Custom Commands
 
 Default custom command roots use the same source order as skills:
@@ -60,3 +64,9 @@ Coverage must include small fixture trees with the same skill, command, and MCP 
 - skill discovery lists both paths, but `loadSkill(name)` loads the user copy
 - command discovery keeps the user command and reports the project duplicate
 - MCP config resolves the user server, does not mark it untrusted, and still keeps project-only servers untrusted
+- native plugin projection materializes duplicate root links once, honors first-match priority without merging resources, isolates plugin namespaces, bypasses legacy caches, and cleans failed/concurrent staging directories
+- resolving an imported root beneath an excluded ancestor still copies the skill while excluding matching descendant directories
+
+### Native skill cache verification (2026-10-17)
+
+The regression first reproduced the reported `ERR_FS_CP_EINVAL` with two user import links targeting the same skill directory. After the fix, 42 adapter tests pass, including eight native projection cases. The actual reported `leanrea` imports also projected successfully into an isolated temporary cache; original content and import links stayed unchanged. Root and adapter type checks pass. Root lint reports 65 existing warnings and no errors; changed adapter/test lint reports no warnings or errors. Architecture and formatting checks pass. No model request, session retry, installed-app replacement, commit, or push was performed.
