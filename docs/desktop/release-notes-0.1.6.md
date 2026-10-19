@@ -1,4 +1,4 @@
-# Cua Driver 电脑操作接入（Community 0.1.5）
+# Cua Driver 电脑操作接入（Community 0.1.6）
 
 本次发行把 ZCode 的电脑操作从占位实现替换为固定版本的 Cua Driver 0.36.0，并扩展到三个桌面平台。
 
@@ -29,6 +29,7 @@
 ## 发行修复
 
 - 修复 Windows/Linux 构建前未准备 Cua Driver 资源导致打包失败：准备脚本现在按目标平台执行，并新增三平台门控回归。
+- 修复 Windows checkout 换行转换改写随包许可导致摘要不一致：固定资源按原始字节入库。
 
 ## 验证
 

@@ -240,12 +240,14 @@ describe("Cua Driver release staging", () => {
   });
 
   it("skips unsupported target platforms without inspecting or downloading resources", async () => {
-    expect(await prepareCuaDriverAssets({ targetPlatform: { os: "darwin", arch: "x64" } })).toEqual({
-      skipped: true,
-    });
-    expect(await prepareCuaDriverAssets({ targetPlatform: { os: "win32", arch: "arm64" } })).toEqual(
-      { skipped: true },
+    expect(await prepareCuaDriverAssets({ targetPlatform: { os: "darwin", arch: "x64" } })).toEqual(
+      {
+        skipped: true,
+      },
     );
+    expect(
+      await prepareCuaDriverAssets({ targetPlatform: { os: "win32", arch: "arm64" } }),
+    ).toEqual({ skipped: true });
     expect(
       resolveDevDesktopCuaDriverEnv({ platform: "darwin", arch: "x64", repoRoot: "/repo" }),
     ).toEqual({});
@@ -273,6 +275,19 @@ describe("Cua Driver release staging", () => {
       ZCODE_CUA_DRIVER_SDK_PATH:
         "/repo/packages/desktop/bundled-tools/cua-driver/linux-x64/node_modules/@trycua/cua-driver",
     });
+  });
+
+  // 回归依据：Windows checkout 的 CRLF 转换会改写随包许可，导致摘要校验在打包前失败。
+  it("keeps checked-in Driver notices byte-pinned across checkout", async () => {
+    const attributes = await readFile(resolve(desktopRoot, "../../.gitattributes"), "utf8");
+    expect(attributes).toMatch(/^third-party\/cua-driver\/\*\* -text -whitespace$/mu);
+    const source = await readCuaDriverSources();
+    for (const notice of source.notices) {
+      const local = await readFile(
+        resolve(desktopRoot, "../../third-party/cua-driver", notice.member),
+      );
+      expect(createHash("sha256").update(local).digest("hex")).toBe(notice.sha256);
+    }
   });
 
   it("presigns SDK/app Mach-O before sealing the nested Driver app", async () => {

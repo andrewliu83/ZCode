@@ -17,4 +17,5 @@ third-party/native-search/licenses/** -text -whitespace
 third-party/runtime/*.txt -text -whitespace
 docs/knip/docs/LICENSE -text -whitespace
 docs/knip/docs/licenses/** -text -whitespace
+third-party/cua-driver/** -text -whitespace
 third-party/inventory.json linguist-generated=true
