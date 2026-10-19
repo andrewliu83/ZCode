@@ -1,6 +1,6 @@
 # ZCode Community
 
-ZCode Community is a community distribution based on [ZCode](https://github.com/zai-org/ZCode), with desktop, Web and terminal AI coding interfaces. The current Community version is **0.1.6**, with its own application ID, package names and `community-v*` tags. It installs and updates separately from upstream 3.x releases.
+ZCode Community is a community distribution based on [ZCode](https://github.com/zai-org/ZCode), with desktop, Web and terminal AI coding interfaces. The current Community version is **0.1.7**, with its own application ID, package names and `community-v*` tags. It installs and updates separately from upstream 3.x releases.
 
 <div align="center">
   <img src="public/logo/icons/1024x1024.png" alt="ZCode" width="128" height="128" />
@@ -193,8 +193,8 @@ The [Community Desktop Release workflow](.github/workflows/community-release.yml
 Commit and push the source, then create a tag matching the root `package.json` version and pointing to that commit:
 
 ```bash
-git tag community-v0.1.6
-git push origin community-v0.1.6
+git tag community-v0.1.7
+git push origin community-v0.1.7
 ```
 
 Rerunning Actions for an old tag still builds its original commit. Publish fixes with a new version and tag instead of moving an existing tag.

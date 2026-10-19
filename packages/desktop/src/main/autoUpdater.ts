@@ -125,6 +125,12 @@ interface InitAutoUpdaterOptions {
 }
 
 let quitAndInstallInFlight = false;
+// 安装器已接管后必须让后续 before-quit 直接放行：否则标志在 finally 清空，
+// 第二次退出会被重新 preventDefault，而更新器此时处于 installing 直接空返回，
+// 没有任何一方再发起退出，表现为“重启以更新”卡死。
+let installHandoffComplete = false;
+// 安装器接管后若 Main 仍未退出，兜底强制结束进程，避免助手等待超时后放弃安装。
+const INSTALL_HANDOFF_EXIT_GRACE_MS = 3_000;
 let devAutoUpdateVersionOverride: string | null = null;
 let recheckAfterDownload: ((reason: string) => void) | null = null;
 let pendingFailedDownloadRecheck = false;
@@ -481,6 +487,11 @@ async function quitAndInstallUpdate(rejectUnavailable = false) {
     logger.info("[auto-update] quitAndInstall already in flight");
     return;
   }
+  if (installHandoffComplete) {
+    // 安装器已接管：放行退出，不能再 preventDefault 造成卡死。
+    logger.info("[auto-update] quitAndInstall already handed off to installer");
+    return;
+  }
   quitAndInstallInFlight = true;
   logger.info("[auto-update] user requested quit and install");
   // macOS 上 quitAndInstall() 在关窗前不会先走 app.before-quit。
@@ -518,7 +529,17 @@ async function quitAndInstallUpdate(rejectUnavailable = false) {
     // 3.3.0 的 Windows 自定义 PowerShell delayed launcher 在 detached/hidden
     // 模式下可能只创建 powershell.exe，却没有稳定执行到安装器启动，用户看到应用关闭但版本不变。
     // 这里恢复 electron-updater 原生安装入口，避免把“launcher 进程创建成功”误当成更新已接管。
+    // 安装期间 before-quit 仍由 quitAndInstallInFlight 放行；只有成功交给安装器后才置位交接标记，
+    // 失败时不能强制退出，否则用户会丢失应用却装不上更新。
     await autoUpdater.quitAndInstall();
+    installHandoffComplete = true;
+    // 兜底：安装器已接管但 Main 因其它退出拦截仍未结束，主动结束进程，
+    // 避免安装助手等待父进程超时后放弃安装（用户只看到重启后版本未变）。
+    const exitTimer = setTimeout(() => {
+      logger.warn("[auto-update] main still running after installer handoff; exiting");
+      app.exit(0);
+    }, INSTALL_HANDOFF_EXIT_GRACE_MS);
+    exitTimer.unref?.();
   } catch (error) {
     // Community helper 的启动是异步的，必须收敛失败，不能留下未处理的 rejection 或误宣告安装。
     handleAutoUpdateFailure(error, "start update installation failed");
@@ -1895,7 +1916,13 @@ function configureAutoUpdater(options: InitAutoUpdaterOptions): void {
   });
 
   app.on("before-quit", (event) => {
-    if (process.platform === "win32" || quitAndInstallInFlight || !isReadyUpdateCurrentTarget()) {
+    // installHandoffComplete 后退出必须放行；否则第二次退出被拦、更新器空返回会卡死。
+    if (
+      process.platform === "win32" ||
+      quitAndInstallInFlight ||
+      installHandoffComplete ||
+      !isReadyUpdateCurrentTarget()
+    ) {
       return;
     }
     event.preventDefault();

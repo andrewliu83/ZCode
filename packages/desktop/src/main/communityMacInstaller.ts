@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { access, mkdtemp, realpath, readdir, rm, writeFile } from "node:fs/promises";
+import { access, mkdtemp, readdir, realpath, rm, stat, writeFile } from "node:fs/promises";
 import { constants } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
@@ -93,6 +93,24 @@ async function readPlist(path: string, key: string): Promise<string> {
   return stdout.trim();
 }
 
+const STALE_STAGING_PREFIX = ".zcode-community-update-";
+const STALE_STAGING_MAX_AGE_MS = 10 * 60 * 1000;
+
+/**
+ * 安装失败（例如父进程超时未退出）会留下 staging 目录；下次准备更新时清掉过期项，
+ * 避免残留无限堆积。只处理同一父目录、同前缀且明显过期的目录，不碰正在进行中的安装。
+ */
+async function removeStaleUpdateStaging(parentDirectory: string, now = Date.now()): Promise<void> {
+  const entries = await readdir(parentDirectory, { withFileTypes: true }).catch(() => []);
+  for (const entry of entries) {
+    if (!entry.isDirectory() || !entry.name.startsWith(STALE_STAGING_PREFIX)) continue;
+    const path = join(parentDirectory, entry.name);
+    const info = await stat(path).catch(() => undefined);
+    if (!info || now - info.mtimeMs < STALE_STAGING_MAX_AGE_MS) continue;
+    await rm(path, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
 export async function prepareCommunityMacUpdate(input: {
   archive: string;
   target: string;
@@ -112,6 +130,7 @@ export async function prepareCommunityMacUpdate(input: {
   });
   validateMacUpdateArchive(stdout.trimEnd().split("\n"), input.appName);
   // staging 与目标在同一文件系统，每次 mv 使用 rename；整个替换由备份和失败回滚守护。
+  await removeStaleUpdateStaging(dirname(target));
   const staging = await mkdtemp(join(dirname(target), ".zcode-community-update-"));
   try {
     await execute("/usr/bin/ditto", ["-x", "-k", input.archive, staging]);

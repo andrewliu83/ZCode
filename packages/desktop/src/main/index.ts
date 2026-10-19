@@ -99,6 +99,7 @@ import {
   selectAppShutdownPolicy,
   type AppShutdownKind,
 } from "./appShutdownPolicy.js";
+import { resolveUpdateStatusWindowClosable } from "./updateStatusWindowClosePolicy.js";
 import { createPrimaryWindowCoordinator } from "./primaryWindowCoordinator.js";
 import { createTempTextAttachment } from "./tempTextAttachment.js";
 import { flushMainE2ECoverage } from "./e2eCoverage.js";
@@ -954,6 +955,14 @@ function markForceQuit(reason: string) {
 
   forceQuitRef.current = true;
   logger.info(`[app-quit] forceQuit enabled (${reason})`);
+  // 修复原因：更新状态窗在 download-progress / update-downloaded 时被设为不可关闭
+  // （syncUpdateStatusWindowClosePolicy），而 forceQuit 打开后没有任何地方重新同步它。
+  // 于是“重启以更新”触发 app.quit() 时，退出被这个不可关闭窗口挡住：Main 永不退出，
+  // 安装助手等待父进程超时后放弃安装（community-update-install.log 记录 Main did not exit），
+  // 用户看到应用重启但版本未变。这里在允许真正退出时同步恢复该窗口的可关闭状态。
+  if (updateStatusWindow && !updateStatusWindow.isDestroyed()) {
+    syncUpdateStatusWindowClosePolicy(updateStatusWindow);
+  }
 }
 
 function markExplicitQuit(reason: string) {
@@ -1477,15 +1486,14 @@ function getMainApplicationWindows(): BrowserWindow[] {
 }
 
 function isUpdateStatusWindowCloseLocked(state: UpdateStatePayload) {
-  return state.kind === "download-progress" || state.kind === "update-downloaded";
+  return !resolveUpdateStatusWindowClosable(state, false);
 }
 
 function syncUpdateStatusWindowClosePolicy(win: BrowserWindow) {
   if (win.isDestroyed()) {
     return;
   }
-  const closeLocked = isUpdateStatusWindowCloseLocked(getAutoUpdaterState());
-  win.setClosable(!closeLocked || forceQuitRef.current);
+  win.setClosable(resolveUpdateStatusWindowClosable(getAutoUpdaterState(), forceQuitRef.current));
   win.setMinimizable(true);
 }
 

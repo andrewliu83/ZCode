@@ -2284,6 +2284,32 @@ describe("autoUpdater ready state sync", () => {
       version: "0.1.25",
     });
   });
+  // 回归依据：0.1.6 上 macOS “重启以更新”卡死 —— 安装器接管后 before-quit
+  // 仍被 preventDefault，而更新器此时直接空返回，无人再发起退出，
+  // Main 永不退出，安装助手等待父进程超时后放弃（Main did not exit）。
+  it("安装交接完成后不再拦截退出，避免重启更新卡死", async () => {
+    mockProcessPlatform("darwin");
+    const onBeforeQuitAndInstall = vi.fn();
+    const { initAutoUpdater } = await import("../src/main/autoUpdater.js");
+
+    initAutoUpdater({ onBeforeQuitAndInstall });
+    autoUpdaterMock.emit("update-downloaded", { version: "0.1.25" });
+    await Promise.resolve();
+
+    const quitHandler = ipcMainHandle.mock.calls.find(
+      ([channel]: [string, unknown]) => channel === PlatformChannels.QuitAndInstallUpdate,
+    )?.[1] as (() => Promise<void>) | undefined;
+    await quitHandler?.();
+    expect(autoUpdaterMock.quitAndInstall).toHaveBeenCalledTimes(1);
+
+    autoUpdaterMock.quitAndInstall.mockClear();
+    const event = { preventDefault: vi.fn() };
+    for (const listener of appListeners.get("before-quit") ?? []) listener(event);
+
+    expect(event.preventDefault).not.toHaveBeenCalled();
+    expect(autoUpdaterMock.quitAndInstall).not.toHaveBeenCalled();
+  });
+
   it("Windows 初始化时会关闭 quit 自动安装，避免关应用后立即关机打断更新", async () => {
     mockProcessPlatform("win32");
     const { initAutoUpdater } = await import("../src/main/autoUpdater.js");

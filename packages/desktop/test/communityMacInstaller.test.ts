@@ -1,6 +1,15 @@
 import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
-import { mkdtemp, mkdir, writeFile, readFile, appendFile, rm } from "node:fs/promises";
+import {
+  mkdtemp,
+  mkdir,
+  writeFile,
+  readFile,
+  appendFile,
+  rm,
+  stat,
+  utimes,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { once } from "node:events";
@@ -50,6 +59,37 @@ async function makeApp(root: string, version: string, identifier = appId) {
 }
 
 describe.skipIf(process.platform !== "darwin")("real macOS Community update transaction", () => {
+  // 回归依据：父进程未退出时安装助手会放弃并留下 staging；准备下一次更新时必须清掉过期残留。
+  it("removes stale update staging without touching a fresh one", async () => {
+    const root = await mkdtemp(join(tmpdir(), "community-update-stale-"));
+    try {
+      const installed = join(root, "installed");
+      const incoming = join(root, "incoming");
+      const target = await makeApp(installed, "0.1.0");
+      const next = await makeApp(incoming, "0.1.1");
+      const archive = join(root, "update.zip");
+      await run("/usr/bin/ditto", ["-c", "-k", "--keepParent", next, archive]);
+      const stale = join(installed, ".zcode-community-update-stale");
+      const fresh = join(installed, ".zcode-community-update-fresh");
+      await mkdir(stale, { recursive: true });
+      await mkdir(fresh, { recursive: true });
+      const old = new Date(Date.now() - 60 * 60 * 1000);
+      await utimes(stale, old, old);
+      await prepareCommunityMacUpdate({
+        archive,
+        target,
+        version: "0.1.1",
+        appName,
+        appId,
+        arch: process.arch,
+      });
+      expect(await stat(stale).catch(() => undefined)).toBeUndefined();
+      expect((await stat(fresh)).isDirectory()).toBe(true);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  }, 30000);
+
   it.each([false, true])(
     "waits for Main exit and installs, or rolls back corrupted staging (corrupt=%s)",
     async (corrupt) => {
