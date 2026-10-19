@@ -1,6 +1,6 @@
 # ZCode Community
 
-ZCode Community 是基于 [ZCode](https://github.com/zai-org/ZCode) 的社区发行版，提供桌面、Web 和终端 AI 编程工作台。当前 Community 版本为 **0.1.3**，使用独立应用 ID、安装包名称和 `community-v*` 标签，与上游 3.x 版本分开安装和更新。
+ZCode Community 是基于 [ZCode](https://github.com/zai-org/ZCode) 的社区发行版，提供桌面、Web 和终端 AI 编程工作台。当前 Community 版本为 **0.1.4**，使用独立应用 ID、安装包名称和 `community-v*` 标签，与上游 3.x 版本分开安装和更新。
 
 <div align="center">
   <img src="public/logo/icons/1024x1024.png" alt="ZCode" width="128" height="128" />
@@ -197,8 +197,8 @@ pnpm release:desktop -- --os win --arch x64 --plan
 发行前先提交并推送源码，再创建与根 `package.json` 版本一致、指向该提交的标签：
 
 ```bash
-git tag community-v0.1.3
-git push origin community-v0.1.3
+git tag community-v0.1.4
+git push origin community-v0.1.4
 ```
 
 重跑旧标签对应的 Actions 仍使用旧提交。修复后发布新版本和新标签，不移动旧标签。

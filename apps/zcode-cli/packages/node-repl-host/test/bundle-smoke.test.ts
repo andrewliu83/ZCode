@@ -200,6 +200,12 @@ describe("node_repl host and browser-use runtime bundles", () => {
     }
   });
 
+  it("keeps the native Driver SDK external to the shared REPL bundle", async () => {
+    const bundle = await readFile(mcpOutfile, "utf8");
+    expect(bundle).toContain('import("@trycua/cua-driver")');
+    expect(bundle).not.toContain("uniffi_cua_driver_sdk_fn");
+  });
+
   // 构建期守卫本身也要有测试：define 名漂移时必须**构建失败**，而不是静默产出空串 ——
   // 后者的症状只在正式包出现，且表现为超时，没有任何日志。
   it("fails the build when the injected build id does not reach the output", async () => {

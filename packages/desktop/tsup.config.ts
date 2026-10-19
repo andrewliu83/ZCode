@@ -171,6 +171,8 @@ const desktopNodeRuntimeExternals = [
   "node-forge",
   // ZIP 解包器内部依赖 CommonJS require("fs")，不能内联到 ESM main/host 产物。
   "yauzl",
+  // Driver SDK 依赖 ESM 元数据与目标 Mach-O，必须由 ASAR 外的固定 SDK 包延迟加载。
+  "@trycua/cua-driver",
 ];
 
 function createDevReadyMarkerHook(target: "main" | "host" | "preload"): string {

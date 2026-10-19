@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
+  isCuaDriverInstalled,
   isRealComputerUseProducerInstalled,
   readComputerUseProducer,
 } from "../scripts/computer-use-producer.mjs";
@@ -45,6 +46,25 @@ describe("Computer Use producer detection", () => {
       placeholder: true,
     });
     expect(isRealComputerUseProducerInstalled({ desktopPackageRoot: desktopRoot })).toBe(false);
+  });
+
+  it("schema 2 Driver 独立启用且不启用旧 Helper producer", () => {
+    const desktopRoot = createWorkspace({
+      name: "@zcode/zcode-cua",
+      zcodeCuaPlaceholder: true,
+      zcodeCuaRuntime: { schema: 2, driver: { version: "0.36.0" } },
+    });
+    expect(isCuaDriverInstalled({ desktopPackageRoot: desktopRoot })).toBe(true);
+    expect(isRealComputerUseProducerInstalled({ desktopPackageRoot: desktopRoot })).toBe(false);
+  });
+
+  it.each([
+    { schema: 1, driver: { version: "0.36.0" } },
+    { schema: 2, driver: { version: "0.35.0" } },
+    undefined,
+  ])("不把旧 producer 或其他 Driver 版本作为固定 Driver", (zcodeCuaRuntime) => {
+    const desktopRoot = createWorkspace({ name: "@zcode/zcode-cua", zcodeCuaRuntime });
+    expect(isCuaDriverInstalled({ desktopPackageRoot: desktopRoot })).toBe(false);
   });
 
   it("未安装任何 producer 时不算真实 producer", () => {

@@ -18,8 +18,17 @@ export interface ComputerUseRuntimeExecuteInput {
   signal?: AbortSignal;
 }
 
+export interface ComputerUseRuntimeResult {
+  content: Array<
+    { type: "text"; text: string } | { type: "image"; mimeType: string; data: string }
+  >;
+  structuredContent?: Record<string, unknown>;
+  isError?: boolean;
+  _meta?: Record<string, unknown>;
+}
+
 export interface ComputerUseRuntime {
-  execute(input: ComputerUseRuntimeExecuteInput): Promise<unknown>;
+  execute(input: ComputerUseRuntimeExecuteInput): Promise<ComputerUseRuntimeResult>;
   closeSession(context: ComputerUseRuntimeContext): Promise<void>;
   dispose(): Promise<void>;
 }

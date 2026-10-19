@@ -15,7 +15,7 @@ import {
   verifyCommunityRelease,
   mergeCommunityUpdateManifests,
 } from "../verify-community-release.mjs";
-import { collectCommunityRelease } from "../collect-community-release.mjs";
+import { collectCommunityRelease, readReleaseSummary } from "../collect-community-release.mjs";
 
 const version = "0.1.0";
 const commit = "fixture-commit";
@@ -181,6 +181,7 @@ test("release collection keeps all OS feeds and aggregates checksums without fil
       outputDirectory,
       version,
       commit,
+      releaseSummary: "# Fixture release\n\n- Windows and Linux support\n",
     });
     assert.equal(builds.length, 3);
     const names = await readdir(outputDirectory);
@@ -199,8 +200,15 @@ test("release collection keeps all OS feeds and aggregates checksums without fil
         digest,
       );
     }
-    assert.match(await readFile(join(outputDirectory, "release-notes.md"), "utf8"), /Windows/);
+    const notes = await readFile(join(outputDirectory, "release-notes.md"), "utf8");
+    assert.match(notes, /Fixture release/);
+    assert.match(notes, /Windows/);
   });
+});
+
+test("refuses to publish without a version summary", async () => {
+  await assert.rejects(readReleaseSummary("9.9.9"), /Missing release summary/);
+  assert.match(await readReleaseSummary("0.1.4"), /Cua Driver/);
 });
 
 for (const failure of [

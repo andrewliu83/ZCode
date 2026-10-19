@@ -1,0 +1,75 @@
+{
+  "schemaVersion": 1,
+  "version": "0.36.0",
+  "repository": "https://github.com/trycua/cua",
+  "commit": "6d6c734c127025fb39ad5d585a10382808b39dc1",
+  "releaseBase": "https://github.com/trycua/cua/releases/download/cua-driver-rs-v0.36.0/",
+  "archives": {
+    "darwin-arm64": {
+      "file": "cua-driver-rs-0.36.0-darwin-arm64.tar.gz",
+      "bytes": 83308236,
+      "sha256": "4a0e229922a1ac6d6f59152e0653541920951afa89a3007e4ff5ffc024eae7a8",
+      "root": "cua-driver-rs-0.36.0-darwin-arm64",
+      "app": "CuaDriver.app",
+      "executable": "Contents/MacOS/cua-driver",
+      "bundleId": "com.trycua.driver",
+      "minimumSystemVersion": "13.0"
+    },
+    "win32-x64": {
+      "file": "cua-driver-rs-0.36.0-windows-x86_64-binary.zip",
+      "bytes": 35240761,
+      "sha256": "f8c47024b626f4e0e70f8428d2998df39e4879110c5722a29d5fd03e367353ad",
+      "root": "",
+      "executable": "cua-driver.exe",
+      "bundleId": "com.trycua.driver",
+      "members": [
+        "cua-driver.exe",
+        "cua-cursor-theme.exe",
+        "cua-driver-uia.exe"
+      ]
+    },
+    "linux-x64": {
+      "file": "cua-driver-rs-0.36.0-linux-x86_64-binary.tar.gz",
+      "bytes": 36484583,
+      "sha256": "05dae2160c86bdf4855c279d30898213d7a150edb1992b7470afdd69f0df4064",
+      "root": "",
+      "executable": "cua-driver",
+      "bundleId": "com.trycua.driver",
+      "members": [
+        "cua-driver",
+        "cua-cursor-theme",
+        "wayland-helper"
+      ]
+    }
+  },
+  "sdkPackages": {
+    "@trycua/cua-driver": "0.36.0",
+    "@ubjs/core": "0.31.0-3",
+    "@ubjs/node": "0.31.0-3"
+  },
+  "notices": [
+    {
+      "member": "LICENSE",
+      "source": "https://github.com/trycua/cua/releases/download/cua-driver-rs-v0.36.0/cua-driver-rs-0.36.0-darwin-arm64.tar.gz",
+      "sha256": "c0779290c1d4783169aa3dbfb55feb505e563ef8a004bbf55298ceffcfbda8d9",
+      "sourceFile": "third-party/cua-driver/LICENSE"
+    },
+    {
+      "member": "THIRD_PARTY_NOTICES.md",
+      "source": "https://github.com/trycua/cua/releases/download/cua-driver-rs-v0.36.0/cua-driver-rs-0.36.0-darwin-arm64.tar.gz",
+      "sha256": "82470c85cb48dd084fccbf192d4a9f0b9d0afe614ab9b63e0fceac0eb315f412",
+      "sourceFile": "third-party/cua-driver/THIRD_PARTY_NOTICES.md"
+    }
+  ],
+  "sdkNativePackages": {
+    "darwin-arm64": {
+      "@trycua/cua-driver-darwin-arm64": "0.36.0"
+    },
+    "win32-x64": {
+      "@trycua/cua-driver-win32-x64-msvc": "0.36.0"
+    },
+    "linux-x64": {
+      "@trycua/cua-driver-linux-x64-gnu": "0.36.0"
+    }
+  }
+}

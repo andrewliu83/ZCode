@@ -29,6 +29,16 @@ export function readComputerUseProducer({ desktopPackageRoot }) {
   }
 }
 
+// schema 2 的 Driver 与旧 Helper producer 分别判定；placeholder 保留为 true，防止启动旧原生资源流程。
+export function isCuaDriverInstalled({ desktopPackageRoot }) {
+  const producer = readComputerUseProducer({ desktopPackageRoot });
+  return (
+    producer.installed &&
+    producer.manifest.zcodeCuaRuntime?.schema === 2 &&
+    producer.manifest.zcodeCuaRuntime?.driver?.version === "0.36.0"
+  );
+}
+
 export function isRealComputerUseProducerInstalled({ desktopPackageRoot }) {
   const producer = readComputerUseProducer({ desktopPackageRoot });
   return producer.installed && !producer.placeholder;

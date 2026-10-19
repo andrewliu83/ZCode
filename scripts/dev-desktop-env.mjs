@@ -2,8 +2,14 @@ import { spawn } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve } from "node:path";
-import { isRealComputerUseProducerInstalled } from "../packages/desktop/scripts/computer-use-producer.mjs";
-import { resolveDevDesktopWindowsCuaEnv } from "./dev-desktop-cua-env.mjs";
+import {
+  isCuaDriverInstalled,
+  isRealComputerUseProducerInstalled,
+} from "../packages/desktop/scripts/computer-use-producer.mjs";
+import {
+  resolveDevDesktopCuaDriverEnv,
+  resolveDevDesktopWindowsCuaEnv,
+} from "./dev-desktop-cua-env.mjs";
 import { withPinnedNodePath } from "./mise-toolchain-env.mjs";
 import { quoteArgsForWindowsShell } from "./spawn-command.mjs";
 
@@ -21,7 +27,17 @@ const pnpmCommand = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
 const hasComputerUseProducer = isRealComputerUseProducerInstalled({
   desktopPackageRoot: join(repoRoot, "packages", "desktop"),
 });
-const computerUseDevEnv = hasComputerUseProducer ? await resolveComputerUseDevEnv() : {};
+const hasCuaDriver = isCuaDriverInstalled({
+  desktopPackageRoot: join(repoRoot, "packages/desktop"),
+});
+const driverDevEnv = hasCuaDriver
+  ? resolveDevDesktopCuaDriverEnv({
+      platform: process.platform,
+      arch: process.arch,
+      repoRoot,
+    })
+  : {};
+const computerUseDevEnv = hasComputerUseProducer ? await resolveComputerUseDevEnv() : driverDevEnv;
 
 async function resolveComputerUseDevEnv() {
   const { DEV_HELPER_APP_NAME } = await import("@zcode/zcode-cua/broker/helperConstants");
@@ -98,6 +114,11 @@ function run(command, args) {
 }
 
 try {
+  if (hasCuaDriver && driverDevEnv.ZCODE_CUA_DRIVER_SDK_PATH) {
+    await run(process.execPath, [
+      resolve(repoRoot, "packages/desktop/scripts/prepare-cua-driver.mjs"),
+    ]);
+  }
   if (process.platform === "darwin" && hasComputerUseProducer) {
     await run(process.execPath, [
       resolve(repoRoot, "scripts/build-cua-helper-app.mjs"),

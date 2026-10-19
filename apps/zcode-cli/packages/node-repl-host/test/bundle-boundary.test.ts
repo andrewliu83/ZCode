@@ -20,6 +20,7 @@ describe("node_repl MCP bundle boundary", () => {
       absWorkingDir: packageRoot,
       bundle: true,
       entryPoints: ["src/server.ts"],
+      external: ["sharp", "@trycua/cua-driver", "@trycua/cua-driver/*"],
       format: "esm",
       legalComments: "none",
       metafile: true,

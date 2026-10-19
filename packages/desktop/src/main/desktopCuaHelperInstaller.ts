@@ -1,6 +1,5 @@
 import { join } from "node:path";
 import { app } from "electron";
-import { HELPER_APP_NAME } from "@zcode/zcode-cua/broker/helperConstants";
 import {
   canonicalizeCuaHelperInstallerOptions,
   createCuaHelperInstaller,
@@ -30,9 +29,15 @@ export function resolvePackagedCuaHelperAppPath(
   const resourcesPath =
     options.resourcesPath ?? (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath;
   const normalizedResourcesPath = resourcesPath?.trim();
-  return platform === "darwin" && isPackaged && normalizedResourcesPath
-    ? join(normalizedResourcesPath, "cua-helper", HELPER_APP_NAME)
-    : undefined;
+  if (!isPackaged || !normalizedResourcesPath) return undefined;
+  // macOS 授权主体是 .app；Windows/Linux 直接运行随包可执行文件。
+  if (platform === "darwin")
+    return join(normalizedResourcesPath, "tools", "cua-driver", "CuaDriver.app");
+  if (platform === "win32")
+    return join(normalizedResourcesPath, "tools", "cua-driver", "cua-driver.exe");
+  if (platform === "linux")
+    return join(normalizedResourcesPath, "tools", "cua-driver", "cua-driver");
+  return undefined;
 }
 
 export function createDesktopCuaHelperInstaller(

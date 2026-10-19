@@ -26,7 +26,11 @@ import {
   isSharpRequiredByComputerUse,
   verifyStagedSharp,
 } from "./scripts/sharp-package-assets.mjs";
-import { isRealComputerUseProducerInstalled } from "./scripts/computer-use-producer.mjs";
+import {
+  isCuaDriverInstalled,
+  isRealComputerUseProducerInstalled,
+} from "./scripts/computer-use-producer.mjs";
+import { verifyCuaDriverAssets } from "./scripts/prepare-cua-driver.mjs";
 import { verifyStagedKoffi } from "./scripts/koffi-package-assets.mjs";
 import {
   finalizePackagedWindowsCuaHelper,
@@ -72,6 +76,9 @@ const workspaceRoot = resolve(import.meta.dirname, "../..");
 const desktopPackageRoot = import.meta.dirname;
 // Computer Use Helper（macOS .app、Windows runtime）只随真实 producer 打包；开源占位包下跳过随包资源与校验。
 const shouldPackageComputerUseHelper = isRealComputerUseProducerInstalled({ desktopPackageRoot });
+const shouldPackageCuaDriver =
+  ["darwin-arm64", "win32-x64", "linux-x64"].includes(targetPlatform.key) &&
+  isCuaDriverInstalled({ desktopPackageRoot });
 const HELPER_FILENAME = "zcode-browser-import-helper.exe";
 const runtimeModuleLookupRoots = [
   desktopPackageRoot,
@@ -593,6 +600,9 @@ export default {
     ...PACKAGING_PRUNE_PATTERNS,
     ...createDesktopNativePackagePrunePatterns(targetPlatform.key),
     "!node_modules/@zcode/**",
+    // Driver SDK 只从 tools/cua-driver 加载，避免收集其他平台 native 或在 ASAR 内重复打包。
+    "!node_modules/@trycua/**",
+    "!node_modules/@ubjs/**",
     "!node_modules/react/**",
     "!node_modules/react-dom/**",
   ],
@@ -667,6 +677,13 @@ export default {
     runTimedSync("afterPack:assertPackagedCuaSharp", () => assertPackagedCuaSharp(context));
     runTimedSync("afterPack:assertPackagedCuaKoffi", () => assertPackagedCuaKoffi(context));
     runTimedSync("afterPack:assertPackagedCuaHelper", () => assertPackagedCuaHelper(context));
+    if (shouldPackageCuaDriver) {
+      await verifyCuaDriverAssets(
+        join(resolvePackagedResourcesDir(context), "tools/cua-driver"),
+        undefined,
+        targetPlatform.key,
+      );
+    }
     if (actualWindowsTarget && shouldPackageComputerUseHelper) {
       await runTimedAsync("afterPack:finalizePackagedWindowsCuaHelper", () =>
         finalizePackagedWindowsCuaHelper({
@@ -753,6 +770,21 @@ export default {
             // 这里不复用窗口 PNG，避免通知区域在高 DPI 下退化成模糊缩放图。
             from: "build/icon.ico",
             to: "tray_icon.ico",
+          },
+        ]
+      : []),
+    ...(shouldPackageCuaDriver
+      ? [
+          {
+            from: `bundled-tools/cua-driver/${targetPlatform.key}`,
+            to: "tools/cua-driver",
+            filter: ["**/*", "!node_modules{,/**/*}"],
+          },
+          {
+            // electron-builder 默认跳过 node_modules，必须独立映射完整目标 SDK 闭包。
+            from: `bundled-tools/cua-driver/${targetPlatform.key}/node_modules`,
+            to: "tools/cua-driver/node_modules",
+            filter: ["**/*", "!**/*.map"],
           },
         ]
       : []),

@@ -135,7 +135,7 @@ sequenceDiagram
 # 使用方式
 
 - 在对应原生系统执行：macOS `pnpm release:desktop -- --os mac --arch arm64`；Windows `pnpm release:desktop -- --os win --arch x64`；Linux `pnpm release:desktop -- --os linux --arch x64`。输出分别在 `packages/desktop/dist/community/macos-arm64/`、`windows-x64/`、`linux-x64/`；添加 `--plan` 仅查看配置，不要求当前主机匹配目标。实际构建在清理目录前验证 host/arch，拒绝跨平台错配。
-- 当前发行版本为 `0.1.3`：提交并推送源码后，创建指向该提交的 `community-v0.1.3` 标签。Actions 自动构建并发布；在 GitHub Actions 中手动运行则只上传 artifacts。重跑旧标签仍构建其原始提交，修复后递增根版本并创建新的 `community-v…` 标签，不移动旧标签；也可使用 `pnpm release patch`／`minor`。
+- 当前发行版本为 `0.1.4`：提交并推送源码后，创建指向该提交的 `community-v0.1.4` 标签。Actions 自动构建并发布；在 GitHub Actions 中手动运行则只上传 artifacts。重跑旧标签仍构建其原始提交，修复后递增根版本并创建新的 `community-v…` 标签，不移动旧标签；也可使用 `pnpm release patch`／`minor`。
 - 工作流的矩阵从 `scripts/community-release-targets.mjs` 读取：macOS 使用 `macos-15`（arm64），Windows 使用 `windows-2022`（x64），Linux 使用 `ubuntu-22.04`（x64）。Linux 安装 rpm、libfuse2、patchelf；Windows 启用长路径。所有 runner 只使用根冻结锁。
 - macOS 无 Apple 凭据时无需配置 Secrets，走 ad hoc。正式签名需同时配置 `MACOS_CERTIFICATE_P12_BASE64`、`APPLE_SIGNING_IDENTITY`（Developer ID Application 完整名称）、`APPLE_ID`、`APPLE_APP_SPECIFIC_PASSWORD`、`APPLE_TEAM_ID`；加密 P12 另设 `MACOS_CERTIFICATE_PASSWORD`。进入正式签名后保持签名身份稳定。凭据不完整时失败。
 - 下载构建 artifacts 时保留每个平台目录，由 `scripts/collect-community-release.mjs` 校验并汇总为一份 SHA512SUMS、构建记录和发行说明。三个平台全部成功才上传 draft，全部资产上传后才公开；已发布版本不覆盖，修改内容必须递增版本。Windows 当前未做 Authenticode 签名；DEB/RPM 更新沿用系统授权安装。

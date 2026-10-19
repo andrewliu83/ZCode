@@ -1,197 +1,224 @@
+import { execFile } from "node:child_process";
+import { access, mkdir, writeFile } from "node:fs/promises";
+import { dirname } from "node:path";
+import { promisify } from "node:util";
 import { CuaHelperError } from "./broker.js";
-import { HELPER_APP_NAME } from "./broker-helper-constants.js";
+import { buildHelperOpenArgs, createDriverHost, driverAppIdentity } from "./driver-host.js";
 
 export const HELPER_ADDON_ENV = "ZCODE_CUA_HELPER_ADDON";
 export const WINDOWS_DEV_CONTROL_PROTOCOL = "zcode-cua-windows-dev/v1";
+const run = promisify(execFile);
+const UNSUPPORTED = "This legacy Helper interface is not supported by Cua Driver.";
+const unavailable = () => {
+  throw new CuaHelperError(UNSUPPORTED);
+};
+export { buildHelperOpenArgs };
+export const resolveHelperPermissionSubjectIdentity = driverAppIdentity;
 
-const UNAVAILABLE = "Computer Use is not available in this build.";
-
-function unavailableReject() {
-  return Promise.reject(new CuaHelperError(UNAVAILABLE));
-}
-
-export function buildHelperOpenArgs(_spec, _launcherPid) {
-  return [];
-}
-
-export async function resolveHelperPermissionSubjectIdentity(_appPath) {
-  throw new CuaHelperError(UNAVAILABLE);
-}
-
-export function isCuaLocalDevelopmentRuntime(_env, _compiledLocalDevelopmentRuntime) {
-  return false;
-}
-
-export function createCuaHelperInstaller(_options) {
-  return {
-    ensureInstalled: unavailableReject,
-    verifyInstalled: unavailableReject,
-  };
+export function isCuaLocalDevelopmentRuntime(
+  env = process.env,
+  compiled = env.NODE_ENV !== "production",
+) {
+  return compiled && env.ZCODE_RUNTIME_ENV !== "production";
 }
 
 export const defaultCuaHelperVerifierDependencies = {
-  readExecutableArchs: unavailableReject,
-  verifyCodeSignature: unavailableReject,
-  verifyTeamIdentifier: unavailableReject,
+  async readExecutableArchs(executablePath) {
+    const { stdout } = await run("/usr/bin/lipo", ["-archs", executablePath]);
+    return stdout
+      .trim()
+      .split(/\s+/u)
+      .map((arch) => (arch === "x86_64" ? "x64" : arch));
+  },
+  async verifyCodeSignature(appPath) {
+    await run("/usr/bin/codesign", ["--verify", "--deep", "--strict", appPath]);
+  },
 };
 
-export function cuaBrokerRefreshMarkerPath(_socketPath) {
+export function createCuaHelperInstaller(options = {}) {
+  const deps = { ...defaultCuaHelperVerifierDependencies, ...options.dependencies };
+  async function verifyInstalled(appPath) {
+    const identity = await driverAppIdentity(appPath);
+    await access(identity.executablePath);
+    const archs = await deps.readExecutableArchs(identity.executablePath);
+    if (!archs.includes(process.arch))
+      throw new CuaHelperError("Cua Driver architecture does not match this device.");
+    await deps.verifyCodeSignature(identity.appPath);
+    const { stdout } = await run(identity.executablePath, ["--version"]);
+    if (stdout.trim() !== "cua-driver 0.36.0")
+      throw new CuaHelperError("Cua Driver version does not match the pinned SDK.");
+  }
+  return {
+    async ensureInstalled() {
+      const path = options.bundledAppPath ?? options.env?.ZCODE_CUA_BUNDLED_HELPER_APP_PATH;
+      if (!path) throw new CuaHelperError("The bundled Cua Driver app path is missing.");
+      await verifyInstalled(path);
+      return path;
+    },
+    verifyInstalled,
+  };
+}
+
+export function cuaBrokerRefreshMarkerPath(socketPath) {
+  return socketPath?.startsWith("\\\\.\\pipe\\") ? undefined : `${socketPath}.refresh`;
+}
+export async function publishCuaBrokerRefreshMarker(socketPath) {
+  const path = cuaBrokerRefreshMarkerPath(socketPath);
+  if (path) {
+    await mkdir(dirname(path), { recursive: true });
+    await writeFile(path, String(Date.now()), { mode: 0o600 });
+  }
+  return { path };
+}
+export const loadRealNativeAddon = unavailable;
+export function resolvePackagedNativeAddonPath() {
   return undefined;
 }
-
-export async function publishCuaBrokerRefreshMarker(_socketPath, _options) {
-  return { path: undefined };
-}
-
-export function loadRealNativeAddon(_options) {
-  throw new CuaHelperError(UNAVAILABLE);
-}
-
-export function resolvePackagedNativeAddonPath(_options) {
+export function resolveInTreeAddonPath() {
   return undefined;
 }
-
-export function resolveInTreeAddonPath(_options) {
-  return undefined;
-}
-
-export function createAxReadOnlyMethods(_source, _registry, _options) {
+export function createAxReadOnlyMethods() {
   return {};
 }
-
-export const ROLE_TO_KIND = {};
-
-export function roleToKind(_role) {
-  return undefined;
+export const ROLE_TO_KIND = Object.freeze({});
+export function roleToKind(role) {
+  return typeof role === "string" ? role : undefined;
 }
 
 export class CuaHelperLifecycleManager {
   #dispose;
   #current;
   #disposed = false;
+  #tail = Promise.resolve();
   constructor(dispose) {
     this.#dispose = dispose;
-    this.#current = undefined;
   }
-  async acquire(options) {
-    if (typeof options?.isAdmitted === "function" && !options.isAdmitted()) {
-      return undefined;
-    }
-    const managed = options?.create?.();
-    this.#current = managed;
-    return managed;
+  acquire(options) {
+    const task = this.#tail.then(async () => {
+      if (this.#disposed || options.isAdmitted?.() === false) return undefined;
+      if (this.#current && options.shouldRetainCurrent?.(this.#current) !== false)
+        return this.#current;
+      if (this.#current) await this.#dispose?.(this.#current);
+      this.#current = options.create();
+      return this.#current;
+    });
+    this.#tail = task.then(
+      () => {},
+      () => {},
+    );
+    return task;
   }
   peek() {
-    return this.#current;
+    return this.#disposed ? undefined : this.#current;
   }
   get disposed() {
     return this.#disposed;
   }
   async dispose(managed) {
+    if (this.#disposed) return this.#tail;
     this.#disposed = true;
-    await this.#dispose?.(managed ?? this.#current);
+    const task = this.#tail.then(async () => {
+      const current = managed ?? this.#current;
+      this.#current = undefined;
+      if (current) await this.#dispose?.(current);
+    });
+    this.#tail = task;
+    return task;
   }
 }
 
+const workspaceEnabled = new Map();
+const keyOf = (context) => context?.workspaceIdentity?.trim() || context?.workspacePath;
 export class CuaProductHelperWorkspaceRegistry {
-  setEnabled(_context, _enabled) {}
+  setEnabled(context, enabled) {
+    const key = keyOf(context);
+    if (key) workspaceEnabled.set(key, enabled);
+  }
 }
-
-export function createProductCuaHelperHost(_options) {
-  return createUnavailableCuaHelperHost();
+export function isOfficialCuaPluginEnabledForWorkspace(options = {}) {
+  const explicit = workspaceEnabled.get(options.workingDirectory);
+  if (explicit !== undefined) return explicit;
+  const env = options.env ?? process.env;
+  return !/^(?:0|false|off)$/iu.test(env.ZCODE_CUA_PRODUCT_HELPER ?? "");
 }
-
-function createUnavailableCuaHelperHost() {
-  return {
-    get running() {
-      return false;
-    },
-    get socketPath() {
-      return null;
-    },
-    get pluginAuthority() {
-      return null;
-    },
-    get reservedTransport() {
-      return undefined;
-    },
-    start: unavailableReject,
-    stop: async () => {},
-    restart: unavailableReject,
-    restartAfterCurrentStart: unavailableReject,
-    waitForTransport: unavailableReject,
-    checkHealth: unavailableReject,
-    queryScreenCaptureProbe: async () => ({
-      ok: false,
-      reason: UNAVAILABLE,
-    }),
-    queryScreenRecordingPreflight: async () => undefined,
-    queryPermissionStatus: async () => ({}),
+export function createProductCuaHelperHost(options = {}) {
+  return createDriverHost({
+    ...options,
+    helperInstaller:
+      options.helperInstaller ??
+      createCuaHelperInstaller({
+        env: options.env,
+        bundledAppPath: options.bundledHelperAppPath,
+      }),
+  });
+}
+export function createCuaProductMcpServerResolver(host, options = {}) {
+  const recoveries = new Map();
+  const restart = async () => {
+    if (options.hasActiveTurn?.())
+      throw new CuaHelperError(
+        "Computer Use is active; retry recovery after the current operation.",
+      );
+    await host.restartAfterCurrentStart();
   };
-}
-
-export function isOfficialCuaPluginEnabledForWorkspace(_options) {
-  return false;
-}
-
-export function createCuaProductMcpServerResolver(_host, _options) {
   return {
-    async resolveMcpServers(servers, _context) {
+    async resolveMcpServers(servers) {
       return servers;
     },
-    async restart() {
-      throw new Error(UNAVAILABLE);
-    },
-    async restartAfterPermissionGrant(_onboardingSessionId) {
-      throw new Error(UNAVAILABLE);
+    restart,
+    async restartAfterPermissionGrant(sessionId) {
+      const key = sessionId || "current";
+      if (recoveries.has(key)) return recoveries.get(key);
+      const result = restart();
+      recoveries.set(key, result);
+      try {
+        await result;
+      } catch (error) {
+        recoveries.delete(key);
+        throw error;
+      }
+      if (recoveries.size > 32) recoveries.delete(recoveries.keys().next().value);
     },
   };
 }
-
-export async function waitForCuaHelperStartup(startup, _deadlineMs) {
-  return await startup;
+export async function waitForCuaHelperStartup(startup) {
+  return startup;
 }
-
-export function isPotentialZCodeCuaAgentMcpServer(_server) {
-  return false;
+export function isPotentialZCodeCuaAgentMcpServer(server) {
+  return server?.name === "computer-use" || server?.name === "zcode-cua";
 }
-
-export function isScreenCaptureProbeSuccess(_probe) {
-  return false;
+export function isScreenCaptureProbeSuccess(probe) {
+  return probe?.ok === true;
 }
-
-export function markCuaProductHelperAgentEnvUnavailable(_host) {}
-
-export function hasCuaProductHelperAgentEnvUnavailable(_host) {
-  return false;
+const unavailableHosts = new WeakSet();
+export function markCuaProductHelperAgentEnvUnavailable(host) {
+  unavailableHosts.add(host);
 }
-
-export function clearCuaProductHelperAgentEnvUnavailable(_host) {}
-
-export async function reapOrphanedHelpers(_options) {}
-
-export async function requestHelperAccessibilityPermissionViaLaunchServices(_options) {
-  return { ok: false, reason: UNAVAILABLE };
+export function hasCuaProductHelperAgentEnvUnavailable(host) {
+  return unavailableHosts.has(host);
 }
-
-export async function requestHelperScreenRecordingPermissionViaLaunchServices(_options) {
-  return { ok: false, reason: UNAVAILABLE };
+export function clearCuaProductHelperAgentEnvUnavailable(host) {
+  unavailableHosts.delete(host);
 }
-
-// 开源构建不携带 Computer Use Helper：没有安装根目录，也没有独立 Helper 候选路径。
-export function resolveHelperAppName(_env) {
-  return HELPER_APP_NAME;
+export async function reapOrphanedHelpers() {}
+export async function requestHelperAccessibilityPermissionViaLaunchServices() {
+  return {
+    ok: false,
+    reason: "Use the desktop permission onboarding for the verified CuaDriver app.",
+  };
 }
-
-export function resolveCuaHelperInstallRoot(_env) {
-  return null;
+export const requestHelperScreenRecordingPermissionViaLaunchServices =
+  requestHelperAccessibilityPermissionViaLaunchServices;
+export function resolveHelperAppName() {
+  return "CuaDriver.app";
 }
-
-export function standaloneHelperCandidatePaths(_env) {
-  return [];
+export function resolveCuaHelperInstallRoot(env) {
+  const app = env.ZCODE_CUA_BUNDLED_HELPER_APP_PATH;
+  return app ? dirname(app) : null;
 }
-
-// 开源构建不注入 Computer Use broker MCP 服务，原样返回。
-export function injectPermissionBrokerAgentMcpServers(servers, _options) {
+export function standaloneHelperCandidatePaths(env = process.env) {
+  return env.ZCODE_CUA_BUNDLED_HELPER_APP_PATH ? [env.ZCODE_CUA_BUNDLED_HELPER_APP_PATH] : [];
+}
+export function injectPermissionBrokerAgentMcpServers(servers) {
   return servers;
 }

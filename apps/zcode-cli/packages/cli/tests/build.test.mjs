@@ -196,8 +196,10 @@ test("desktop agent builds minify the app-facing JS bundle", () => {
   });
 });
 
-test("CLI bundle externalizes native koffi so esbuild does not parse platform .node files", () => {
+test("CLI bundle externalizes native SDKs and keeps the workspace CUA adapter inline", () => {
   assert.ok(resolveBuildExternal().includes("koffi"));
+  assert.ok(resolveBuildExternal().includes("@trycua/cua-driver"));
+  assert.ok(!resolveBuildExternal().includes("@zcode/zcode-cua"));
 });
 
 test("Desktop agent build keeps Node-only shared subpaths ahead of the generic alias", () => {

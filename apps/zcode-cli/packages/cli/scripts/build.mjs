@@ -11,7 +11,9 @@ const executableFileMode = 0o755;
 const packageJsonFile = "package.json";
 const rootPackageVersionError = "Root package.json must define a non-empty string version.";
 const desktopAgentBuildFlag = "--desktop-agent";
-export const resolveBuildExternal = () => ["@zcode/tui", "playwright-core", "koffi"];
+export const resolveBuildExternal = () => [
+  "@zcode/tui", "playwright-core", "koffi", "@trycua/cua-driver",
+];
 
 export const readZodBuildVersion = async () => {
   const sharedPackage = JSON.parse(

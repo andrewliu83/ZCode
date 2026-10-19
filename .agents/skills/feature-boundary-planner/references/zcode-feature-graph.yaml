@@ -3384,18 +3384,31 @@ nodes:
       - symbol: "createCuaOperationTurnTracker"
         file: "packages/services/src/zcode-agent/cuaOperationTurnTracker.ts"
 
+  - id: "surface.computer-use-permissions"
+    kind: "ui-surface"
+    label: "Computer Use permission status and verified Driver onboarding"
+    docs: ["packages/zcode-cua/SPEC.md"]
+    codeSeeds:
+      - file: "packages/ui/src/settings/ComputerUseSection.tsx"
+        symbol: "ComputerUseSection"
+      - file: "packages/zcode-cua/driver-host.js"
+        symbol: "createDriverHost"
+    invariants:
+      - "Read-only status queries never prompt or capture pixels; unavailable is distinct from denied or unknown."
+      - "The verified independent CuaDriver.app owns macOS grants; renderer only projects its reported facts."
+
   - id: "service.cua-helper-build-release"
     kind: "service"
-    label: "Canonical ZCode Computer Use Helper build and release"
+    label: "Pinned Cua Driver app, native SDK resources and signing"
     aliases:
       - "cua-helper-build"
       - "CUA Helper packaging"
     docs:
-      - "docs/superpowers/specs/2026-08-19-cua-producer-0.5.7-integration.md"
+      - "packages/zcode-cua/SPEC.md"
       - "docs/desktop/macos-dmg-signing-notarization.md"
     codeSeeds:
-      - file: "scripts/build-cua-helper-app.mjs"
-      - file: "scripts/package-cua-helper-release.mjs"
+      - file: "packages/desktop/scripts/prepare-cua-driver.mjs"
+      - file: "third-party/cua-driver/sources.json"
       - file: "packages/desktop/electron-builder.config.js"
       - file: "packages/desktop/src/main/desktopCuaHelperInstaller.ts"
 
@@ -3410,8 +3423,8 @@ nodes:
       - file: "apps/zcode-cli/packages/core/src/mcp/index.ts"
     invariants:
       - "Official CUA raster bytes and adjacent image_ref reach the model unchanged."
-      - "Coordinate strategy=event uses WindowServer provenance and never requires AX hit-test."
-      - "Window, full-display, and nested Zoom pixels share one final native stale/occlusion gate."
+      - "Coordinate actions bind the exact Driver capture id and unchanged raster pixels to the observing session and generation."
+      - "Only verified Driver routes are dispatched; unsupported exclusive event/a11y strategies are explicit errors."
 
   - id: "service.cua-plugin-dev-runtime-assets"
     kind: "service"
@@ -3447,7 +3460,7 @@ nodes:
       - "docs/cua/2026-08-24-cua-node-repl-sdk-migration-spec.md"
     codeSeeds:
       - symbol: "createComputerUseRuntime"
-        file: "../zcode-cua/src/tools/computer-use-runtime.ts"
+        file: "packages/zcode-cua/index.js"
       - symbol: "setupComputerUseRuntime"
         file: "apps/zcode-cli/packages/zcode-cua-plugin/scripts/computer-use-client.mjs"
     invariants:
@@ -6122,6 +6135,14 @@ edges:
     rank: "invariant-only"
     condition: "CUA indicator windows are excluded from Explorer/deep-link target selection and primary application window resolution."
   - from: "capability.computer-use"
+    to: "surface.computer-use-permissions"
+    type: "renders-in"
+    rank: "must-inspect"
+  - from: "surface.computer-use-permissions"
+    to: "service.cua-platform"
+    type: "queries-through"
+    rank: "must-inspect"
+  - from: "capability.computer-use"
     to: "service.cua-platform"
     type: "implemented-by"
     rank: "must-inspect"
@@ -6129,7 +6150,7 @@ edges:
     to: "service.cua-helper-build-release"
     type: "packaged-by"
     rank: "must-inspect"
-    condition: "Stable builds assemble ZCode Computer Use.app; local development builds assemble ZCode Computer Use Dev.app. Both use the ZCode Computer Use executable and producer-owned identity constants."
+    condition: "macOS arm64 uses the pinned CuaDriver.app and matching native SDK outside ASAR; development and packaged paths resolve the same verified app identity."
   - from: "capability.build-release-engineering"
     to: "service.cua-helper-build-release"
     type: "produces-signed-runtime-through"

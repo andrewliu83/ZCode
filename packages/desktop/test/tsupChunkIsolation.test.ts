@@ -180,6 +180,7 @@ app.whenReady().then(async () => {
   it("main/host/scheduler 应内联 CUA producer，安装包不能依赖被排除的 @zcode node_modules", () => {
     for (const configName of ["main", "host", "scheduler"]) {
       expect(getNoExternal(configName)).toContain("@zcode/zcode-cua");
+      expect(getExternal(configName)).toContain("@trycua/cua-driver");
     }
   });
 

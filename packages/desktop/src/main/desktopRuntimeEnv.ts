@@ -4,7 +4,7 @@ import { homedir } from "node:os";
 import { join, resolve, win32 } from "node:path";
 import type { ConnectOptions } from "@zcode/server/remote";
 import { listSSHConfigAliasesFromLocalConfig } from "@zcode/services/node";
-import { DEV_HELPER_APP_NAME, HELPER_APP_NAME } from "@zcode/zcode-cua/broker/helperConstants";
+import { resolvePackagedCuaHelperAppPath } from "./desktopCuaHelperInstaller.js";
 import {
   ZCODE_APP_VERSION_ENV,
   ZCODE_BUILD_COMMIT_ID_ENV,
@@ -488,25 +488,18 @@ export function buildHostProcessEnv(hostProcessLocalEnv: Record<string, string>)
     ...readDefinedProcessEnv(),
   };
   const packagedDesktop = isElectronAppPackaged();
+  // 修复依据：权限入口与 Host 必须指向同一随包 Driver，不能复用全局旧 Helper。
   const bundledCuaHelperAppPath =
-    process.platform !== "darwin"
+    process.platform !== "darwin" && process.platform !== "win32" && process.platform !== "linux"
       ? undefined
       : packagedDesktop
-        ? join(process.resourcesPath, "cua-helper", HELPER_APP_NAME)
-        : // Truthy grammar must match the producer's isUnsignedHelperLocalDevRequested
-          // (1|true|on, case-insensitive). Accepting only the literal "1" silently
-          // ignored `true`/`on` set by scripts following the documented dev flow.
-          ["1", "true", "on"].includes(
-              rawInheritedEnv.ZCODE_CUA_HELPER_ALLOW_UNSIGNED_LOCAL?.trim().toLowerCase() ?? "",
-            )
-          ? rawInheritedEnv.ZCODE_CUA_BUNDLED_HELPER_APP_PATH?.trim() ||
-            join(
-              rawInheritedEnv.ZCODE_HOME?.trim() || join(homedir(), ".zcode"),
-              "computer-use",
-              "dev",
-              DEV_HELPER_APP_NAME,
-            )
-          : undefined;
+        ? resolvePackagedCuaHelperAppPath({ isPackaged: true })
+        : rawInheritedEnv.ZCODE_CUA_BUNDLED_HELPER_APP_PATH?.trim();
+  const driverSdkPath =
+    packagedDesktop &&
+    (process.platform === "darwin" || process.platform === "win32" || process.platform === "linux")
+      ? join(process.resourcesPath, "tools/cua-driver/node_modules/@trycua/cua-driver")
+      : undefined;
   const windowsAppInstallDir = resolveWindowsAppInstallDirForDataBaseDirGuard();
 
   // Desktop 身份由 host 从凭据仓库和本机状态读取后可信注入；外部环境只能配置 OTLP 连接，
@@ -561,6 +554,7 @@ export function buildHostProcessEnv(hostProcessLocalEnv: Record<string, string>)
     ...(bundledCuaHelperAppPath
       ? { [ZCODE_CUA_BUNDLED_HELPER_APP_PATH_ENV]: bundledCuaHelperAppPath }
       : {}),
+    ...(driverSdkPath ? { ZCODE_CUA_DRIVER_SDK_PATH: driverSdkPath } : {}),
     ...(resolvedGlmBinaryPath ? { GLM_BINARY_PATH: resolvedGlmBinaryPath } : {}),
     // 修复依据：Electron utilityProcess.fork 拒绝 env 中的 undefined；缺失资源只在选择 SDK 时报告。
     ...(sdkRuntimePath ? { ZCODE_CLAUDE_SDK_RUNTIME_PATH: sdkRuntimePath } : {}),

@@ -470,7 +470,6 @@ import {
   buildAgentRuntimeEnv,
 } from "./runtime-tools/agentProxyEnv.js";
 import { ensureAppCaCert } from "./runtime-tools/appCaCert.js";
-import { buildHelperOpenArgs, isCuaLocalDevelopmentRuntime } from "@zcode/zcode-cua/broker/server";
 import { createServiceLogger, type ServiceLogger } from "#src/logger/serviceLogger.js";
 import { IOffPeakTaskService } from "./session/offPeakTask.js";
 import type { HighspeedMockScenario } from "@zcode/shared";
@@ -512,7 +511,6 @@ import {
   isPotentialZCodeCuaAgentMcpServer,
   isScreenCaptureProbeSuccess,
   reapOrphanedHelpers,
-  resolveStandaloneStatusLaunchCandidates,
   shouldRunCuaScreenCaptureProbe,
   type CuaHelperHost,
   type CuaHelperTransportRestartOptions,
@@ -537,7 +535,6 @@ import {
   getStableCuaPipeName,
   resolveStableCuaWinRecipe,
 } from "#src/cua-permission-broker/stableCuaTransport.js";
-import { HELPER_APP_NAME } from "@zcode/zcode-cua/broker/helperConstants";
 import { resolveBrokerSocketPath } from "@zcode/zcode-cua/broker/socketPath";
 import {
   DEFAULT_ZCODE_MODEL_CONTEXT_BUDGET_STRATEGY,
@@ -685,12 +682,11 @@ export function shouldEnableDefaultCuaProductHelper(
     env?: NodeJS.ProcessEnv;
   } = {},
 ): boolean {
-  // CUA 已随正式版默认开启（isZCodeCuaInternalFeatureEnabled 默认 ON，仅显式 0/false/off 关闭；2026-08 注释更正——旧注释称默认关闭已过期）。显式开启后 macOS 使用既有产品 Helper，Windows 使用安装包内 runtime；
-  // 两端都保持按需启动。关闭时不创建 host、不探测资源、不产生子进程或权限提示。
+  // CUA 默认开启；固定 Driver 在 macOS、Windows、Linux 的受支持目标上按需启动。
   const env = options.env ?? process.env;
   if (!isZCodeCuaInternalFeatureEnabled(env)) return false;
   const platform = options.platform ?? process.platform;
-  return platform === "darwin" || platform === "win32";
+  return platform === "darwin" || platform === "win32" || platform === "linux";
 }
 
 /**
@@ -719,7 +715,7 @@ export function shouldUseCuaPermissionService(opts: {
   cuaEnabled: boolean;
 }): boolean {
   const platform = opts.platform ?? process.platform;
-  return (platform === "darwin" || platform === "win32") && opts.cuaEnabled;
+  return (platform === "darwin" || platform === "win32" || platform === "linux") && opts.cuaEnabled;
 }
 
 export function shouldRetainDefaultCuaProductHelper(): boolean {
@@ -981,7 +977,8 @@ export function createDefaultCuaProductHelper(
   }
   let macPermissionHost: CuaHelperHost | undefined;
   let host: ManagedCuaProductHelperHost;
-  if (platform === "darwin") {
+  if (platform === "darwin" || platform === "win32" || platform === "linux") {
+    // 三平台统一使用随包 Cua Driver；macOS 指向 .app，Windows/Linux 指向独立可执行文件。
     const bundledHelperAppPath = resolveBundledCuaHelperAppPath();
     if (!bundledHelperAppPath) {
       logger.error(
@@ -1000,13 +997,9 @@ export function createDefaultCuaProductHelper(
           env: process.env,
           bundledAppPath: bundledHelperAppPath,
         }),
-        // 冲突解决原则：macOS 继续严格消费应用内置 Helper，不能退回下载源；
-        // Windows 才走下方独立的安装包 runtime 解析链路。
         bundledHelperAppPath,
-        // tolerate the Helper's cold first-launch instead of the 5s default.
+        // tolerate the Driver's cold first-launch instead of the 5s default.
         healthTimeoutMs: CUA_HELPER_HEALTH_TIMEOUT_MS,
-        // producer product factory 统一固定 ghost cursor/PiP=true、background=false。
-        // consumer 不再传伪动态 getter，避免两个仓库各保存一份产品策略。
       });
     host = macPermissionHost;
   } else {
@@ -1054,7 +1047,14 @@ export function resolveBundledCuaHelperAppPath(
   const resourcesPath = (
     process as NodeJS.Process & { resourcesPath?: string }
   ).resourcesPath?.trim();
-  return resourcesPath ? join(resourcesPath, "cua-helper", HELPER_APP_NAME) : undefined;
+  if (!resourcesPath) return undefined;
+  // macOS 的 TCC 主体是独立 app；Windows/Linux 直接运行随包可执行文件。
+  if (process.platform === "darwin")
+    return join(resourcesPath, "tools", "cua-driver", "CuaDriver.app");
+  if (process.platform === "win32")
+    return join(resourcesPath, "tools", "cua-driver", "cua-driver.exe");
+  if (process.platform === "linux") return join(resourcesPath, "tools", "cua-driver", "cua-driver");
+  return undefined;
 }
 
 export { isOfficialCuaPluginEnabledForWorkspace };
@@ -1681,58 +1681,6 @@ export function createLocalServices(options: {
     }
   };
 
-  // 按需启动：拉起 standalone Helper（稳定 socket）。dev 场景（本 Helper 构建内嵌 dev
-  // policy）成对带 unsigned-launcher/external-escape argv，让 ad-hoc 签名的本进程也能过
-  // 签名门查询；产品 Helper 不嵌 dev policy，这对 argv 无效（产品签名天然过 Team 门）。
-  // 拉起后轮询 ping（5s/100ms），就绪返回 socket 路径，否则 null。
-  //
-  // dev 判定直接用上游的 isCuaLocalDevelopmentRuntime（@zcode/zcode-cua/broker/server，
-  // 即本文件已经用来 import buildHelperOpenArgs 的那个 subpath，可正常导入）。
-  //
-  // 行为等价性（别误读成安全加固）：上游是 `COMPILED_LOCAL_DEVELOPMENT_RUNTIME &&
-  // ZCODE_RUNTIME_ENV!=="production"`，而那个编译期常量只有 scripts/build-cua-helper-app.mjs
-  // 会用 define 折叠（Helper bundle）；desktop host bundle 没有该 define，于是回退成
-  // `process.env.NODE_ENV !== "production"` —— 正是复制品写的那一项。所以在**当前**打包形态下
-  // 两者逐字等价，关门靠的是 ZCODE_RUNTIME_ENV=production（打包态显式注入且不传 NODE_ENV）。
-  //
-  // 换成上游的收益是消除漂移面：折叠点、因子个数与 fail-closed 方向都由上游一处决定，
-  // 哪天 host bundle 也补上 __ZCODE_LOCAL_DEVELOPMENT_RUNTIME__ define（Helper 侧已经有），
-  // 编译期门自动生效，不需要再回来改这里。
-
-  const launchStandaloneCuaHelperForStatus = async (): Promise<string | null> => {
-    if (process.platform !== "darwin") return null;
-    const { existsSync } = await import("node:fs");
-    const { execFile } = await import("node:child_process");
-    const { promisify } = await import("node:util");
-    const socketPath = resolveBrokerSocketPath();
-    const appPath = resolveStandaloneStatusLaunchCandidates(process.env).find((candidate) =>
-      existsSync(candidate),
-    );
-    if (!appPath) return null;
-    // Helper 启动参数统一由 buildHelperOpenArgs 构造，避免多处手写导致漏传或漂移。
-    // 设置页只读权限探测不承载 PiP，不传 --launcher-pid 和 --pip-mode；
-    // exit-log 使用 .settings.exit.log。新增参数应定义在 HelperLaunchSpec 中供调用方共用。
-    const args = buildHelperOpenArgs({
-      appPath,
-      socketPath,
-      exitLogPath: `${socketPath}.settings.exit.log`,
-      ...(isCuaLocalDevelopmentRuntime(process.env)
-        ? { allowUnsignedLauncherLocalDev: true, allowExternalBrokerClientLocalDev: true }
-        : {}),
-    });
-    try {
-      await promisify(execFile)("/usr/bin/open", args, { timeout: 5_000 });
-    } catch {
-      // LaunchServices 已接单也可能超时；继续等 ping。
-    }
-    for (let attempt = 0; attempt < 50; attempt += 1) {
-      const ready = await probeStableCuaHelperSocket();
-      if (ready) return ready;
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
-    return null;
-  };
-
   const launchWindowsCuaHelperForStatus = async (): Promise<string | null> => {
     try {
       const managed = await getOrCreateDefaultCuaProductHelper(undefined);
@@ -1785,14 +1733,31 @@ export function createLocalServices(options: {
       workspaceIdentity?: string,
       queryOptions?: CuaPermissionStatusQueryOptions,
     ): Promise<CuaPermissionStatusResult> {
-      if (process.platform !== "darwin" && process.platform !== "win32") {
+      if (
+        process.platform !== "darwin" &&
+        process.platform !== "win32" &&
+        process.platform !== "linux"
+      ) {
         return {
           available: false,
-          reason: "CUA permissions are only available on macOS and Windows.",
+          reason: "CUA is not available on this platform.",
         };
       }
       const context = workspacePath ? { workspacePath, workspaceIdentity } : undefined;
-      // 插件关闭只门控后续 Agent；权限页刷新不得进入 acquire，否则会把仍被已有 Agent 使用的 Helper 停掉。
+      if (
+        !shouldCreateDefaultCuaProductHelper({
+          serviceAuthorityMode: options?.serviceAuthorityMode,
+          hasRemoteWorkspaceIdentity: Boolean(workspaceIdentity?.trim()),
+          hasInjectedResolver: Boolean(options?.cuaProductMcpServerResolver),
+          hasBuiltInCuaPlugin: isCuaEnabledForContext(context),
+        })
+      ) {
+        return {
+          available: false,
+          reason: "Computer Use is unavailable for this Host attachment.",
+        };
+      }
+      // 已创建的 Host 会保留；开关只门控后续准入，不停止进行中的控制。
       if (
         !shouldUseCuaPermissionService({
           cuaEnabled: isCuaEnabledForContext(context),
@@ -1803,20 +1768,44 @@ export function createLocalServices(options: {
           reason: "ZCode Computer Use is not enabled (plugin off or not product mode).",
         };
       }
-      // 懒启动：状态查询绝不拉起 Helper。托管 host 在（如刚完成授权流）→ 全量查询；
-      // 否则探测稳定 socket 上自启动的 Helper（probe-only）；都没有 → 未运行（首次使用时自动启动）。
+      // macOS 状态查询通过同一托管 Host 按需启动 Driver，读取实际权限主体的只读状态。
       const peeked = defaultCuaProductHelperLifecycle.peek()?.helper;
-      const helper = peeked && isDefaultCuaProductHelperCurrent(peeked) ? peeked : undefined;
+      // Driver 的兼容 socket 由窗口 Host 持有，首次查询必须显式创建同一宿主。
+      let candidate = peeked;
+      if (!candidate) {
+        try {
+          candidate = await getOrCreateDefaultCuaProductHelper(context);
+        } catch (error) {
+          return {
+            available: false,
+            reason: error instanceof Error ? error.message : String(error),
+          };
+        }
+      }
+      const helper =
+        candidate && isDefaultCuaProductHelperCurrent(candidate) ? candidate : undefined;
       const host = helper ? helper.macPermissionHost : undefined;
+      if (!host) {
+        return {
+          available: false,
+          reason: "Computer Use is unavailable for this Host attachment.",
+        };
+      }
+      if (host && !host.running) {
+        try {
+          await host.start();
+        } catch (error) {
+          return {
+            available: false,
+            reason: error instanceof Error ? error.message : String(error),
+          };
+        }
+      }
       if (!host || !host.running) {
-        // Helper 按需启动：设置页查询 = 拉起 standalone Helper（稳定 socket、
-        // 无 launcher-pid → 300s 无访问自动休眠，不进托管体系）。拉起后经稳定 socket 查真值。
+        // Windows 保留已有安装包 runtime 的稳定命名管道发现路径。
         let stable = await probeStableCuaHelperSocket();
         if (!stable) {
-          stable =
-            process.platform === "darwin"
-              ? await launchStandaloneCuaHelperForStatus()
-              : await launchWindowsCuaHelperForStatus();
+          stable = process.platform === "win32" ? await launchWindowsCuaHelperForStatus() : null;
         }
         if (!stable) {
           return {
@@ -1857,7 +1846,9 @@ export function createLocalServices(options: {
         }
       }
       try {
-        const report = await host.queryPermissionStatus();
+        const report = await host.queryPermissionStatus({
+          includeFunctionalProbes: queryOptions?.includeFunctionalProbes === true,
+        });
         if (!helper || !isDefaultCuaProductHelperCurrent(helper)) {
           return {
             available: false,
@@ -1914,10 +1905,14 @@ export function createLocalServices(options: {
       workspaceIdentity?: string,
       restartOptions?: CuaPermissionRestartOptions,
     ): Promise<CuaPermissionRestartResult> {
-      if (process.platform !== "darwin") {
+      if (
+        process.platform !== "darwin" &&
+        process.platform !== "win32" &&
+        process.platform !== "linux"
+      ) {
         return {
           ok: false,
-          reason: "CUA permissions are only available on macOS.",
+          reason: "CUA is not available on this platform.",
         };
       }
       const context = workspacePath ? { workspacePath, workspaceIdentity } : undefined;
@@ -2133,26 +2128,50 @@ export function createLocalServices(options: {
             };
       const cuaPluginEnabled = isCuaEnabledForContext(context);
       let cuaProductHelperEnv: Record<string, string> = {};
-      if (cuaPluginEnabled && (process.platform === "darwin" || process.platform === "win32")) {
+      if (
+        cuaPluginEnabled &&
+        (process.platform === "darwin" ||
+          process.platform === "win32" ||
+          process.platform === "linux")
+      ) {
         const brokerSocket =
           process.platform === "win32" ? getStableCuaPipeName() : resolveBrokerSocketPath();
         cuaProductHelperEnv = {
           [BROKER_SOCKET_ENV]: brokerSocket,
           [ZCODE_CUA_PLUGIN_AUTHORITY_ENV_KEY]: randomBytes(16).toString("hex"),
         };
-        if (process.platform === "win32") {
+        try {
+          // 仅预留兼容传输；原生 Driver 由首次电脑操作按需启动，Agent 不另建控制进程。
+          const helper = await getOrCreateDefaultCuaProductHelper(context);
+          const transport = await helper?.host.waitForTransport?.();
+          if (transport) {
+            cuaProductHelperEnv = {
+              [BROKER_SOCKET_ENV]: transport.socketPath,
+              [ZCODE_CUA_PLUGIN_AUTHORITY_ENV_KEY]: transport.pluginAuthority,
+            };
+          } else {
+            cuaProductHelperEnv = {
+              [BROKER_UNAVAILABLE_ENV]: "Computer Use is unavailable for this Host attachment.",
+            };
+          }
+        } catch (error) {
+          cuaProductHelperEnv = {
+            [BROKER_UNAVAILABLE_ENV]: error instanceof Error ? error.message : String(error),
+          };
+        }
+        if (process.platform === "win32" && !cuaProductHelperEnv[BROKER_UNAVAILABLE_ENV]) {
           const recipe = await resolveStableCuaWinRecipe();
           if (recipe) {
             cuaProductHelperEnv["ZCODE_CUA_WIN_HELPER_RECIPE"] = JSON.stringify({
               ...recipe,
               hostPid: process.pid,
             });
-          } else {
-            cuaProductHelperEnv = {
-              [BROKER_UNAVAILABLE_ENV]:
-                "broker_unavailable: windows helper recipe could not be resolved",
-            };
           }
+        }
+        if (process.platform === "win32" && cuaProductHelperEnv[BROKER_UNAVAILABLE_ENV]) {
+          // Windows 保留旧 recipe 失败时的显式不可用标记；Driver 路径不受该 recipe 影响。
+          cuaProductHelperEnv[BROKER_UNAVAILABLE_ENV] ??=
+            "broker_unavailable: windows helper recipe could not be resolved";
         }
       }
 

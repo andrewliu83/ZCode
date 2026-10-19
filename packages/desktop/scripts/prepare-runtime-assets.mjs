@@ -6,7 +6,10 @@ import { fileURLToPath } from "node:url";
 import { resolveNativeSearchReleasePlan } from "../../../scripts/native-search-tools-config.mjs";
 import { runCommand } from "../../../scripts/spawn-command.mjs";
 import { getTargetPlatform } from "./target-platform.mjs";
-import { isRealComputerUseProducerInstalled } from "./computer-use-producer.mjs";
+import {
+  isCuaDriverInstalled,
+  isRealComputerUseProducerInstalled,
+} from "./computer-use-producer.mjs";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const desktopRoot = resolve(scriptDir, "..");
@@ -33,6 +36,9 @@ const shouldPrepareMacosWindowBounds = target.os === "darwin";
 // 未配置时解包仓库内置的同名归档，两种情况都不需要额外开关。
 const localRuntimeScripts = [
   "prepare:agent-bundle",
+  ...(target.key === "darwin-arm64" && isCuaDriverInstalled({ desktopPackageRoot: desktopRoot })
+    ? ["prepare:cua-driver"]
+    : []),
   ...(shouldPrepareWindowsCuaHelper ? ["prepare:windows-cua-helper"] : []),
   ...(nativeSearchReleasePlan.enabled ? ["prepare:native-search"] : []),
   ...(shouldPrepareWindowsBrowserImportHelper ? ["prepare:browser-import-helper"] : []),

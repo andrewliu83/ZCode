@@ -6689,6 +6689,7 @@ const zhCN: Record<string, string> = {
   "cuaPermission.status.granted": "已授权",
   "cuaPermission.status.missing": "未授权",
   "cuaPermission.status.unknown": "未知",
+  "cuaPermission.status.driverUnavailable": "驱动不可用",
   "cuaPermission.status.stale": "授权状态需要重新确认",
   "cuaPermission.status.verifying": "已授权，正在验证",
   "cuaPermission.probeVerifyingHint": "系统授权已存在，正在验证实际控制与截图能力。",

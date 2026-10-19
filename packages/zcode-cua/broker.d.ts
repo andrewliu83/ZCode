@@ -31,6 +31,7 @@ export interface CallBrokerMethodArgs {
   method: string;
   params?: unknown;
   timeoutMs?: number;
+  signal?: AbortSignal;
 }
 
 export declare function callBrokerMethod<T = unknown>(args: CallBrokerMethodArgs): Promise<T>;
@@ -55,7 +56,7 @@ export declare function mintBrokerSocketPath(options?: SocketPathOptions): strin
 export declare function resolveBrokerSocketPath(options?: SocketPathOptions): string;
 
 export interface BrokerRequest {
-  id?: string | null;
+  id?: string | number | null;
   method: string;
   params?: unknown;
 }
@@ -119,6 +120,7 @@ export interface CuaPermissionStatusUnavailable {
 export type CuaPermissionStatusResult = CuaPermissionStatus | CuaPermissionStatusUnavailable;
 
 export interface CuaPermissionStatusQueryOptions {
+  includeFunctionalProbes?: boolean;
   probeScreenCapture?: boolean;
   [key: string]: unknown;
 }

@@ -73,6 +73,9 @@ function classify(raw) {
     .map((x) => x.trim())
     .filter(Boolean);
   if (and.length > 1 && and.every((x) => GREEN.test(x))) return "green";
+  // 混合弱 copyleft 声明（如 "MIT AND MPL-2.0"）仍须进入逐项复核，不能按首个标识误判。
+  if (and.length > 1 && and.every((x) => GREEN.test(x) || /^(MPL|EPL|CDDL)/i.test(x)))
+    return "yellow-weak";
   const t = or[0] || and[0] || s;
   if (/\bAGPL/i.test(t)) return "red-agpl";
   if (/\bLGPL/i.test(t)) return "yellow-lgpl";
@@ -99,11 +102,23 @@ const PROD_REVIEWED = [
     "yellow-weak",
     "仅内部开发文档站 apps/dev-docs 使用，不随产品分发、不部署；按 EPL-2.0 使用",
   ],
+  [
+    /^@ubjs\/(?:core|node(?:-(?:darwin-(?:arm64|x64)|linux-(?:arm64|x64)-(?:gnu|musl)|win32-(?:arm64|x64)-msvc))?)$/,
+    "yellow-weak",
+    "仅复核 0.31.0-3 的 MPL-2.0：原始许可头、完整条款和固定源码链接随根声明分发；core 源码 revision 49bc59194d183a05855ed4104c18eb92fb465e02，node 及八个平台包 revision dcb5c4ab2350d57f6d26f5fa81a99c77ed86d449，均来自各包 npm gitHead。Driver 兼容运行时保留 node-runtime-NOTICE.md，其变换源码在 Cua 6d6c734c127025fb39ad5d585a10382808b39dc1/libs/cua-driver/scripts/build-node-runtime.mjs。",
+    (r) => r.version === "0.31.0-3" && r.license === "MPL-2.0",
+  ],
+  [
+    /^@trycua\/cua-driver-(?:darwin-(?:arm64|x64)|linux-(?:arm64|x64)-gnu|win32-(?:arm64|x64)-msvc)$/,
+    "yellow-weak",
+    "仅复核 0.36.0 平台包：包内 libcua_driver_sdk 与 cua_driver_node_runtime.node 为 Cua 固定发行物（MIT），后者是从 uniffi-bindgen-react-native 0.31.0-3 N-API 运行时确定性变换出的 MPL-2.0 兼容构建，包内保留 node-runtime-NOTICE.md；源码与 build-node-runtime.mjs 位于 Cua 仓库 6d6c734c127025fb39ad5d585a10382808b39dc1。",
+    (r) => r.version === "0.36.0" && r.license === "MIT AND MPL-2.0",
+  ],
 ];
 function weakAllowReason(r) {
   if (r.isProd) {
-    for (const [re, bucket, why] of PROD_REVIEWED)
-      if (re.test(r.name) && r.bucket === bucket) return why;
+    for (const [re, bucket, why, matchesVersion = () => true] of PROD_REVIEWED)
+      if (re.test(r.name) && r.bucket === bucket && matchesVersion(r)) return why;
     return null;
   }
   for (const [re, why] of WEAK_ALLOW) if (re.test(r.name)) return why;

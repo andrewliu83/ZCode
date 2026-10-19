@@ -7021,6 +7021,7 @@ const enUS: Record<string, string> = {
   "cuaPermission.status.granted": "Granted",
   "cuaPermission.status.missing": "Missing",
   "cuaPermission.status.unknown": "Unknown",
+  "cuaPermission.status.driverUnavailable": "Driver unavailable",
   "cuaPermission.status.stale": "Authorization needs verification",
   "cuaPermission.status.verifying": "Granted, verifying",
   "cuaPermission.probeVerifyingHint":

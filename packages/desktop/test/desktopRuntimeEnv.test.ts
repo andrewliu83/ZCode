@@ -204,6 +204,7 @@ function isAmbientHostEnvKey(key: string): boolean {
   return (
     AMBIENT_TOOL_PASSTHROUGH_ENV_KEYS.has(upperKey) ||
     upperKey.startsWith("OTEL_") ||
+    upperKey.startsWith("ZCODE_CUA_") ||
     upperKey.startsWith("ZCODE_TELEMETRY_") ||
     AMBIENT_PACKAGE_MANAGER_PROXY_ENV_PATTERN.test(key)
   );
@@ -575,62 +576,27 @@ describe("desktopRuntimeEnv buildHostProcessEnv", () => {
     expect(env.NODE_ENV).toBeUndefined();
   });
 
-  // 根因：bundledCuaHelperAppPath 只在 darwin 上计算（desktopRuntimeEnv.ts:474 直接
-  // `process.platform !== "darwin" ? undefined : ...`），其他平台不写这个键，继承值原样穿透。
-  // Windows CUA 走独立的 Node Helper，不使用 .app bundle，所以下面几条 dev bundle 断言
-  // 只在 darwin 上有意义。
   it.skipIf(process.platform !== "darwin")(
-    "本地免签 CUA 使用 dev Helper bundle，且不回退网络下载",
+    "开发态没有明确 Driver 路径时不回退到全局旧 Helper",
     async () => {
       const { buildHostProcessEnv } = await import("../src/main/desktopRuntimeEnv.js");
-
       const env = buildHostProcessEnv({
         ZCODE_HOME: "/tmp/zcode-cua-dev-home",
-        ZCODE_CUA_PRODUCT_HELPER: "1",
         ZCODE_CUA_HELPER_ALLOW_UNSIGNED_LOCAL: "1",
       });
-
-      expect(env.ZCODE_CUA_BUNDLED_HELPER_APP_PATH).toBe(
-        join("/tmp/zcode-cua-dev-home", "computer-use", "dev", "ZCode Computer Use Dev.app"),
-      );
+      expect(env.ZCODE_CUA_BUNDLED_HELPER_APP_PATH).toBeUndefined();
     },
   );
 
-  it.skipIf(process.platform !== "darwin")(
-    "本地免签 CUA 尊重显式 bundled Helper 路径以支持无打包源码验证",
-    async () => {
-      const { buildHostProcessEnv } = await import("../src/main/desktopRuntimeEnv.js");
-
-      const env = buildHostProcessEnv({
-        ZCODE_HOME: "/tmp/zcode-cua-dev-home",
-        ZCODE_CUA_PRODUCT_HELPER: "1",
-        ZCODE_CUA_HELPER_ALLOW_UNSIGNED_LOCAL: "1",
-        ZCODE_CUA_BUNDLED_HELPER_APP_PATH: "/tmp/new-helper/ZCode Computer Use Dev.app",
-      });
-
-      expect(env.ZCODE_CUA_BUNDLED_HELPER_APP_PATH).toBe(
-        "/tmp/new-helper/ZCode Computer Use Dev.app",
-      );
-    },
-  );
-
-  it.skipIf(process.platform !== "darwin")(
-    "本地免签 CUA 在显式 bundled Helper 路径为空白时回退到默认 dev bundle",
-    async () => {
-      const { buildHostProcessEnv } = await import("../src/main/desktopRuntimeEnv.js");
-
-      const env = buildHostProcessEnv({
-        ZCODE_HOME: "/tmp/zcode-cua-dev-home",
-        ZCODE_CUA_PRODUCT_HELPER: "1",
-        ZCODE_CUA_HELPER_ALLOW_UNSIGNED_LOCAL: "1",
-        ZCODE_CUA_BUNDLED_HELPER_APP_PATH: "   ",
-      });
-
-      expect(env.ZCODE_CUA_BUNDLED_HELPER_APP_PATH).toBe(
-        join("/tmp/zcode-cua-dev-home", "computer-use", "dev", "ZCode Computer Use Dev.app"),
-      );
-    },
-  );
+  it.skipIf(process.platform !== "darwin")("开发态透传明确的 Driver app 和 SDK 路径", async () => {
+    const { buildHostProcessEnv } = await import("../src/main/desktopRuntimeEnv.js");
+    const env = buildHostProcessEnv({
+      ZCODE_CUA_BUNDLED_HELPER_APP_PATH: "/tmp/cua-driver/CuaDriver.app",
+      ZCODE_CUA_DRIVER_SDK_PATH: "/tmp/cua-driver/node_modules/@trycua/cua-driver",
+    });
+    expect(env.ZCODE_CUA_BUNDLED_HELPER_APP_PATH).toBe("/tmp/cua-driver/CuaDriver.app");
+    expect(env.ZCODE_CUA_DRIVER_SDK_PATH).toBe("/tmp/cua-driver/node_modules/@trycua/cua-driver");
+  });
 
   it("打包态 host 进程显式注入 ZCODE_RUNTIME_ENV=production 且不传 NODE_ENV", async () => {
     appMock.isPackaged = true;
@@ -696,7 +662,10 @@ describe("desktopRuntimeEnv buildHostProcessEnv", () => {
       });
 
       expect(env.ZCODE_CUA_BUNDLED_HELPER_APP_PATH).toBe(
-        join("/mock/resources", "cua-helper", "ZCode Computer Use.app"),
+        join("/mock/resources", "tools", "cua-driver", "CuaDriver.app"),
+      );
+      expect(env.ZCODE_CUA_DRIVER_SDK_PATH).toBe(
+        join("/mock/resources", "tools/cua-driver/node_modules/@trycua/cua-driver"),
       );
     },
   );

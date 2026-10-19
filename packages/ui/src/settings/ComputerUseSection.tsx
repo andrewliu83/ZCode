@@ -78,13 +78,17 @@ export function ComputerUseSection({
     !remoteSessionId &&
     !remoteTarget &&
     !(workspaceIdentity?.trim() && isRemoteWorkspaceIdentity(workspaceIdentity.trim()));
-  // Windows 只复用插件总开关；macOS 才具备 TCC 权限、Helper 状态和附加设置能力。
+  // Windows/Linux 只复用插件总开关；macOS 才具备 TCC 权限、Helper 状态和附加设置能力。
   const supportsLocalMacWorkspace =
     !isWindowsDesktop &&
     (isMacDesktop ?? supportsLocalMacCuaPermissionOnboarding(platform)) &&
     isLocalWorkspace;
   const supportsLocalWindowsWorkspace = isWindowsDesktop && isLocalWorkspace;
-  const supportsComputerUseSettings = supportsLocalMacWorkspace || supportsLocalWindowsWorkspace;
+  const supportsLocalLinuxWorkspace = Boolean(
+    isDesktop && !isMacDesktop && !isWindowsDesktop && isLocalWorkspace,
+  );
+  const supportsComputerUseSettings =
+    supportsLocalMacWorkspace || supportsLocalWindowsWorkspace || supportsLocalLinuxWorkspace;
   const availability = resolveComputerUseAvailability({
     isDesktop: isDesktop || isWindowsDesktop || supportsLocalMacWorkspace,
     isMacDesktop: isMacDesktop || supportsLocalMacWorkspace,
@@ -93,7 +97,7 @@ export function ComputerUseSection({
     remoteTarget,
     workspaceIdentity,
   });
-  // CUA 权限是 macOS 本机属性：仅完整 macOS 设置需要 Helper workspace 路径。
+  // 只有 macOS 的独立 Driver app 需要 TCC 授权；Linux/Windows 状态查询走同一 Host。
   const path = supportsLocalMacWorkspace ? (localWorkspacePath ?? workspacePath) : null;
   // 展示只跟 settled：fresh 每次查询开始都会落回 false，跟着它渲染会让授权按钮的文案
   // 在「验证中…」与终态之间切换、宽度随之跳变。
@@ -756,7 +760,7 @@ export function ComputerUseSection({
                 {intl.formatMessage(
                   { id: "cuaPermission.osFloorTitle" },
                   {
-                    minimum: osSupport?.minimumMacOs ?? "12.0",
+                    minimum: osSupport?.minimumMacOs ?? "13.0",
                     current: osSupport?.currentMacOs ?? "12 以下",
                   },
                 )}
@@ -764,8 +768,24 @@ export function ComputerUseSection({
               <p>{intl.formatMessage({ id: "cuaPermission.osFloorDescription" })}</p>
             </div>
           ) : null}
-          {/* macOS 权限引导只保留在 Settings 内，CUA 操作与工具审批流不再自动弹权限 modal。 */}
-          {!macOsBelowCuaFloor ? (
+          {/* 驱动不可用并非权限未知；保留实际原因，避免把缺失驱动误导为需要系统授权。 */}
+          {!macOsBelowCuaFloor && status?.available === false ? (
+            <SettingsGroupCard>
+              <SettingsRow
+                controlLayout="wide"
+                label={intl.formatMessage({ id: "settings.computerUse.title" })}
+                description={<span className="break-words">{status.reason}</span>}
+                control={
+                  <SettingsBadge>
+                    <span className="inline-flex items-center gap-1.5">
+                      <StatusDot tone="amber" />
+                      {intl.formatMessage({ id: "cuaPermission.status.driverUnavailable" })}
+                    </span>
+                  </SettingsBadge>
+                }
+              />
+            </SettingsGroupCard>
+          ) : !macOsBelowCuaFloor ? (
             <SettingsGroupCard>
               <SettingsRow
                 controlLayout="wide"

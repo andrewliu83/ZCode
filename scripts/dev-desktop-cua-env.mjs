@@ -1,5 +1,26 @@
 import { join } from "node:path";
 
+export function resolveDevDesktopCuaDriverEnv({ platform, arch, repoRoot }) {
+  // 与发行目标一致：macOS arm64、Windows x64、Linux x64。
+  const key =
+    platform === "darwin" && arch === "arm64"
+      ? "darwin-arm64"
+      : platform === "win32" && arch === "x64"
+        ? "win32-x64"
+        : platform === "linux" && arch === "x64"
+          ? "linux-x64"
+          : undefined;
+  if (!key) return {};
+  const root = join(repoRoot, "packages/desktop/bundled-tools/cua-driver", key);
+  return {
+    ZCODE_CUA_BUNDLED_HELPER_APP_PATH:
+      platform === "darwin"
+        ? join(root, "CuaDriver.app")
+        : join(root, platform === "win32" ? "cua-driver.exe" : "cua-driver"),
+    ZCODE_CUA_DRIVER_SDK_PATH: join(root, "node_modules/@trycua/cua-driver"),
+  };
+}
+
 export const WINDOWS_CUA_DEV_ROOT_ENV = "ZCODE_CUA_DEV_ROOT";
 
 /**

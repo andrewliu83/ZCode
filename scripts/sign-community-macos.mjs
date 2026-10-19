@@ -1,6 +1,6 @@
-import { open, readdir } from "node:fs/promises";
+import { open, readdir, stat } from "node:fs/promises";
 import { createRequire } from "node:module";
-import { resolve, join } from "node:path";
+import { resolve, join, sep } from "node:path";
 import { runReleaseCommand as run } from "./apple-signing.mjs";
 
 const MACHO_MAGICS = new Set([
@@ -33,10 +33,37 @@ async function collectMachO(root) {
   return binaries;
 }
 
-export async function signCommunityMacApp({ appPath, desktopRoot, config, signing }) {
+export async function collectCommunityMacPresignPaths(appPath) {
+  const resources = join(appPath, "Contents/Resources");
+  const paths = await collectMachO(join(resources, "glm"));
+  const tools = join(resources, "tools");
+  try {
+    await stat(tools);
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+    return paths;
+  }
+  paths.push(...(await collectMachO(tools)));
+  const driverApp = join(tools, "cua-driver/CuaDriver.app");
+  try {
+    await stat(driverApp);
+    // tools 被默认签名遍历忽略；内部 Mach-O 全部签完后再封 Driver app，最后才封外层应用。
+    paths.push(driverApp);
+  } catch (error) {
+    if (error.code !== "ENOENT") throw error;
+  }
+  return paths;
+}
+
+export async function presignCommunityMacResources({ appPath, desktopRoot, config, signing }) {
   const childEntitlements = resolve(desktopRoot, config.mac.entitlementsInherit);
-  // glm 在原有 signIgnore 中：必须先给 SDK、Node 和其它 Mach-O 独立签名，再封整个 app。
-  for (const binary of await collectMachO(join(appPath, "Contents/Resources/glm"))) {
+  const driverApp = join(appPath, "Contents/Resources/tools/cua-driver/CuaDriver.app");
+  for (const binary of await collectCommunityMacPresignPaths(appPath)) {
+    // Driver 的屏幕捕获与 Apple Events 权限不能被 Electron 通用子进程 entitlement 覆盖。
+    const entitlements =
+      binary === driverApp || binary.startsWith(`${driverApp}${sep}`)
+        ? resolve(desktopRoot, "build/entitlements.cua-driver.plist")
+        : childEntitlements;
     await run("/usr/bin/codesign", [
       "--force",
       "--sign",
@@ -46,10 +73,14 @@ export async function signCommunityMacApp({ appPath, desktopRoot, config, signin
         ? ["--options", "runtime", "--timestamp"]
         : ["--timestamp=none"]),
       "--entitlements",
-      childEntitlements,
+      entitlements,
       binary,
     ]);
   }
+}
+
+export async function signCommunityMacApp({ appPath, desktopRoot, config, signing }) {
+  await presignCommunityMacResources({ appPath, desktopRoot, config, signing });
   const require = createRequire(resolve(desktopRoot, "package.json"));
   const { signAsync } = require("@electron/osx-sign");
   const ignored = config.mac.signIgnore.map((pattern) => new RegExp(pattern));

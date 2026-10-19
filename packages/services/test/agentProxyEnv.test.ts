@@ -275,21 +275,22 @@ describe("node.ts lazy CUA spawn helper selection", () => {
     expect(spawnEnvStart).toBeGreaterThanOrEqual(0);
   });
 
-  it("routes darwin through the lazy branch with the stable broker socket (MC-3)", () => {
+  it("routes every supported desktop platform through the reserved Driver broker (MC-3)", () => {
     expect(spawnEnvStart).toBeGreaterThanOrEqual(0);
     const cuaBlock = source.slice(spawnEnvStart, spawnEnvStart + 4000);
-    const darwinIdx = cuaBlock.indexOf('process.platform === "darwin"');
-    expect(darwinIdx).toBeGreaterThanOrEqual(0);
-    expect(cuaBlock.slice(darwinIdx, darwinIdx + 60)).toContain("win32");
+    for (const platform of ['"darwin"', '"win32"', '"linux"'])
+      expect(cuaBlock).toContain(`process.platform === ${platform}`);
     const stableSocketIdx = cuaBlock.indexOf("resolveBrokerSocketPath()");
-    expect(stableSocketIdx).toBeGreaterThan(darwinIdx);
+    expect(stableSocketIdx).toBeGreaterThan(0);
   });
 
   it("keeps win32 spawn off the acquire path (MC-4)", () => {
     expect(spawnEnvStart).toBeGreaterThanOrEqual(0);
     const cuaBlock = source.slice(spawnEnvStart, spawnEnvStart + 6000);
     expect(cuaBlock).toContain("getStableCuaPipeName()");
-    expect(cuaBlock.indexOf("getOrCreateDefaultCuaProductHelper(context)")).toBe(-1);
+    const windowsBranch = cuaBlock.slice(cuaBlock.indexOf('if (process.platform === "win32")'));
+    expect(windowsBranch).not.toContain("getOrCreateDefaultCuaProductHelper(context)");
+    expect(cuaBlock).toContain("helper?.host.waitForTransport?.()");
     expect(cuaBlock).toContain("ZCODE_CUA_WIN_HELPER_RECIPE");
   });
 });

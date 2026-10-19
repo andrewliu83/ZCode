@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { createReadStream } from "node:fs";
 import { readFile, readdir, mkdir, copyFile, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { pathToFileURL } from "node:url";
+import { pathToFileURL, fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { COMMUNITY_DISTRIBUTION } from "./community-distribution.mjs";
 import { COMMUNITY_RELEASE_TARGETS, communityArtifactName } from "./community-release-targets.mjs";
@@ -13,12 +13,25 @@ async function digest(path) {
   return hash.digest("hex");
 }
 
+function releaseSummaryPath(version) {
+  return fileURLToPath(new URL(`../docs/desktop/release-notes-${version}.md`, import.meta.url));
+}
+
+/** 发布说明必须包含本版本的真实更新摘要，不能只有平台清单。 */
+export async function readReleaseSummary(version) {
+  return readFile(releaseSummaryPath(version), "utf8").catch((error) => {
+    if (error.code === "ENOENT") throw new Error(`Missing release summary for ${version}`);
+    throw error;
+  });
+}
+
 /** 发布 owner 必须先收齐并验证所有平台，再产生可上传目录；不依赖构建 job 间的文件覆盖顺序。 */
 export async function collectCommunityRelease({
   inputDirectory,
   outputDirectory,
   version,
   commit,
+  releaseSummary,
 }) {
   const directories = await readdir(inputDirectory);
   const expected = COMMUNITY_RELEASE_TARGETS.map((target) => `community-${target.id}`);
@@ -97,7 +110,9 @@ export async function collectCommunityRelease({
     JSON.stringify({ version, commit, builds }, null, 2) + "\n",
   );
   const mac = builds.find((build) => build.os === "mac");
-  const notes = `${COMMUNITY_DISTRIBUTION.name} ${version}\n\nIndependent Community distribution; does not replace upstream ZCode.\n\n- macOS arm64: DMG and ZIP. ${mac.signing === "native" ? "Developer ID signed and Apple notarized." : "Ad hoc signed, not Apple notarized; first installation may require Open Anyway in Privacy & Security."}\n- Windows x64: NSIS installer (unsigned).\n- Linux x64: AppImage, DEB and RPM.\n\nThe first Community version must be installed manually. Later releases use the Community update source. DEB/RPM installation may require system authorization.\n`;
+  const summary = releaseSummary ?? (await readReleaseSummary(version));
+  const platformNotes = `- macOS arm64: DMG and ZIP. ${mac.signing === "native" ? "Developer ID signed and Apple notarized." : "Ad hoc signed, not Apple notarized; first installation may require Open Anyway in Privacy & Security."}\n- Windows x64: NSIS installer (unsigned).\n- Linux x64: AppImage, DEB and RPM.\n`;
+  const notes = `${summary.trimEnd()}\n\n## 平台与安装\n\n${platformNotes}\nBuilt from ${commit}. The first Community version must be installed manually; later releases use the Community update source. DEB/RPM installation may require system authorization.\n`;
   await writeFile(resolve(outputDirectory, "release-notes.md"), notes);
   return builds;
 }

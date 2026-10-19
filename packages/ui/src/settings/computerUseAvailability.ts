@@ -55,7 +55,8 @@ export function resolveComputerUseAvailability({
   if (!isDesktop) return { kind: "web", supported: false };
   if (isMacDesktop) return { kind: "local-macos", supported: true };
   if (isWindowsDesktop) return { kind: "local-windows", supported: true };
-  return { kind: "local-linux", supported: false };
+  // Linux 桌面同样随包分发固定 Cua Driver（X11 完整支持，Wayland 按驱动实测能力）。
+  return { kind: "local-linux", supported: true };
 }
 
 const COMPUTER_USE_SEARCH_TERMS = ["电脑控制", "computer use", "zcode-cua", "cua"];
@@ -67,5 +68,7 @@ export function matchesComputerUseSearch(query: string): boolean {
 }
 
 export function isComputerUseRemoteOrLinux(availability: ComputerUseAvailability): boolean {
-  return !availability.supported && availability.kind !== "web";
+  // Linux 本地桌面已接入 Driver；只有远端 workspace 仍不提供本机控制入口。
+  return !availability.supported && availability.kind !== "web" &&
+    availability.kind !== "local-linux";
 }
