@@ -19,6 +19,9 @@ import { getTargetPlatform } from "./target-platform.mjs";
 const desktopRoot = resolve(import.meta.dirname, "..");
 const inventoryPath = resolve(desktopRoot, "../../third-party/cua-driver/sources.json");
 
+export { CUA_DRIVER_TARGETS, isSupportedCuaDriverTarget } from "./cua-driver-binaries.mjs";
+export { assertBinary } from "./cua-driver-binaries.mjs";
+
 export async function readCuaDriverSources() {
   return JSON.parse(await readFile(inventoryPath, "utf8"));
 }
