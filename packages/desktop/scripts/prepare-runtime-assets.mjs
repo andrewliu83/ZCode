@@ -36,9 +36,8 @@ const shouldPrepareMacosWindowBounds = target.os === "darwin";
 // 未配置时解包仓库内置的同名归档，两种情况都不需要额外开关。
 const localRuntimeScripts = [
   "prepare:agent-bundle",
-  ...(target.key === "darwin-arm64" && isCuaDriverInstalled({ desktopPackageRoot: desktopRoot })
-    ? ["prepare:cua-driver"]
-    : []),
+  // 三平台都随包分发固定 Driver；准备器按目标平台选择归档并校验架构。
+  ...(isCuaDriverInstalled({ desktopPackageRoot: desktopRoot }) ? ["prepare:cua-driver"] : []),
   ...(shouldPrepareWindowsCuaHelper ? ["prepare:windows-cua-helper"] : []),
   ...(nativeSearchReleasePlan.enabled ? ["prepare:native-search"] : []),
   ...(shouldPrepareWindowsBrowserImportHelper ? ["prepare:browser-import-helper"] : []),

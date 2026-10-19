@@ -1,4 +1,4 @@
-# Cua Driver 电脑操作接入（Community 0.1.4）
+# Cua Driver 电脑操作接入（Community 0.1.5）
 
 本次发行把 ZCode 的电脑操作从占位实现替换为固定版本的 Cua Driver 0.36.0，并扩展到三个桌面平台。
 
@@ -25,6 +25,10 @@
 - SDK 依赖外置，按目标平台裁剪，只包含该平台原生包。
 - 关闭 Cua Driver 遥测与独立自动更新；保留原始许可与第三方声明。
 - macOS 原生资源使用专用权限 entitlements 单独签名；最低系统版本提高到 macOS 13。
+
+## 发行修复
+
+- 修复 Windows/Linux 构建前未准备 Cua Driver 资源导致打包失败：准备脚本现在按目标平台执行，并新增三平台门控回归。
 
 ## 验证
 

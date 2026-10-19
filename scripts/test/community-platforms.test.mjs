@@ -208,7 +208,7 @@ test("release collection keeps all OS feeds and aggregates checksums without fil
 
 test("refuses to publish without a version summary", async () => {
   await assert.rejects(readReleaseSummary("9.9.9"), /Missing release summary/);
-  assert.match(await readReleaseSummary("0.1.4"), /Cua Driver/);
+  assert.match(await readReleaseSummary("0.1.5"), /Cua Driver/);
 });
 
 for (const failure of [
